@@ -39,7 +39,13 @@ try{
  let spectatorSnapshot:any,firstFlight:any;spectator.onMessage('snapshot',s=>{spectatorSnapshot=s;if(s.state.pendingDart&&!firstFlight)firstFlight=s;});
  const rejected=new Promise<any>(resolve=>spectator.onMessage('error',resolve));spectator.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:id,expectedStateVersion:state.stateVersion,type:'dart.stop_horizontal',phaseToken:state.state.phaseToken});const error=await rejected;assert.equal(error.code,'spectator_read_only');
  await a.page.getByLabel('Chatbericht',{exact:true}).first().fill('Toetsenbordcontrole');await a.page.getByLabel('Chatbericht',{exact:true}).first().press('Space');assert.equal((await get(a.page,'match/'+id)).state.phase,'horizontal','Typing cannot throw a dart');
- await a.page.getByLabel('Chatbericht',{exact:true}).first().fill('Echte wedstrijdchat');await a.page.getByRole('button',{name:'Verstuur bericht',exact:true}).first().click();await b.page.getByText('Echte wedstrijdchat',{exact:true}).waitFor({timeout:10000});
+ await a.page.getByLabel('Chatbericht',{exact:true}).first().fill('Echte wedstrijdchat');
+ const sent=a.page.waitForResponse(response=>response.url().endsWith('/api/platform/chat/send')&&response.request().method()==='POST',{timeout:30000});
+ await a.page.getByRole('button',{name:'Verstuur bericht',exact:true}).first().click();
+ const acknowledgement=await sent;assert.equal(acknowledgement.status(),200,'The real browser chat send must succeed');assert.equal(acknowledgement.request().postDataJSON().body,'Echte wedstrijdchat');
+ const channel=await post(b.page,'chat/resolve',{kind:'match',target:id});
+ assert.ok((await get(b.page,'chat/'+channel.channelId)).some((message:any)=>message.body==='Echte wedstrijdchat'),'The second authenticated player must read the committed match message');
+ await b.page.getByText('Echte wedstrijdchat',{exact:true}).waitFor({timeout:30000});
  await a.page.evaluate(()=>{(document.activeElement as HTMLElement)?.blur();});await a.page.keyboard.press('Space');
  for(let i=0;i<40;i++){state=await get(a.page,'match/'+id);if(state.state.phase==='vertical')break;await new Promise(r=>setTimeout(r,50));}assert.equal(state.state.phase,'vertical');
  const scores=[...state.state.scores];await a.page.getByRole('button',{name:'Stop verticale indicator en gooi',exact:true}).click();
