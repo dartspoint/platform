@@ -57,7 +57,21 @@ try{
  for(let i=0;i<100&&spectatorSnapshot?.state?.events.length!==1;i++)await new Promise(r=>setTimeout(r,100));
  state=await get(a.page,'match/'+id);assert.equal(state.state.pendingDart,null);assert.equal(state.state.events.length,1);assert.deepEqual(state.state.events[0].hit,committedHit);
  for(let i=0;i<20&&spectatorSnapshot?.state?.events.length!==1;i++)await new Promise(r=>setTimeout(r,100));assert.equal(spectatorSnapshot.state.events.length,1);
- await a.page.reload();await a.page.getByRole('button',{name:'Stop horizontale indicator',exact:true}).waitFor();const restored=await get(a.page,'match/'+id);assert.deepEqual(restored.state.events,state.state.events);
+ await a.page.route('http://127.0.0.1:42567/matchmake/**',async route=>{await new Promise(resolve=>setTimeout(resolve,300));await route.continue();},{times:1});
+ await a.page.reload();let restored=await get(a.page,'match/'+id);
+ const horizontalButton=a.page.getByRole('button',{name:'Stop horizontale indicator',exact:true});
+ // A reload can close the old socket before the new one joins. Exercise the
+ // actual paused-match confirmation flow instead of requiring a gapless reload.
+ for(let attempt=0;attempt<100;attempt++){
+  restored=await get(a.page,'match/'+id);
+  if(restored.lifecycle==='paused')for(const [seat,actor] of [a,b].entries()){
+   const ready=actor.page.getByRole('button',{name:'Begin de wedstrijd',exact:true});
+   if(!restored.state.ready[seat]&&await ready.isVisible()&&await ready.isEnabled())await ready.click();
+  }
+  if(restored.lifecycle==='playing'&&await horizontalButton.isVisible()&&await horizontalButton.isEnabled())break;
+  await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ assert.equal(restored.lifecycle,'playing','Both real players must reconfirm after a reconnect pause');assert.equal(await horizontalButton.isEnabled(),true);assert.deepEqual(restored.state.events,state.state.events);
  await a.page.screenshot({path:'artifacts/multiplayer-player-a.png',fullPage:true});await b.page.screenshot({path:'artifacts/multiplayer-player-b.png',fullPage:true});const result=await fullMatch(a,b,id);await spectator.leave();
  const totals=(await get(a.page,'bootstrap')).personalRecords;assert.ok(totals.highestCheckout>0);assert.ok(totals.fastestLeg>0);assert.equal(totals.wins,1);
  await writeFile('artifacts/multiplayer-result.json',JSON.stringify({ok:true,newOtpUsers:3,independentBrowsers:true,staleReadyRefreshesOnce:true,spectatorReadOnly:true,realMatchChatBetweenBrowsers:true,keyboardNoThrowWhileTyping:true,keyboardStopsMeter:true,accountRecordAggregates:true,authoritativeHit:true,scoreAtImpact:true,reconnectRestored:true,...result},null,2));
