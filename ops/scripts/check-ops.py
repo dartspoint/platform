@@ -201,6 +201,10 @@ class DeploymentContractChecks(unittest.TestCase):
             with self.assertRaises(ValueError):config.validate_values('staging',{**v,name:''})
 
     def test_distinct_database_roles_cannot_be_faked_with_url_flags(self):
+        for encoded in ('%61pp','a%70p','ap%70'):
+            m,v,p=fixture()
+            v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('app:',encoded+':')
+            with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)
         m,v,p=fixture()
         v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('verify-full','require')
         with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)

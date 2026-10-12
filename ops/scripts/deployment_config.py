@@ -1,7 +1,7 @@
 """Shared, strictly validated deployment contract. Never evaluate configuration as code."""
 import json, os, re, ssl, base64
 from pathlib import Path
-from urllib.parse import urlsplit, parse_qs
+from urllib.parse import urlsplit, parse_qs, unquote
 
 ROOT = Path('/srv/dartspoint')
 CONFIG = Path('/etc/dartspoint')
@@ -77,11 +77,12 @@ def validate_values(env, values):
     project = urlsplit(values['NEXT_PUBLIC_SUPABASE_URL']).hostname.split('.')[0]
     for k in ('DATABASE_URL', 'MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL'):
         database = urlsplit(values[k])
-        if database.hostname != 'db.'+project+'.supabase.co' and not (database.hostname.endswith('.pooler.supabase.com') and database.username.endswith('.'+project)):
+        if database.hostname != 'db.'+project+'.supabase.co' and not (database.hostname.endswith('.pooler.supabase.com') and unquote(database.username).endswith('.'+project)):
             raise ValueError('Database connection does not belong to this Supabase project')
     def login(value):
         parsed=urlsplit(value)
-        return parsed.username.rsplit('.',1)[0] if parsed.hostname.endswith('.pooler.supabase.com') else parsed.username
+        username=unquote(parsed.username)
+        return username.rsplit('.',1)[0] if parsed.hostname.endswith('.pooler.supabase.com') else username
     if len({login(values[k]) for k in ('DATABASE_URL', 'MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL')}) != 3:
         raise ValueError('App, migration and backup credentials must be separate')
     ca = values['DATABASE_CA_CERT_BASE64']
