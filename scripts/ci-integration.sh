@@ -6,6 +6,9 @@ mkdir -p artifacts
 node_modules/.bin/supabase start --exclude studio,imgproxy,edge-runtime,logflare,vector,supavisor >artifacts/supabase-start-private.log 2>&1
 python3 scripts/bind-local-services.py
 node scripts/configure-local.mjs
+# Build with the actual local public configuration and exercise the production
+# server. Cold development compilation must not consume a player's turn clock.
+node --env-file=.env.local scripts/build-deploy.mjs >artifacts/acceptance-build-private.log 2>&1
 redis_image=$(python3 -c 'import json; print(json.load(open("ops/image-pins.json"))["REDIS_IMAGE"])')
 docker run -d --name dartspoint-development-redis --publish 127.0.0.1:62479:6379 "$redis_image" redis-server --appendonly yes >/dev/null
 postgres_image=$(python3 -c 'import json; print(json.load(open("ops/image-pins.json"))["POSTGRES_IMAGE"])')
@@ -15,7 +18,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/worker/src/worker.
 worker_pid=$!
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/realtime/src/server.ts >artifacts/realtime-private.log 2>&1 &
 realtime_pid=$!
-npm run dev:web >artifacts/web-private.log 2>&1 &
+HOSTNAME=127.0.0.1 PORT=4300 node --env-file=.env.local dist/deploy/web/apps/web/server.js >artifacts/web-private.log 2>&1 &
 web_pid=$!
 trap 'kill "$web_pid" "$realtime_pid" "$worker_pid" 2>/dev/null || true' EXIT
 node --env-file=.env.local scripts/wait-local.mjs
