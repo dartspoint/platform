@@ -17,16 +17,20 @@ try{
  await a.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();
  let state=await get(a.page,'match/'+id);for(let i=0;i<40&&state.lifecycle!=='playing';i++){await new Promise(r=>setTimeout(r,100));state=await get(a.page,'match/'+id);}assert.equal(state.lifecycle,'playing');
  const sdk=new Client('ws://127.0.0.1:42567');const spectator=await sdk.joinOrCreate('match',{matchId:id,token:viewer.token});
- let spectatorSnapshot:any;spectator.onMessage('snapshot',s=>{spectatorSnapshot=s;});
+ let spectatorSnapshot:any,firstFlight:any;spectator.onMessage('snapshot',s=>{spectatorSnapshot=s;if(s.state.pendingDart&&!firstFlight)firstFlight=s;});
  const rejected=new Promise<any>(resolve=>spectator.onMessage('error',resolve));spectator.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:id,expectedStateVersion:state.stateVersion,type:'dart.stop_horizontal',phaseToken:state.state.phaseToken});const error=await rejected;assert.equal(error.code,'spectator_read_only');
  await a.page.getByLabel('Chatbericht',{exact:true}).first().fill('Toetsenbordcontrole');await a.page.getByLabel('Chatbericht',{exact:true}).first().press('Space');assert.equal((await get(a.page,'match/'+id)).state.phase,'horizontal','Typing cannot throw a dart');
  await a.page.getByLabel('Chatbericht',{exact:true}).first().fill('Echte wedstrijdchat');await a.page.getByRole('button',{name:'Verstuur bericht',exact:true}).first().click();await b.page.getByText('Echte wedstrijdchat',{exact:true}).waitFor({timeout:10000});
  await a.page.evaluate(()=>{(document.activeElement as HTMLElement)?.blur();});await a.page.keyboard.press('Space');
  for(let i=0;i<40;i++){state=await get(a.page,'match/'+id);if(state.state.phase==='vertical')break;await new Promise(r=>setTimeout(r,50));}assert.equal(state.state.phase,'vertical');
  const scores=[...state.state.scores];await a.page.getByRole('button',{name:'Stop verticale indicator en gooi',exact:true}).click();
- for(let i=0;i<40;i++){state=await get(a.page,'match/'+id);if(state.state.pendingDart)break;await new Promise(r=>setTimeout(r,20));}
- assert.equal(state.state.phase,'flight');assert.deepEqual(state.state.scores,scores);const committedHit=state.state.pendingDart.hit;
- await new Promise(r=>setTimeout(r,700));state=await get(a.page,'match/'+id);assert.equal(state.state.pendingDart,null);assert.equal(state.state.events.length,1);assert.deepEqual(state.state.events[0].hit,committedHit);
+ // Capture the short flight in the live stream: an HTTP round trip can exceed
+ // its 560 ms duration on a cold hosted runner without changing game behavior.
+ for(let i=0;i<100&&!firstFlight;i++)await new Promise(r=>setTimeout(r,100));
+ assert.ok(firstFlight,'The spectator must receive the sealed flight before impact');
+ assert.equal(firstFlight.state.phase,'flight');assert.deepEqual(firstFlight.state.scores,scores);const committedHit=firstFlight.state.pendingDart.hit;
+ for(let i=0;i<100&&spectatorSnapshot?.state?.events.length!==1;i++)await new Promise(r=>setTimeout(r,100));
+ state=await get(a.page,'match/'+id);assert.equal(state.state.pendingDart,null);assert.equal(state.state.events.length,1);assert.deepEqual(state.state.events[0].hit,committedHit);
  for(let i=0;i<20&&spectatorSnapshot?.state?.events.length!==1;i++)await new Promise(r=>setTimeout(r,100));assert.equal(spectatorSnapshot.state.events.length,1);
  await a.page.reload();await a.page.getByRole('button',{name:'Stop horizontale indicator',exact:true}).waitFor();const restored=await get(a.page,'match/'+id);assert.deepEqual(restored.state.events,state.state.events);
  await a.page.screenshot({path:'artifacts/multiplayer-player-a.png',fullPage:true});await b.page.screenshot({path:'artifacts/multiplayer-player-b.png',fullPage:true});const result=await fullMatch(a,b,id);await spectator.leave();
