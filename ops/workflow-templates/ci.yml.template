@@ -1,6 +1,7 @@
 # Hosted CI never receives staging or production credentials.
 name: DartsPoint CI
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -29,5 +30,20 @@ jobs:
             sh -c 'npm ci && npm run typecheck && npm test && node scripts/check-original-rules.mjs && npm run build:deploy'
           python3 ops/scripts/check-ops.py
           python3 scripts/check-source-parity.py
+      - name: Verify pinned QA tools and deployment infrastructure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
+        run: |
+          python3 scripts/fetch-qa-tools.py "$DARTSPOINT_QA_TOOLS"
+          "$DARTSPOINT_QA_TOOLS/actionlint" .github/workflows/ci.yml .github/workflows/deploy.yml
+          "$DARTSPOINT_QA_TOOLS/caddy" validate --config ops/Caddyfile.staging --adapter caddyfile
+          "$DARTSPOINT_QA_TOOLS/caddy" validate --config ops/Caddyfile.production --adapter caddyfile
       - name: Start isolated infrastructure and run acceptance tests
+        env:
+          DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
         run: bash scripts/ci-integration.sh
+      - name: Verify real database TLS and encrypted restore
+        env:
+          DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
+        run: python3 tests/integration/deployment-infrastructure.py

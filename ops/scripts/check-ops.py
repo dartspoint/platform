@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Isolated behavioral verification. No Docker, network, VPS or real credentials."""
-import ast, contextlib, importlib.util, io, json, os, sys, tempfile, unittest
+import ast, contextlib, copy, importlib.util, io, json, os, subprocess, sys, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
 HERE = Path(__file__).resolve().parent
@@ -10,6 +10,25 @@ spec.loader.exec_module(deployment)
 prep_spec = importlib.util.spec_from_file_location("prepare", HERE / "prepare-release.py")
 prepare = importlib.util.module_from_spec(prep_spec)
 prep_spec.loader.exec_module(prepare)
+import deployment_config as config
+import github_origin
+import managed
+
+def load_script(name):
+    spec=importlib.util.spec_from_file_location(name.replace('-','_'),HERE/(name+'.py'))
+    result=importlib.util.module_from_spec(spec);spec.loader.exec_module(result);return result
+
+installer=load_script('install-host')
+
+def fixture(env='staging'):
+    pins=json.loads((HERE.parent/'image-pins.json').read_text())
+    host='staging.dartspoint.nl' if env=='staging' else 'dartspoint.nl'
+    values={'NEXT_PUBLIC_APP_URL':'https://'+host,'NEXT_PUBLIC_REALTIME_URL':'https://realtime.'+host,'NEXT_PUBLIC_SUPABASE_URL':'https://'+'a'*20+'.supabase.co','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY':'sb_publishable_example','NEXT_PUBLIC_TURNSTILE_SITE_KEY':'site-key',
+            'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':''}
+    for name,user in (('DATABASE_URL','app'),('MIGRATION_DATABASE_URL','migrate'),('BACKUP_DATABASE_URL','backup')):
+        values[name]='postgresql://'+user+':example-password@db.'+'a'*20+'.supabase.co/postgres?sslmode=verify-full'
+    manifest={'version':1,'environment':env,'sha':'a'*40,'run':'100','attempt':'1','repository':'dartspoint/platform','workflow':'.github/workflows/deploy.yml','platform':'linux/amd64','public':{k:values[k] for k in config.PUBLIC},'pins':pins,'images':{s:'ghcr.io/dartspoint/platform-'+env+'-'+s+'@sha256:'+'b'*64 for s in config.SERVICES},'builtAt':'2026-10-12T00:00:00+00:00'}
+    return manifest,values,pins
 
 class DeploymentChecks(unittest.TestCase):
     def setUp(self):
@@ -40,6 +59,7 @@ class DeploymentChecks(unittest.TestCase):
             return {"draining":False}
         with patch.object(deployment, "release_path", side_effect=lambda p:Path(p).resolve()), \
              patch.object(deployment, "verify_images", side_effect=lambda p:event("images",p)), \
+             patch.object(deployment, "verify_database", side_effect=lambda p:event("database",p)), \
              patch.object(deployment, "verify_backup", side_effect=lambda root,p:event("backup",p)), \
              patch.object(deployment, "token", return_value="test-token"), \
              patch.object(deployment, "drain", side_effect=lambda p,t:event("drain",p)), \
@@ -61,6 +81,18 @@ class DeploymentChecks(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.execute()
         self.assertNotIn(('containers','new'),self.events)
         self.assertIn(('resume','old'),self.events)
+
+    def test_failed_backup_stops_before_drain_and_migration(self):
+        self.fail_at=('backup','new')
+        with self.assertRaises(RuntimeError): self.execute()
+        self.assertNotIn(('drain','old'),self.events)
+        self.assertNotIn(('migrate','new'),self.events)
+        self.assertNotIn(('containers','new'),self.events)
+
+    def test_failed_application_role_gate_stops_before_backup(self):
+        self.fail_at=('database','new')
+        with self.assertRaises(RuntimeError): self.execute()
+        self.assertNotIn(('backup','new'),self.events)
 
     def test_migration_failure_retains_old(self):
         self.fail_at=('migrate','new')
@@ -140,6 +172,160 @@ class SerializationChecks(unittest.TestCase):
     def test_python_syntax(self):
         for path in HERE.glob("*.py"):
             ast.parse(path.read_text(),filename=str(path))
+
+class DeploymentContractChecks(unittest.TestCase):
+    def test_environment_manifest_boundaries(self):
+        for env in ('staging','production'):
+            m,v,p=fixture(env);config.validate_manifest(m,env,p);config.validate_values(env,v)
+            for key,value in (('environment','other'),('platform','linux/arm64'),('repository','other/platform'),('workflow','.github/workflows/ci.yml'),('sha','bad'),('run','1;evil')):
+                bad=copy.deepcopy(m);bad[key]=value
+                with self.assertRaises(ValueError):config.validate_manifest(bad,env,p)
+            for image in ('ghcr.io/dartspoint/platform-'+env+'-web:latest','ghcr.io/evil/platform-web@sha256:'+'b'*64,'ghcr.io/dartspoint/platform-'+('production' if env=='staging' else 'staging')+'-web@sha256:'+'b'*64):
+                bad=copy.deepcopy(m);bad['images']['web']=image
+                with self.assertRaises(ValueError):config.validate_manifest(bad,env,p)
+
+    def test_public_configuration_and_pins_fail_closed(self):
+        m,v,p=fixture()
+        for name,value in (('NEXT_PUBLIC_APP_URL','https://dartspoint.nl'),('NEXT_PUBLIC_REALTIME_URL','wss://realtime.staging.dartspoint.nl'),('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','sb_secret_private')):
+            bad=copy.deepcopy(m);bad['public'][name]=value
+            with self.assertRaises(ValueError):config.validate_manifest(bad,'staging',p)
+        bad=copy.deepcopy(m);bad['pins']['REDIS_IMAGE']='redis:latest'
+        with self.assertRaises(ValueError):config.validate_manifest(bad,'staging',p)
+
+    def test_hetzner_region_repository_and_private_credentials(self):
+        m,v,p=fixture()
+        for name,value in (('AWS_DEFAULT_REGION','hel1'),('RESTIC_REPOSITORY','s3:http://fsn1.your-objectstorage.com/bucket'),('RESTIC_REPOSITORY','s3:https://secret:secret@fsn1.your-objectstorage.com/bucket'),('RESTIC_REPOSITORY','s3:https://127.0.0.1/bucket'),('RESTIC_REPOSITORY','s3:https://fsn1.your-objectstorage.com/bucket?password=secret')):
+            bad={**v,name:value}
+            with self.assertRaises(ValueError):config.validate_values('staging',bad)
+        for name in config.SECRETS:
+            with self.assertRaises(ValueError):config.validate_values('staging',{**v,name:''})
+
+    def test_distinct_database_roles_cannot_be_faked_with_url_flags(self):
+        m,v,p=fixture()
+        v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('verify-full','require')
+        with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)
+        m,v,p=fixture()
+        v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('app:example-password@db.'+'a'*20+'.supabase.co','app.'+'a'*20+':different-password@aws-0-eu-central-1.pooler.supabase.com:5432')
+        with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)
+
+    def test_unknown_extension_metadata_cannot_reach_restore_sql(self):
+        restore=load_script('restore-db')
+        for extensions in ([{'name':'evil;drop schema auth','schema':'extensions','version':'1.0'}],[{'name':'pgcrypto','schema':'unreviewed','version':'1.3'}],[{'name':'pgcrypto','schema':'extensions','version':"1.3';evil"}]):
+            with self.assertRaises(ValueError):restore.restore('/nonexistent.dump',fixture()[2]['POSTGRES_IMAGE'],extensions)
+
+    def test_role_files_and_environment_ports_are_separated(self):
+        for env in ('staging','production'):
+            m,v,p=fixture(env)
+            with tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);(root/'releases').mkdir()
+                release=prepare.prepare(m,v,root)
+                for service in config.SERVICES:
+                    values=config.read_env(release/(service+'.env'))
+                    self.assertNotIn('MIGRATION_DATABASE_URL',values);self.assertNotIn('BACKUP_DATABASE_URL',values)
+                    self.assertNotIn('RESTIC_PASSWORD',values);self.assertNotIn('AWS_SECRET_ACCESS_KEY',values)
+                    if service!='worker':self.assertNotIn('RESEND_API_KEY',values)
+                self.assertEqual(set(config.read_env(release/'migration.env')),{'NODE_ENV','APP_ENV','DEPLOY_ENV','MIGRATION_DATABASE_URL','DATABASE_CA_CERT_BASE64'})
+                self.assertEqual(config.read_env(release/'backup.env')['AWS_DEFAULT_REGION'],'fsn1')
+                self.assertEqual(config.read_env(release/'deploy.env')['WEB_PORT'],str(config.ports(env)[0]))
+                self.assertFalse((release/'compose.yml').exists())
+
+    def test_libpq_mounts_real_host_trust_instead_of_assuming_image_ca(self):
+        import postgres_client
+        m,v,p=fixture();v['POSTGRES_IMAGE']=p['POSTGRES_IMAGE']
+        with tempfile.TemporaryDirectory() as folder:
+            args,env=postgres_client.client(v,folder)
+            self.assertEqual(env['PGSSLMODE'],'verify-full')
+            self.assertEqual(env['PGSSLROOTCERT'],'/tmp/database-ca.crt')
+            self.assertIn('target=/tmp/database-ca.crt,readonly',' '.join(args))
+            self.assertNotIn(env['PGPASSWORD'],' '.join(args))
+            self.assertTrue((Path(folder)/'database-ca.crt').read_bytes().startswith(b'-----BEGIN CERTIFICATE-----'))
+
+    def test_public_values_cannot_change_after_build(self):
+        m,v,p=fixture();v['NEXT_PUBLIC_TURNSTILE_SITE_KEY']='changed-after-build'
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError,'Build-time'):prepare.prepare(m,v,Path(folder))
+
+    def test_cross_project_database_and_transaction_pooler_are_rejected(self):
+        m,v,p=fixture()
+        for value in (v['DATABASE_URL'].replace('a'*20,'b'*20),v['DATABASE_URL'].replace('.supabase.co','.supabase.co:6543')):
+            with self.assertRaises(ValueError):config.validate_values('staging',{**v,'DATABASE_URL':value})
+        values={**v}
+        for key in ('DATABASE_URL','MIGRATION_DATABASE_URL','BACKUP_DATABASE_URL'):
+            values[key]=values[key].replace(':example-password@', '.'+'a'*20+':example-password@').replace('db.'+'a'*20+'.supabase.co','aws-0-eu-central-1.pooler.supabase.com:5432')
+        config.validate_values('staging',values)
+
+    def test_stale_or_duplicate_runs_cannot_reverse_release_order(self):
+        m,v,p=fixture()
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);managed.reject_old(root,m)
+            for run,attempt in (('99','5'),('100','1')):
+                with self.assertRaises(ValueError):managed.reject_old(root,{**m,'run':run,'attempt':attempt})
+            managed.reject_old(root,{**m,'attempt':'2'})
+            managed.reject_old(root,{**m,'run':'101','attempt':'1'})
+
+    def test_github_provenance_and_branch_head_are_verified(self):
+        m,v,p=fixture()
+        run={'event':'push','head_sha':m['sha'],'head_branch':'staging','run_attempt':1,'path':'.github/workflows/deploy.yml','head_repository':{'full_name':'dartspoint/platform'},'actor':{'login':'qa-fixture'}}
+        jobs={'jobs':[{'name':n,'conclusion':'success'} for n in ('Verify / verify','Publish images')]}
+        ref={'object':{'sha':m['sha']}}
+        with patch.object(github_origin,'get',side_effect=[run,jobs,ref]):github_origin.verify(m,'example-token')
+        for k,value in (('event','pull_request'),('head_sha','b'*40),('head_branch','production'),('path','.github/workflows/evil.yml'),('run_attempt',2)):
+            with patch.object(github_origin,'get',return_value={**run,k:value}):
+                with self.assertRaises(ValueError):github_origin.verify(m,'example-token')
+        for data in ([run,{'jobs':[]}],[run,jobs,{'object':{'sha':'b'*40}}]):
+            with patch.object(github_origin,'get',side_effect=data):
+                with self.assertRaises(ValueError):github_origin.verify(m,'example-token')
+
+    def test_entrypoint_refuses_arbitrary_arguments(self):
+        for argv in (['managed.py'],['managed.py','staging','--shell'],['managed.py','../production']):
+            with patch.object(sys,'argv',argv):
+                with self.assertRaises(ValueError):managed.main()
+
+    def test_private_handoff_rejects_symlinks_and_world_readable_files(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);spool=root/'staging';spool.mkdir();spool.chmod(0o750)
+            private=spool/'pending.json';private.write_text(json.dumps({'manifest':{},'values':{},'registryToken':'example'}));private.chmod(0o640)
+            with patch.object(managed,'SPOOL',root),patch.object(managed.pwd,'getpwnam',return_value=SimpleNamespace(pw_uid=os.getuid())):
+                self.assertEqual(managed.pending('staging')['registryToken'],'example')
+                private.chmod(0o644)
+                with self.assertRaises(ValueError):managed.pending('staging')
+                private.unlink();private.symlink_to('/etc/passwd')
+                with self.assertRaises(OSError):managed.pending('staging')
+
+    def test_exact_sudoers_are_validated_by_visudo(self):
+        for env in ('staging','production'):
+            text=installer.sudoers_rule(env)
+            self.assertIn('ALL=(dartspoint-'+env+')',text);self.assertTrue(text.rstrip().endswith('""'))
+            self.assertNotIn('(root)',text);self.assertNotIn('*',text)
+            with tempfile.NamedTemporaryFile(mode='w') as f:
+                f.write(text);f.flush()
+                result=subprocess.run(['/usr/sbin/visudo','-cf',f.name],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                self.assertEqual(result.returncode,0)
+
+    def test_workflow_contract_and_inventory(self):
+        # PyYAML is available on Ubuntu hosted runners and the development VPS.
+        import yaml, re
+        root=HERE.parent.parent
+        workflow=yaml.load((root/'.github/workflows/deploy.yml').read_text(),Loader=yaml.BaseLoader)
+        ci=yaml.load((root/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)
+        self.assertEqual(workflow['on']['push']['branches'],['staging','production'])
+        self.assertEqual(ci['on']['push']['branches'],['main']);self.assertIn('workflow_call',ci['on'])
+        self.assertEqual(workflow['jobs']['verify']['uses'],'./.github/workflows/ci.yml')
+        self.assertEqual(workflow['jobs']['publish']['runs-on'],'ubuntu-latest')
+        deploy=workflow['jobs']['deploy'];self.assertIn('self-hosted',deploy['runs-on'])
+        self.assertEqual(deploy['needs'],['verify','publish'])
+        self.assertEqual(workflow['concurrency']['cancel-in-progress'],'false')
+        delivered=deploy['steps'][1]['env']
+        secrets={k for k,v in delivered.items() if 'secrets.' in v}
+        variables={k for k,v in delivered.items() if 'vars.' in v}
+        self.assertEqual(secrets,set(config.SECRETS));self.assertEqual(variables,set(config.VARIABLES+config.OPTIONAL))
+        for step in deploy['steps']:
+            self.assertNotIn('checkout',step.get('uses',''));self.assertNotIn('npm ',step.get('run',''));self.assertNotIn('build ',step.get('run',''))
+        for job in workflow['jobs'].values():
+            for step in job.get('steps',[]):
+                if 'uses' in step:self.assertRegex(step['uses'],r'@[0-9a-f]{40}$')
+        self.assertEqual((root/'.github/workflows/deploy.yml').read_text(),(root/'ops/workflow-templates/deploy.yml.template').read_text())
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

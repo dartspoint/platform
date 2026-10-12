@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator recovery only: python3 ops/scripts/control.py /opt/.../current status|drain|resume"""
+"""Operator recovery only: python3 ops/scripts/control.py /srv/dartspoint/<environment>/current status|drain|resume"""
 import json, sys
 from deploy import control, release_path
 if len(sys.argv) != 3 or sys.argv[2] not in ("status", "drain", "resume"):

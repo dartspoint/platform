@@ -20,7 +20,7 @@ Start eenvoudig: per omgeving één Next.js-proces, één Colyseus-proces, één
 | Identiteit | Supabase Auth | E-mailadres, OTP-uitgifte, OTP-controle, sessies, refresh tokens |
 | Database | Managed Supabase PostgreSQL | Profielen, rollen, vrienden, chatgeschiedenis, wedstrijden, worpen, Elo, toernooien, seizoenen, audit en outbox |
 | Databasetoegang | Versiebeheerde SQL-migraties; getypeerde repositories met `pg` | Expliciete transacties, uniqueness, locking en toegangsgrenzen; geen tweede ORM-migratiebron |
-| Tijdelijke coördinatie | Redis op eigen VPS, alleen intern bereikbaar | Rate limits, presence/matchmaking, tijdelijke leases en notificatiepub/sub; geen enige opslag voor uitslagen |
+| Tijdelijke coördinatie | Redis per rootless omgeving op de gedeelde doel-VPS, alleen intern bereikbaar | Rate limits, presence/matchmaking, tijdelijke leases en notificatiepub/sub; geen enige opslag voor uitslagen |
 | E-mail | Resend SMTP voor Supabase Auth; Resend API voor app-mails | OTP-bezorging plus dezelfde DartsPoint-huisstijl voor welkomst-, uitnodigings- en operationele mails |
 | Botbescherming | Cloudflare Turnstile via Supabase Auth, verplicht voor publieke V1 | Verminderen van geautomatiseerde OTP-aanvragen, naast server-rate-limits; sitekey via GitHub Environment, secret in Supabase Auth |
 | Worker | Apart Node.js-proces met PostgreSQL-outbox | Betrouwbare e-mailtaken, herinneringen, planning, deadlineverwerking en herhaalbare onderhoudstaken |

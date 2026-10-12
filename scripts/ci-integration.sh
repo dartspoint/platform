@@ -34,3 +34,5 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/visual.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/interface.ts
+
+python3 tests/integration/https-proxy.py

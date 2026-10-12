@@ -1,10 +1,14 @@
 # Native Next.js, authoritative realtime and durable worker. No runtime secrets in images.
-ARG NODE_IMAGE=node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+ARG NODE_IMAGE
 FROM ${NODE_IMAGE} AS build
 WORKDIR /build
-COPY . .
-RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 python3-yaml sudo && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY apps/realtime/package.json apps/realtime/package.json
+COPY apps/worker/package.json apps/worker/package.json
 RUN npm ci
+COPY . .
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
@@ -21,11 +25,12 @@ ENV APP_ENV=$DEPLOY_ENV RELEASE_SHA=$GIT_SHA NEXT_TELEMETRY_DISABLED=1 \
     GIT_SHA=$GIT_SHA
 RUN npm run verify:ci && npm run build:deploy
 
-ARG NODE_IMAGE=node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+ARG NODE_IMAGE
 FROM ${NODE_IMAGE} AS runtime
 ARG SERVICE
 ARG GIT_SHA
-LABEL org.opencontainers.image.revision=$GIT_SHA
+ARG DEPLOY_ENV
+LABEL org.opencontainers.image.revision=$GIT_SHA nl.dartspoint.environment=$DEPLOY_ENV org.opencontainers.image.source=https://github.com/dartspoint/platform
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=build --chown=node:node /build/dist/deploy/${SERVICE}/ ./

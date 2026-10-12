@@ -1,0 +1,16 @@
+{
+  "staging": {
+    "NEXT_PUBLIC_APP_URL": "https://staging.dartspoint.nl",
+    "NEXT_PUBLIC_REALTIME_URL": "https://realtime.staging.dartspoint.nl",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://REPLACE_STAGING_PROJECT.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "REPLACE_PUBLIC_STAGING_KEY",
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "REPLACE_PUBLIC_STAGING_SITE_KEY"
+  },
+  "production": {
+    "NEXT_PUBLIC_APP_URL": "https://dartspoint.nl",
+    "NEXT_PUBLIC_REALTIME_URL": "https://realtime.dartspoint.nl",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://REPLACE_PRODUCTION_PROJECT.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "REPLACE_PUBLIC_PRODUCTION_KEY",
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "REPLACE_PUBLIC_PRODUCTION_SITE_KEY"
+  }
+}

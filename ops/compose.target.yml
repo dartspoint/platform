@@ -1,10 +1,13 @@
-# Docker Compose >= 2.30, one environment per VPS. Native host Caddy owns 80/443.
+# Docker Compose >= 2.30. Installed root-owned per environment; native Caddy owns 80/443.
 name: dartspoint-${DEPLOY_ENV:?DEPLOY_ENV required}
 x-runtime: &runtime
   restart: unless-stopped
   init: true
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
+  cpus: 0.75
+  mem_limit: 768m
+  pids_limit: 128
   stop_grace_period: 60s
   logging:
     driver: json-file
@@ -17,7 +20,7 @@ services:
       - path: ${RELEASE_DIR:?RELEASE_DIR required}/web.env
         format: raw
     environment: {PORT: "3000"}
-    ports: ["127.0.0.1:4300:3000"]
+    ports: ["127.0.0.1:${WEB_PORT:?WEB_PORT required}:3000"]
     depends_on:
       redis: {condition: service_healthy}
     healthcheck:
@@ -32,7 +35,8 @@ services:
       - path: ${RELEASE_DIR}/realtime.env
         format: raw
     environment: {PORT: "2567"}
-    ports: ["127.0.0.1:42567:2567"]
+    ports: ["127.0.0.1:${REALTIME_PORT:?REALTIME_PORT required}:2567"]
+    mem_limit: 512m
     depends_on:
       redis: {condition: service_healthy}
     healthcheck:
@@ -43,6 +47,8 @@ services:
   worker:
     <<: *runtime
     image: ${WORKER_IMAGE:?WORKER_IMAGE required}
+    cpus: 0.5
+    mem_limit: 384m
     env_file:
       - path: ${RELEASE_DIR}/worker.env
         format: raw
@@ -62,9 +68,15 @@ services:
       - path: ${RELEASE_DIR}/migration.env
         format: raw
     command: [node, scripts/migrate.mjs, --expand-only]
+    cpus: 0.5
+    mem_limit: 512m
   redis:
     image: ${REDIS_IMAGE:?Pin REDIS_IMAGE by digest}
     restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 384m
+    pids_limit: 64
+    security_opt: ["no-new-privileges:true"]
     command: [redis-server, --appendonly, "yes", --maxmemory, 256mb, --maxmemory-policy, noeviction]
     volumes: [redis-data:/data]
     healthcheck:
@@ -77,4 +89,4 @@ services:
       options: {max-size: "10m", max-file: "3"}
 volumes:
   redis-data:
-# No Redis port is published. Add monitoring/capacity tuning after measurement.
+# Each rootless daemon has its own project, network and persistent Redis volume.

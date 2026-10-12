@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DELIBERATELY NOT A WORKING BACKUP PROVIDER.
 Install a reviewed root-owned executable as:
-  /opt/dartspoint/<environment>/hooks/pre-deploy-backup
+  /usr/local/libexec/dartspoint/backup-gate.py (historical example only)
 Accept argv environment + release SHA, authenticate to the selected backup
 provider, create/check an encrypted OFF-HOST backup and verify actual evidence.
 Success must print ONLY JSON with:

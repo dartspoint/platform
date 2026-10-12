@@ -18,7 +18,7 @@ for(const service of ['realtime','worker']){
  // Bundling shared domain code and dependencies avoids copying unrelated sources or secrets.
  await build({entryPoints:[`apps/${service}/src/${service==='worker'?'worker':'server'}.ts`],outfile:directory+'/server.js',bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native']});
  if(service==='worker'){
-  await build({entryPoints:['scripts/migrate.ts','scripts/owner-bootstrap.ts','scripts/worker-health.ts'],outdir:directory+'/scripts',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native']});
+  await build({entryPoints:['scripts/migrate.ts','scripts/owner-bootstrap.ts','scripts/worker-health.ts','scripts/verify-database.ts'],outdir:directory+'/scripts',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native']});
   await cp('supabase/migrations',directory+'/supabase/migrations',{recursive:true});await cp(directory+'/scripts/worker-health.mjs',directory+'/scripts/health.mjs');
  }
 }

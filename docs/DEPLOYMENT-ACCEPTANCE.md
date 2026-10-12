@@ -1,0 +1,36 @@
+# Deploymentacceptatie — 12 oktober 2026
+
+Uitgevoerd op de development-VPS, zonder toegang tot de nieuwe doel-VPS of echte staging/productioncredentials. De onveranderde applicatie-UI en oorspronkelijke overdrachtsbestanden blijven gecontroleerd met bronpariteit. Dit document meldt uitsluitend werkelijk uitgevoerd bewijs; live provideracceptatie staat hieronder afzonderlijk.
+
+## Uitgevoerd en geslaagd
+
+| Controle | Bewijs |
+|---|---|
+| Deploymentcontract | 31 Python-tests: omgevingen/origins, registry/digests/amd64, public-valuewisseling, centrale pins, ontbrekende secrets, directe/sessionprojectidentiteit, echte host-CA-mount en afwijzen transactionpooler/crossproject |
+| Scheiding van rechten/config | Werkelijke tijdelijke 0600 rol-envfiles; geen migratie-/backupkeys in web/realtime/worker; 0640 handoff, chmod/symlink/O_NOFOLLOW-afwijzing; exact beide sudoersregels met echte visudo gevalideerd |
+| Build-/runnerselectie | Werkelijke YAML en templates gecontroleerd; actionlint 1.7.12: main uitsluitend hosted CI, environmentbranches hosted verify/publish en afzonderlijk self-hosted deploy, volledige Action-SHA's en minimum jobpermissions |
+| Herkomst/verouderde jobs | Gedragstests voor echte GitHub-runstructuur, push/branch/SHA/attempt/jobstatus, actuele ref; monotone run/attempt-watermark weigert oude en herhaalde jobs |
+| Fail closed en rollback | Backup-/app-rolefout stopt vóór drain/migratie; drain-timeout stopt vóór vervanging; migratiefout behoudt oud; readinessfout herstelt oud vóór resume; onzekere nieuwe resume forceert geen rollback; expliciete rollback doet geen DB-downgrade |
+| Drie containers | Web, realtime en worker werkelijk gebouwd met gepinde Node-image; gestart tegen echte lokale Auth/Postgres/Redis. Zelfde release-readiness, workerheartbeat, werkelijke beperkte app-rolecheck, CORS naar uitsluitend weborigin, loopbackcontrol, gerenderde pagina's, nonroot runtime, geen env/reference in runtime-images |
+| Database TLS | Disposable PostgreSQL 17 met eigen CA/servercert: echte libpq en gedeelde Node-driver verbinden met vertrouwde CA; verkeerde CA en verkeerde hostname worden door beide geweigerd, ook Node-URL sslmode=require |
+| Resourcegrenzen | Daadwerkelijke rootless cgroupbestanden in container gelezen: 256 MiB, CPU-quota 0.5 en 128 pids afgedwongen. Restore is begrensd op 0.5 CPU/512 MiB/128 pids, zonder netwerk/hostpoort |
+| Restic encryptie/herstel | Restic 0.19.1: echte lokale databasedump versleuteld, verkeerde password geweigerd, volledige data-check en verified restore, bytes vergeleken; daadwerkelijke auth/public/private/migraties hersteld in disposable PostgreSQL 17, Auth-rijen, RLS-isolatie, migraties, Elo-zero-sum en extensionnamespace/versie gecontroleerd |
+| Restic retention | Dezelfde tag/host-retention als de timer daadwerkelijk uitgevoerd op de wegwerprepository: 5% read-check, daily/weekly/monthly forget/prune en volledige check na afloop |
+| Proxy/HTTPS/realtime | Beide echte Caddy-siteconfigs gevalideerd met Caddy 2.11.7; disposable Caddy HTTPS met gecontroleerde interne CA zonder systeemtrustwijziging: internal-routes 404, verkeerde origin 403, echte Auth-JWT's/seats via Colyseus HTTP-matchmaking, veilige WebSocket-commando's en echte reconnect; fout JWT afgewezen |
+| Wedstrijddrain | Echte lokale server: active game weigert safeToStop, nieuwe starts gesloten, reeds gecommitteerde impact voltooid, uiteindelijk drie echte nulcounters, expliciete resume; forwarded/ongeauthenticeerde control geweigerd |
+| Owner en gewone restore | Echte geverifieerde lokale Auth-identiteit en wegwerpdatabase: bootstrap exact eenmaal, verkeerde email geweigerd en bestaande owner/herhaling beschermd; aparte werkelijke pg_dump/isolated-restoretest geslaagd |
+| Applicatie-/bronnenintegriteit | TypeScript typecheck, 11 domein-unittests, acht originele regelchecks en oorspronkelijke checksumpariteit geslaagd: 316 archivefiles, 286 oorspronkelijke bronfiles; geen business-/UI-herontwerp |
+
+De testtools zijn gepind en hun gepubliceerde upstreamchecksums gecontroleerd. Providerdiagnostics, cookies, tokens, certificaatsleutels, dumps en screenshots blijven private/ignored; CI uploadt deze niet. De lokale Restic-test gebruikt echte encryptie en een echte databasedump, maar geen Hetzner-endpoint. De HTTPS-test gebruikt een lokale CA, geen publiek ACME-certificaat. De tests creëren uitsluitend expliciete lokale QA-gebruikers en verwijderen hun tijdelijke containers/netwerken/keys/dumps; geen productie-seeding.
+
+## Resterende acceptatie met echte toegang
+
+1. **Doel-VPS:** account/groep/sudoers/managed-fileownership, afzonderlijke socket/daemon/netwerk/Redis-volume, lingering/reboot, effectieve runner-dropins en cgroupdelegation. Bewijs dat stagingrunner geen productionbestanden/socket/wrapper kan gebruiken. De installer is geleverd en zijn sudoers zijn gevalideerd; hij is niet op deze onbekende doelhost uitgevoerd.
+2. **GitHub/GHCR:** branch/environment/runnergroep- of workflowbeperkingen en private package-repositoryaccess; echte push na gebruikersmerge, successful hosted `Verify / verify` en `Publish images`, juiste artifact/herkomst/digests en werkelijke fixed-helperdelivery. Main pusht geen environmentrelease. YAML-contract en lokale images zijn getest; externe environmentpipeline nog niet gestart.
+3. **Supabase:** afzonderlijke juiste projecten en drie werkelijk bevoegde accounts; externe PostgreSQL 17/directe of sessionconnecties, CA/hostname, volledige RLS-lezende dump, echte first-databasebootstrap, Auth/providergrants en onherhaalbare ownerbootstrap met de echte eigenaar. Geen data-/securitybypass als dit ontbreekt.
+4. **Hetzner:** bewust private buckets en minimaal bevoegde sleutels; aantoonbare wederzijdse toegangsweigering tussen staging en production. Echte repository-init met het eigen kluispassword, HTTPS/regio, snapshotdump/upload/download/restore, policy/delete/lock/multipartrechten, retention en een werkelijke fout die deployment vóór migratie stopt.
+5. **DNS/Caddy/Tailscale:** vier A-records naar hetzelfde VPS-IP, eventuele IPv6 werkelijk werkend, publiek HTTPS/ACME, staging via Tailscale/split DNS op web én realtime geweigerd voor andere bronnen, bestaande Caddy-sites behouden. Geen live DNS/SSH/firewall/Tailscale gewijzigd vanuit dit werk.
+6. **Gebruikersacceptatie:** echte OTP/CAPTCHA/mailbezorging, twee spelers/toeschouwer, HTTP-seats/WebSocket/heartbeat/reconnect op beide echte domeinparen; controle dat production nooit stagingproject of endpoint gebruikt.
+7. **Beheer/herstel:** echte bestaande-wedstrijddeployment en lock/concurrency, readiness-/rollbackproef met expand-compatible schema, dagelijkse timerrestore/retention/failuremonitoring, resource/capaciteitsmeting onder gelijktijdige staging/productionbelasting en het volledige herstelplan inclusief providerconfig/kluis en eventueel later toegevoegde Storage-objecten.
+
+De gebruiker geeft deployment vrij met merges naar staging/production. De concrete code, installatieprocedure, migratieplan en complete invulinventaris staan in de repository; bovenstaande externe gates worden niet als geslaagd voorgesteld zonder toegang en bewijs.

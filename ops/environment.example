@@ -1,26 +1,28 @@
-# Inventory only; full instructions: docs/GITHUB-STAGING.md
-# GitHub Environment staging SECRETS:
-# RESTIC_PASSWORD
-# AWS_ACCESS_KEY_ID
-# AWS_SECRET_ACCESS_KEY
-# BACKUP_DATABASE_URL
+# Both GitHub Environments: staging and production. docs/GITHUB-ENVIRONMENTS.md
+# Required SECRETS (9):
 # SUPABASE_SECRET_KEY
 # DATABASE_URL
 # MIGRATION_DATABASE_URL
+# BACKUP_DATABASE_URL
 # RESEND_API_KEY
 # INTERNAL_DEPLOY_TOKEN
-# GitHub Environment staging VARIABLES:
+# RESTIC_PASSWORD
+# AWS_ACCESS_KEY_ID
+# AWS_SECRET_ACCESS_KEY
+# Required VARIABLES (9):
 # NEXT_PUBLIC_APP_URL
-# DATABASE_CA_CERT_BASE
-# NODE_IMAGE
-# REDIS_IMAGE
 # NEXT_PUBLIC_REALTIME_URL
 # NEXT_PUBLIC_SUPABASE_URL
 # NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 # NEXT_PUBLIC_TURNSTILE_SITE_KEY
-# RESTIC_REPOSITORY
-# POSTGRES_IMAGE
 # MAIL_FROM
 # MAIL_REPLY_TO
-# Turnstile private secret and SMTP credentials belong in Supabase Auth settings.
-# One-time owner UUID/email/confirmation belong only in a temporary private operator file.
+# RESTIC_REPOSITORY
+# AWS_DEFAULT_REGION
+# Optional VARIABLE:
+# DATABASE_CA_CERT_BASE64
+# NODE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE: only ops/image-pins.json, not Environment vars.
+# AWS_* credentials come from Hetzner S3, not Amazon AWS.
+# RESTIC_PASSWORD: create for new repository and keep in password vault.
+# Turnstile private secret/OTP SMTP: Supabase Auth, not GitHub.
+# Owner UUID/email/confirmation: temporary private operator config, never automatic deployment.

@@ -40,6 +40,12 @@ try:
         except Exception:time.sleep(1)
     else:raise RuntimeError('Production containers did not become ready')
     docker(['exec','--env','NODE_OPTIONS=','dartspoint-acceptance-worker','node','scripts/health.mjs'])
+    docker(['exec','--env','NODE_OPTIONS=','dartspoint-acceptance-worker','node','scripts/verify-database.mjs'])
+    for origin in ('http://127.0.0.1:4302','https://other-environment.example.test'):
+        request=urllib.request.Request('http://127.0.0.1:42569/matchmake/joinOrCreate/match',method='OPTIONS',headers={'Origin':origin})
+        with urllib.request.urlopen(request,timeout=5) as response:
+            assert response.headers['Access-Control-Allow-Origin']=='http://127.0.0.1:4302'
+            assert response.headers['Vary']=='Origin'
     control="fetch('http://127.0.0.1:2567/internal/deploy/status',{headers:{Authorization:'Bearer '+process.env.INTERNAL_DEPLOY_TOKEN}}).then(async r=>{if(!r.ok)process.exit(1);const s=await r.json();console.log(JSON.stringify({protectedControlWorks:typeof s.activeMatches==='number'}));}).catch(()=>process.exit(1))"
     assert json.loads(docker(['exec','--env','NODE_OPTIONS=','dartspoint-acceptance-realtime','node','-e',control]))['protectedControlWorks']
     with urllib.request.urlopen('http://127.0.0.1:4302',timeout=10) as response:assert response.status==200
@@ -47,7 +53,7 @@ try:
     # Export/list rather than inspect container environments containing credentials.
     for service in ('worker','realtime','web'):
         docker(['exec','--env','NODE_OPTIONS=','dartspoint-acceptance-'+service,'node','-e',"const f=require('fs');if(f.existsSync('/app/.env')||f.existsSync('/app/.env.local')||f.existsSync('/app/reference'))process.exit(1);if(process.getuid()===0)process.exit(1);"])
-    (artifacts/'containers-result.json').write_text(json.dumps({'ok':True,'threeProductionImagesBuilt':True,'webAndRealtimeSameRelease':True,'realDatabaseRedisWorkerReadiness':True,'workerHealth':True,'loopbackControlInsideContainer':True,'productionPagesRender':True,'nonRootRuntime':True,'noEnvOrReferenceInImages':True},indent=2))
+    (artifacts/'containers-result.json').write_text(json.dumps({'ok':True,'threeProductionImagesBuilt':True,'webAndRealtimeSameRelease':True,'realDatabaseRedisWorkerReadiness':True,'workerHealth':True,'applicationDatabaseRoleVerified':True,'CORSBoundToWebOrigin':True,'loopbackControlInsideContainer':True,'productionPagesRender':True,'nonRootRuntime':True,'noEnvOrReferenceInImages':True},indent=2))
     print('Three standalone production images, real readiness and private control passed',flush=True)
 finally:
     for name in names:

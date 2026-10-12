@@ -1,36 +1,34 @@
 #!/usr/bin/env python3
-"""Build the exact checked-out SHA with only public build-time settings."""
-import json, os, re, subprocess, sys, tarfile
+"""Hosted-only amd64 image publication. Only public values enter builds/artifacts."""
+import datetime, json, os, subprocess, tempfile
 from pathlib import Path
-os.umask(0o077)
-release = Path(sys.argv[1]).resolve()
-if not re.fullmatch(r"/opt/dartspoint/(staging|production)/releases/[0-9a-f]{40}-[0-9]+-[0-9]+", str(release)):
-    raise SystemExit("Invalid release directory")
-meta = json.loads((release / "release.json").read_text())
-checkout = Path(meta["checkout"])
-if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip() != meta["sha"]:
-    raise SystemExit("Checkout changed since release preparation")
-if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=all"], cwd=checkout, text=True).strip():
-    raise SystemExit("Checkout is not clean; refuse to build uncommitted source")
-if not (checkout / ".dockerignore").is_file():
-    raise SystemExit("Copy and review ops/dockerignore.target as the repository .dockerignore first")
-# Git archive excludes ignored/untracked runner leftovers from the Docker context.
-# Public env stays in build args; runtime configuration is outside this archive.
-context = release / "source"
-context.mkdir(mode=0o700)
-archive = release / "source.tar"
-with archive.open("xb") as output:
-    subprocess.run(["git", "archive", "--format=tar", meta["sha"]], cwd=checkout, stdout=output, check=True)
-with tarfile.open(archive) as source:
-    source.extractall(context, filter="data")
-archive.unlink()
-for service, image in meta["images"].items():
-    args = ["docker", "build", "--file", "ops/Dockerfile.target", "--target", "runtime", "--tag", image,
-            "--build-arg", f"NODE_IMAGE={meta['nodeImage']}", "--build-arg", f"SERVICE={service}",
-            "--build-arg", f"GIT_SHA={meta['sha']}", "--build-arg", f"DEPLOY_ENV={meta['environment']}"]
-    for key, value in meta["public"].items():
-        args += ["--build-arg", f"{key}={value}"]
-    subprocess.run(args + ["."], cwd=context, check=True)
-image_ids = {service: subprocess.check_output(["docker", "image", "inspect", "--format", "{{.Id}}", image], text=True).strip() for service, image in meta["images"].items()}
-(release / "image-ids.json").write_text(json.dumps(image_ids, indent=2) + "\n")
-print("Release images built and immutable image IDs recorded.")
+from deployment_config import *
+
+def main():
+    env = environment(os.environ['DEPLOY_ENV'])
+    sha, run, attempt = (os.environ[k] for k in ('GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT'))
+    release_id = identity(sha, run, attempt)
+    if os.environ.get('GITHUB_REPOSITORY') != REPOSITORY or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted':
+        raise ValueError('Publication requires the hosted repository workflow')
+    if subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip() != sha:
+        raise ValueError('Build checkout does not match trigger')
+    if subprocess.check_output(['git','status','--porcelain','--untracked-files=all'],text=True).strip():
+        raise ValueError('Build checkout must be clean')
+    public = validate_public(env, os.environ)
+    pins = json.loads(Path('ops/image-pins.json').read_text())
+    images = {}
+    # Docker auth is created/removed by the workflow, outside source and image context.
+    for service in SERVICES:
+        image = f'ghcr.io/dartspoint/platform-{env}-{service}'
+        with tempfile.TemporaryDirectory() as folder:
+            metadata = Path(folder)/'metadata.json'
+            args = ['docker','buildx','build','--platform','linux/amd64','--file','ops/Dockerfile.target','--target','runtime','--push','--provenance=mode=min','--metadata-file',str(metadata),'--tag',image+':'+release_id,'--build-arg','NODE_IMAGE='+pins['NODE_IMAGE'],'--build-arg','SERVICE='+service,'--build-arg','GIT_SHA='+sha,'--build-arg','DEPLOY_ENV='+env]
+            for k, v in public.items(): args += ['--build-arg',k+'='+v]
+            subprocess.run(args+['.'], check=True)
+            images[service] = image+'@'+json.loads(metadata.read_text())['containerimage.digest']
+    manifest = {'version':1,'environment':env,'sha':sha,'run':run,'attempt':attempt,'repository':REPOSITORY,'workflow':'.github/workflows/deploy.yml','platform':'linux/amd64','public':public,'pins':pins,'images':images,'builtAt':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    validate_manifest(manifest, env, pins)
+    Path('release-manifest').mkdir(mode=0o700)
+    Path('release-manifest/release.json').write_text(json.dumps(manifest,indent=2)+'\n')
+
+if __name__ == '__main__': main()

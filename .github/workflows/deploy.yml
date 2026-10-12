@@ -1,42 +1,90 @@
-# Deployment runs only on protected environment branches and dedicated VPS runners.
+# Protected environment branches only. The target VPS never checks out/builds source.
 name: Deploy DartsPoint
 on:
   push:
     branches: [staging, production]
-permissions:
-  contents: read
+permissions: {}
 concurrency:
   group: dartspoint-deploy-${{ github.ref_name }}
   cancel-in-progress: false
 jobs:
-  deploy:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/production')
-    runs-on: [self-hosted, Linux, X64, "${{ github.ref_name == 'staging' && 'dartspoint-staging' || 'dartspoint-production' }}"]
-    timeout-minutes: 90
+  verify:
+    name: Verify
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+  publish:
+    name: Publish images
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
     environment:
       name: ${{ github.ref_name }}
-      url: ${{ vars.NEXT_PUBLIC_APP_URL }}
+    env:
+      DEPLOY_ENV: ${{ github.ref_name }}
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+      NEXT_PUBLIC_REALTIME_URL: ${{ vars.NEXT_PUBLIC_REALTIME_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
     steps:
-      # Reviewed immutable checkout v4.2.2; refresh deliberately, never an unpinned branch.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-          fetch-depth: 1
-      - name: Prepare private configuration from GitHub Environment
-        id: prepare
+      - name: Publish exact commit for this environment
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/dartspoint-registry.XXXXXX")
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          python3 ops/scripts/build-release.py
+      - name: Store public release identity
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dartspoint-release-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-manifest/release.json
+          if-no-files-found: error
+          retention-days: 7
+  deploy:
+    name: Controlled deployment
+    needs: [verify, publish]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/production')
+    runs-on: [self-hosted, Linux, X64, "${{ github.ref_name == 'staging' && 'dartspoint-staging' || 'dartspoint-production' }}"]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    environment:
+      name: ${{ github.ref_name }}
+      url: ${{ vars.NEXT_PUBLIC_APP_URL }}
+    steps:
+      - name: Download only the public manifest from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: dartspoint-release-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dartspoint-release
+      - name: Deliver to the installed environment helper
         env:
           DEPLOY_ENV: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_MANIFEST: ${{ runner.temp }}/dartspoint-release/release.json
           DATABASE_CA_CERT_BASE64: ${{ vars.DATABASE_CA_CERT_BASE64 }}
-          NODE_IMAGE: ${{ vars.NODE_IMAGE }}
-          REDIS_IMAGE: ${{ vars.REDIS_IMAGE }}
           NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_REALTIME_URL: ${{ vars.NEXT_PUBLIC_REALTIME_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           RESTIC_REPOSITORY: ${{ vars.RESTIC_REPOSITORY }}
-          POSTGRES_IMAGE: ${{ vars.POSTGRES_IMAGE }}
+          AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -48,17 +96,9 @@ jobs:
           MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           INTERNAL_DEPLOY_TOKEN: ${{ secrets.INTERNAL_DEPLOY_TOKEN }}
-        run: python3 ops/scripts/prepare-release.py
-      - name: Verify and build exact SHA for this environment
-        env:
-          RELEASE_PATH: ${{ steps.prepare.outputs.release }}
-        run: python3 ops/scripts/build-release.py "$RELEASE_PATH"
-      - name: Backup gate, drain, migrate, activate and health check
-        env:
-          RELEASE_PATH: ${{ steps.prepare.outputs.release }}
-        run: python3 ops/scripts/deploy.py "$RELEASE_PATH"
-      - name: Final readiness
-        run: python3 ops/scripts/health.py "$GITHUB_SHA"
-# No pull_request/pull_request_target trigger on these privileged runners.
-# No environment files, backups, logs or Docker inspection uploaded as artifacts.
-# Workflow intentionally excludes BOOTSTRAP_OWNER_EMAIL: owner creation is one-off.
+        run: /usr/bin/python3 -I /usr/local/libexec/dartspoint/delivery-entry.py
+      - name: Remove downloaded public manifest
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/dartspoint-release"
+# No privileged pull_request, checkout, dependency installation or build on target runners.
+# Restrict runner groups/workflows and branch/environment administration outside YAML.
