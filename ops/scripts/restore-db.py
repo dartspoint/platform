@@ -17,7 +17,8 @@ def restore(dump, image):
     try:
         run(['docker','run','-d','--name',name,'--network','none','--env','POSTGRES_HOST_AUTH_METHOD=trust',image])
         for attempt in range(60):
-            result=subprocess.run(['docker','exec',name,'pg_isready','-U','postgres'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            # Ignore the temporary Unix-socket server used by image initdb.
+            result=subprocess.run(['docker','exec',name,'pg_isready','-h','127.0.0.1','-U','postgres'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             if result.returncode==0:break
             time.sleep(1)
         else:raise RuntimeError('Restore database did not become ready')

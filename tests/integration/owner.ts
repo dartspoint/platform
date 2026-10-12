@@ -10,7 +10,10 @@ const image=JSON.parse(await readFile('ops/image-pins.json','utf8')).POSTGRES_IM
 function docker(args:string[]){const r=spawnSync('docker',args,{encoding:'utf8'});assert.equal(r.status,0,'Owned test database command failed');return r.stdout.trim();}
 try{
  docker(['run','-d','--name',name,'--publish','127.0.0.1::5432','--env','POSTGRES_HOST_AUTH_METHOD=trust',image]);
- for(let i=0;i<60;i++){if(spawnSync('docker',['exec',name,'pg_isready','-U','postgres'],{stdio:'ignore'}).status===0)break;await new Promise(r=>setTimeout(r,200));}
+ // The entrypoint's temporary init server accepts Unix sockets before it shuts
+ // down. TCP becomes ready only when the final server is actually running.
+ let ready=false;for(let i=0;i<150;i++){if(spawnSync('docker',['exec',name,'pg_isready','-h','127.0.0.1','-U','postgres'],{stdio:'ignore'}).status===0){ready=true;break;}await new Promise(r=>setTimeout(r,200));}
+ assert.equal(ready,true,'Disposable owner database did not become TCP-ready');
  const port=docker(['port',name,'5432/tcp']).split(':').at(-1),url=`postgresql://postgres@127.0.0.1:${port}/postgres`;isolated=new Pool({connectionString:url,max:1});
  await isolated.query("create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select null::uuid$$;create role anon;create role authenticated;create role service_role;");
  const env={...process.env,DATABASE_URL:url,MIGRATION_DATABASE_URL:url};const migrate=spawnSync('node',['node_modules/tsx/dist/cli.mjs','scripts/migrate.ts','--expand-only'],{env,encoding:'utf8'});assert.equal(migrate.status,0,'Fresh checksum migrations failed');
