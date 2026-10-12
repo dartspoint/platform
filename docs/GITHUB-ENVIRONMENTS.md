@@ -4,7 +4,7 @@ Configureer in GitHub → dartspoint/platform → Settings → Environments afzo
 
 ## Secrets — negen per omgeving
 
-Alle negen zijn verplicht. Alleen de stap `Deliver to the installed environment helper` ontvangt deze waarden; de hosted build ontvangt uitsluitend publieke variabelen. De private overdracht wordt na de helper verwijderd. Rolbestanden zijn app-owned en `0600`.
+Alle negen zijn verplicht. De hosted stap `Validate settings without displaying secret values` controleert eerst hun formaat, het Supabaseproject, de afzonderlijke databaselogins en het Hetzner-endpoint. Bij een fout toont hij alleen de betreffende instelling of contractregel; hij maakt geen verbinding met providers en schrijft geen configuratiebestand. Daarna ontvangt `Deliver to the installed environment helper` de waarden voor de private overdracht. De hosted imagebuild ontvangt uitsluitend publieke variabelen. De private overdracht wordt na de helper verwijderd. Rolbestanden zijn app-owned en `0600`.
 
 | Naam | Doel en herkomst | Consumer en tijdstip |
 |---|---|---|

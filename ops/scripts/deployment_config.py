@@ -69,7 +69,9 @@ def validate_backup(values):
 
 def validate_values(env, values):
     if set(values) != set(SECRETS + VARIABLES + OPTIONAL): raise ValueError('Unexpected or missing configuration fields')
-    for k in SECRETS + VARIABLES: scalar(values[k])
+    for k in SECRETS + VARIABLES:
+        try: scalar(values[k])
+        except ValueError: raise ValueError(k + ' is missing or invalid') from None
     validate_public(env, values); validate_backup(values)
     if not values['SUPABASE_SECRET_KEY'].startswith('sb_secret_'): raise ValueError('Server Supabase secret required')
     if not re.fullmatch('[A-Za-z0-9_-]{43,}', values['INTERNAL_DEPLOY_TOKEN']): raise ValueError('Deploy token needs 32 random bytes encoded base64url')

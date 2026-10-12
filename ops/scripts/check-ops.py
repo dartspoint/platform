@@ -19,6 +19,7 @@ def load_script(name):
     result=importlib.util.module_from_spec(spec);spec.loader.exec_module(result);return result
 
 installer=load_script('install-host')
+configuration_check=load_script('check-delivery-config')
 
 def fixture(env='staging'):
     pins=json.loads((HERE.parent/'image-pins.json').read_text())
@@ -174,6 +175,30 @@ class SerializationChecks(unittest.TestCase):
             ast.parse(path.read_text(),filename=str(path))
 
 class DeploymentContractChecks(unittest.TestCase):
+    def test_hosted_preflight_reports_settings_without_secret_values(self):
+        _,values,_=fixture()
+        sensitive='do-not-print-this-private-password'
+        cases=[('RESTIC_PASSWORD', '', 'RESTIC_PASSWORD is missing or invalid'),
+               ('INTERNAL_DEPLOY_TOKEN', sensitive, 'Deploy token needs'),
+               ('DATABASE_URL', 'postgresql://app:'+sensitive+'@host:invalid/postgres?sslmode=require', 'DATABASE_URL must use'),
+               ('SUPABASE_SECRET_KEY', sensitive, 'Server Supabase secret required'),
+               ('DATABASE_CA_CERT_BASE64', sensitive, 'Invalid database CA certificate'),
+               ('BACKUP_DATABASE_URL', values['DATABASE_URL'].replace('example-password',sensitive), 'credentials must be separate')]
+        for name,value,expected in cases:
+            with self.subTest(name=name),contextlib.redirect_stdout(io.StringIO()) as stdout,contextlib.redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(configuration_check.check('staging',{**values,name:value}),1)
+                output=stdout.getvalue()+stderr.getvalue()
+                self.assertIn(expected,output)
+                self.assertNotIn(sensitive,output)
+                self.assertNotIn(values['RESTIC_PASSWORD'],output)
+        with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(configuration_check.check('staging',values),0)
+
+    def test_hosted_preflight_suppresses_unexpected_exception_details(self):
+        with patch.object(configuration_check,'validate_values',side_effect=RuntimeError('private-value')), contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(configuration_check.check('staging',{}),1)
+        self.assertNotIn('private-value',stderr.getvalue())
+
     def test_environment_manifest_boundaries(self):
         for env in ('staging','production'):
             m,v,p=fixture(env);config.validate_manifest(m,env,p);config.validate_values(env,v)
@@ -317,6 +342,11 @@ class DeploymentContractChecks(unittest.TestCase):
         self.assertEqual(ci['on']['push']['branches'],['main']);self.assertIn('workflow_call',ci['on'])
         self.assertEqual(workflow['jobs']['verify']['uses'],'./.github/workflows/ci.yml')
         self.assertEqual(workflow['jobs']['publish']['runs-on'],'ubuntu-latest')
+        self.assertEqual(workflow['jobs']['publish']['needs'],['verify','configuration'])
+        configuration=workflow['jobs']['configuration']
+        self.assertEqual(configuration['runs-on'],'ubuntu-latest')
+        checked=configuration['steps'][1]['env']
+        self.assertEqual(set(checked),set(config.SECRETS+config.VARIABLES+config.OPTIONAL+('DEPLOY_ENV',)))
         deploy=workflow['jobs']['deploy'];self.assertIn('self-hosted',deploy['runs-on'])
         self.assertEqual(deploy['needs'],['verify','publish'])
         self.assertEqual(workflow['concurrency']['cancel-in-progress'],'false')
