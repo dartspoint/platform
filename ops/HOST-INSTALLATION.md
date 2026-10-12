@@ -6,6 +6,8 @@ Deze stappen zijn voor **de nieuwe doel-VPS**, als `nick` met bestaande beheerde
 
 Ubuntu 24.04, amd64, cgroup v2/systemd; Python 3, ca-certificates, sudo/visudo, native Caddy, Docker Engine met rootless extras, Compose >=2.30 en een bewust gecontroleerde recente Restic-versie die `restore --verify` ondersteunt. Volg de officiële Docker-package/rootlessinstallatie en verifieer versies en leverancierschecksums. PostgreSQL-clients krijgen het echte host-CA-bundle expliciet read-only gemount; een eventuele provider-CA wordt daaraan toegevoegd. Geen algemene Docker-groep/root-Docker-socket voor app of runner. [Rootless installeren](https://docs.docker.com/engine/security/rootless/), [resourcegrenzen](https://docs.docker.com/engine/security/rootless/tips/).
 
+De managed helpers gebruiken bewust `PATH=/usr/bin:/bin`. Installeer de gecontroleerde Restic-binary daarom root-owned als `/usr/bin/restic`, met `0755`, en controleer `/usr/bin/restic version` en `/usr/bin/restic restore --help` op `--verify`. Een binary uitsluitend in een administrator-home of `/usr/local/bin` wordt door deze helpers niet gebruikt.
+
 Controleer eerst `getent passwd`/`id`; maak alleen ontbrekende accounts. Voor nieuwe accounts:
 
 ```sh
