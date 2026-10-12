@@ -13,9 +13,28 @@ try{
  for(const actor of [a,b,viewer])await post(actor.page,'room',{roomId:room.id});
  const invitation=await post(a.page,'invite',{targetId:b.id,roomId:room.id,rules:{startScore:301,doubleIn:true,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},ranked:true});
  const accepted=await post(b.page,'invite/respond',{inviteId:invitation.id,action:'accept'});const id=accepted.matchId;
+ let sawStaleReady=false;
+ b.page.on('websocket',socket=>{if(new URL(socket.url()).port==='42567')socket.on('framereceived',frame=>{const bytes=Buffer.isBuffer(frame.payload)?frame.payload:Buffer.from(frame.payload);if(bytes.includes(Buffer.from('stale_state')))sawStaleReady=true;});});
+ await b.page.addInitScript(()=>{
+  const send=WebSocket.prototype.send,gate={hold:false,frames:[] as Array<()=>void>};
+  (window as any).__readyGate=gate;
+  WebSocket.prototype.send=function(this:WebSocket,data){
+   const bytes=ArrayBuffer.isView(data)?new Uint8Array(data.buffer,data.byteOffset,data.byteLength):data instanceof ArrayBuffer?new Uint8Array(data):null;
+   const text=typeof data==='string'?data:bytes?new TextDecoder().decode(bytes):'';
+   if(gate.hold&&text.includes('match.ready'))gate.frames.push(()=>send.call(this,data));else send.call(this,data);
+  };
+ });
  await a.page.goto(origin+'/spelen?match='+id);await b.page.goto(origin+'/spelen?match='+id);
- await a.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();
- let state=await get(a.page,'match/'+id);for(let i=0;i<40&&state.lifecycle!=='playing';i++){await new Promise(r=>setTimeout(r,100));state=await get(a.page,'match/'+id);}assert.equal(state.lifecycle,'playing');
+ // Delay the actual second player's command unchanged. The other player's
+ // confirmation commits first, forcing a real version rejection and refresh.
+ await b.page.evaluate(()=>{(window as any).__readyGate.hold=true;});
+ await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();
+ assert.equal(await b.page.evaluate(()=>(window as any).__readyGate.frames.length),1);
+ await a.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();
+ let state=await get(a.page,'match/'+id);for(let i=0;i<100&&!state.state.ready[0];i++){await new Promise(r=>setTimeout(r,100));state=await get(a.page,'match/'+id);}assert.equal(state.state.ready[0],true);
+ await b.page.evaluate(()=>{const gate=(window as any).__readyGate;gate.hold=false;for(const frame of gate.frames.splice(0))frame();});
+ for(let i=0;i<100&&state.lifecycle!=='playing';i++){await new Promise(r=>setTimeout(r,100));state=await get(a.page,'match/'+id);}assert.equal(state.lifecycle,'playing',JSON.stringify({lifecycle:state.lifecycle,ready:state.state.ready}));
+ assert.equal(sawStaleReady,true,'The actual server must reject the old confirmation before the client refreshes it');
  const sdk=new Client('ws://127.0.0.1:42567');const spectator=await sdk.joinOrCreate('match',{matchId:id,token:viewer.token});
  let spectatorSnapshot:any,firstFlight:any;spectator.onMessage('snapshot',s=>{spectatorSnapshot=s;if(s.state.pendingDart&&!firstFlight)firstFlight=s;});
  const rejected=new Promise<any>(resolve=>spectator.onMessage('error',resolve));spectator.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:id,expectedStateVersion:state.stateVersion,type:'dart.stop_horizontal',phaseToken:state.state.phaseToken});const error=await rejected;assert.equal(error.code,'spectator_read_only');
@@ -35,6 +54,6 @@ try{
  await a.page.reload();await a.page.getByRole('button',{name:'Stop horizontale indicator',exact:true}).waitFor();const restored=await get(a.page,'match/'+id);assert.deepEqual(restored.state.events,state.state.events);
  await a.page.screenshot({path:'artifacts/multiplayer-player-a.png',fullPage:true});await b.page.screenshot({path:'artifacts/multiplayer-player-b.png',fullPage:true});const result=await fullMatch(a,b,id);await spectator.leave();
  const totals=(await get(a.page,'bootstrap')).personalRecords;assert.ok(totals.highestCheckout>0);assert.ok(totals.fastestLeg>0);assert.equal(totals.wins,1);
- await writeFile('artifacts/multiplayer-result.json',JSON.stringify({ok:true,newOtpUsers:3,independentBrowsers:true,spectatorReadOnly:true,realMatchChatBetweenBrowsers:true,keyboardNoThrowWhileTyping:true,keyboardStopsMeter:true,accountRecordAggregates:true,authoritativeHit:true,scoreAtImpact:true,reconnectRestored:true,...result},null,2));
+ await writeFile('artifacts/multiplayer-result.json',JSON.stringify({ok:true,newOtpUsers:3,independentBrowsers:true,staleReadyRefreshesOnce:true,spectatorReadOnly:true,realMatchChatBetweenBrowsers:true,keyboardNoThrowWhileTyping:true,keyboardStopsMeter:true,accountRecordAggregates:true,authoritativeHit:true,scoreAtImpact:true,reconnectRestored:true,...result},null,2));
  console.log('Two browsers, spectator, authoritative impacts, reconnect, full match and Elo passed');
 }finally{await browser.close();}

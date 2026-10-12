@@ -20,7 +20,7 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string){
  const matchId=explicitMatchId??selected??own?.id;
  const actualId=matchId||own?.id;
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[sending,setSending]=useState(false),[connectionMessage,setConnectionMessage]=useState(''),[offlineUntil,setOfflineUntil]=useState<number|null>(null),[reconnected,setReconnected]=useState(false),[active,setActive]=useState(true);
- const current=useRef<Snapshot|null>(null),socket=useRef<Room|null>(null),pending=useRef<any>(null),offset=useRef(0);
+ const current=useRef<Snapshot|null>(null),socket=useRef<Room|null>(null),pending=useRef<any>(null),readyRetries=useRef(0),offset=useRef(0);
  const xMeter=useMotionValue(.5),yMeter=useMotionValue(.5);
  const apply=useCallback((value:Snapshot)=>{const previous=current.current;if(previous&&previous.matchId===value.matchId&&previous.stateVersion>value.stateVersion)return;const next={...previous,...value};offset.current=value.serverAt-Date.now();current.current=next;setSnapshot(next);},[]);
  useEffect(()=>{
@@ -30,19 +30,29 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string){
     const {data,error}=await browserAuth().auth.getSession();if(error||!data.session)throw new Error('Log opnieuw in om verder te spelen.');
     const client=new Client(process.env.NEXT_PUBLIC_REALTIME_URL!);const room=await client.joinOrCreate('match',{matchId:actualId,token:data.session.access_token});
     if(cancelled){await room.leave();return;}socket.current=room;setOfflineUntil(null);setConnectionMessage('');
-    room.onMessage('snapshot',(value:Snapshot)=>apply(value));
-    room.onMessage('receipt',(value:Snapshot)=>{apply(value);pending.current=null;setSending(false);});
-    room.onMessage('error',(value:any)=>{setSending(false);pending.current=null;setConnectionMessage(value.message);void api<Snapshot>('match/'+actualId).then(apply).catch(()=>{});});
+    room.onMessage('snapshot',(value:Snapshot)=>{if(!cancelled)apply(value);});
+    room.onMessage('receipt',(value:Snapshot)=>{if(cancelled)return;apply(value);pending.current=null;setSending(false);setConnectionMessage('');});
+    room.onMessage('error',(value:any)=>{
+     if(cancelled)return;const failed=pending.current;setSending(false);pending.current=null;setConnectionMessage(value.message);
+     void api<Snapshot>('match/'+actualId).then(fresh=>{
+      if(cancelled)return;apply(fresh);
+      // Readiness expresses a durable intention. Refresh and retry this alone
+      // when another player's confirmation wins the version race.
+      if(failed?.type==='match.ready'&&value.code==='stale_state'&&readyRetries.current<2&&fresh.seat!==null&&!fresh.state.ready[fresh.seat]&&['assigned','paused'].includes(fresh.lifecycle)&&socket.current===room&&!pending.current){
+       readyRetries.current++;const retry={...failed,commandId:crypto.randomUUID(),expectedStateVersion:fresh.stateVersion,phaseToken:fresh.state.phaseToken};pending.current=retry;setSending(true);setConnectionMessage('');room.send('command',retry);
+      }
+     }).catch(()=>{});
+    });
     room.onLeave(()=>{if(cancelled)return;socket.current=null;setOfflineUntil(Date.now()+(current.current?.remainingReconnectMs??120000));setConnectionMessage('De verbinding wordt hersteld.');retry=setTimeout(connect,1000);});
     apply(await api<Snapshot>('match/'+actualId));
     if(pending.current)room.send('command',pending.current);
     if(renew)clearInterval(renew);renew=setInterval(()=>{void browserAuth().auth.getSession().then(({data})=>{if(data.session)room.send('authenticate',{token:data.session.access_token});});},60000);
    }catch(e){if(cancelled)return;setConnectionMessage(e instanceof Error?e.message:'Verbinding maken lukt niet.');retry=setTimeout(connect,3000);}
   };
-  void connect();return ()=>{cancelled=true;clearTimeout(retry);clearInterval(renew);void socket.current?.leave();socket.current=null;current.current=null;setSnapshot(null);};
+  void connect();return ()=>{cancelled=true;clearTimeout(retry);clearInterval(renew);void socket.current?.leave();socket.current=null;current.current=null;pending.current=null;readyRetries.current=0;setSnapshot(null);};
  },[actualId,apply]);
  useEffect(()=>{let frame:number;const tick=()=>{const state=current.current?.state;if(state){const now=Date.now()+offset.current;const value=(axis:'horizontal'|'vertical')=>{const phase=(((now-state.phaseStartedAt)/(axis==='horizontal'?2200:2500)+.25)%1+1)%1;return 1-Math.abs(phase*2-1);};xMeter.set(state.lockedX===null?value('horizontal'):(state.lockedX+1.14)/2.28);yMeter.set(value('vertical'));}frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);return ()=>cancelAnimationFrame(frame);},[xMeter,yMeter]);
- const command=useCallback((type:string)=>{const s=current.current;if(!s||!socket.current||pending.current)return;const payload={protocolVersion:1,commandId:crypto.randomUUID(),matchId:s.matchId,expectedStateVersion:s.stateVersion,type,phaseToken:s.state.phaseToken};pending.current=payload;setSending(true);socket.current.send('command',payload);},[]);
+ const command=useCallback((type:string)=>{const s=current.current;if(!s||!socket.current||pending.current)return;readyRetries.current=0;const payload={protocolVersion:1,commandId:crypto.randomUUID(),matchId:s.matchId,expectedStateVersion:s.stateVersion,type,phaseToken:s.state.phaseToken};pending.current=payload;setSending(true);socket.current.send('command',payload);},[]);
  const startOrStop=useCallback(()=>{const s=current.current;if(!active||!s||s.seat!==s.state.turn||s.lifecycle!=='playing')return;if(preferences.haptics)navigator.vibrate?.(12);if(s.state.phase==='horizontal')command('dart.stop_horizontal');else if(s.state.phase==='vertical')command('dart.stop_vertical');},[active,preferences.haptics,command]);
  const beginMatch=useCallback(async()=>command('match.ready'),[command]);
  const raw=snapshot?.state??empty,swap=snapshot?.seat===1;
