@@ -2,7 +2,16 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {writeFileSync,mkdirSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import pg from 'pg';
-const status=JSON.parse(execFileSync(process.env.SUPABASE_CLI??new URL('../node_modules/.bin/supabase',import.meta.url).pathname,['status','--output','json'],{stdio:['ignore','pipe','ignore']}).toString());
+// Rebinding published ports restarts Postgres. A successful `start` predates
+// that restart, so wait for the provider's health checks before reading keys.
+let status;
+for(let attempt=0;attempt<120;attempt++){
+ try{
+  status=JSON.parse(execFileSync(process.env.SUPABASE_CLI??new URL('../node_modules/.bin/supabase',import.meta.url).pathname,['status','--output','json'],{stdio:['ignore','pipe','ignore']}).toString());
+  break;
+ }catch{await new Promise(resolve=>setTimeout(resolve,1000));}
+}
+if(!status)throw new Error('Local Supabase did not become ready within the startup budget');
 if(status.API_URL!=='http://127.0.0.1:62421') throw new Error('Wrong local Supabase project');
 const migrated=spawnSync(process.execPath,['node_modules/tsx/dist/cli.mjs','scripts/migrate.ts','--expand-only'],{env:{...process.env,APP_ENV:"development",MIGRATION_DATABASE_URL:status.DB_URL},stdio:'inherit'});if(migrated.status!==0)process.exit(migrated.status??1);
 const password=randomBytes(32).toString('base64url');
