@@ -40,12 +40,10 @@ jobs:
           RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           MAIL_REPLY_TO: ${{ vars.MAIL_REPLY_TO }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           INTERNAL_DEPLOY_TOKEN: ${{ secrets.INTERNAL_DEPLOY_TOKEN }}
         run: python3 ops/scripts/check-delivery-config.py
@@ -131,12 +129,10 @@ jobs:
           RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           MAIL_REPLY_TO: ${{ vars.MAIL_REPLY_TO }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           INTERNAL_DEPLOY_TOKEN: ${{ secrets.INTERNAL_DEPLOY_TOKEN }}
         run: /usr/bin/python3 -I /usr/local/libexec/dartspoint/delivery-entry.py

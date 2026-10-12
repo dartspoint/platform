@@ -1,6 +1,6 @@
 import {Pool} from 'pg';
-import {postgresOptions} from '../packages/data/src/postgres';
-const pool=new Pool({...postgresOptions(process.env.DATABASE_URL!),max:1});
+import {applicationPostgresOptions} from '../packages/data/src/postgres';
+const pool=new Pool({...applicationPostgresOptions(process.env.DATABASE_URL!),max:1});
 try{
  const result=await pool.query("select rolsuper,rolbypassrls,pg_has_role(current_user,'dartspoint_app','MEMBER') member,current_setting('server_version_num')::int version from pg_roles where rolname=current_user");
  const role=result.rows[0];

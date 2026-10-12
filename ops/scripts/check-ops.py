@@ -26,8 +26,7 @@ def fixture(env='staging'):
     host='staging.dartspoint.nl' if env=='staging' else 'dartspoint.nl'
     values={'NEXT_PUBLIC_APP_URL':'https://'+host,'NEXT_PUBLIC_REALTIME_URL':'https://realtime.'+host,'NEXT_PUBLIC_SUPABASE_URL':'https://'+'a'*20+'.supabase.co','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY':'sb_publishable_example','NEXT_PUBLIC_TURNSTILE_SITE_KEY':'site-key',
             'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':''}
-    for name,user in (('DATABASE_URL','app'),('MIGRATION_DATABASE_URL','migrate'),('BACKUP_DATABASE_URL','backup')):
-        values[name]='postgresql://'+user+':example-password@db.'+'a'*20+'.supabase.co/postgres?sslmode=verify-full'
+    values['DATABASE_URL']='postgresql://postgres:example-password@db.'+'a'*20+'.supabase.co/postgres?sslmode=verify-full'
     manifest={'version':1,'environment':env,'sha':'a'*40,'run':'100','attempt':'1','repository':'dartspoint/platform','workflow':'.github/workflows/deploy.yml','platform':'linux/amd64','public':{k:values[k] for k in config.PUBLIC},'pins':pins,'images':{s:'ghcr.io/dartspoint/platform-'+env+'-'+s+'@sha256:'+'b'*64 for s in config.SERVICES},'builtAt':'2026-10-12T00:00:00+00:00'}
     return manifest,values,pins
 
@@ -175,15 +174,59 @@ class SerializationChecks(unittest.TestCase):
             ast.parse(path.read_text(),filename=str(path))
 
 class DeploymentContractChecks(unittest.TestCase):
+    def test_first_start_never_bootstraps_existing_or_unverifiable_database(self):
+        from types import SimpleNamespace
+        operator=load_script('operator-actions')
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);release=root/'releases/first';release.mkdir(parents=True)
+            with patch.object(operator,'read_env',return_value={}),patch.object(operator,'client',return_value=([],{})),patch.object(operator,'compose') as migrate:
+                for result in (SimpleNamespace(returncode=0,stdout=b'false'),SimpleNamespace(returncode=1,stdout=b'')):
+                    with patch.object(operator.subprocess,'run',return_value=result):
+                        if result.returncode:
+                            with self.assertRaises(RuntimeError):operator.bootstrap_first_database('staging',root,release)
+                        else:self.assertFalse(operator.bootstrap_first_database('staging',root,release))
+                    migrate.assert_not_called()
+                (root/'database-bootstrapped.json').write_text('{}')
+                self.assertFalse(operator.bootstrap_first_database('staging',root,release))
+                migrate.assert_not_called()
+
+    def test_first_start_retains_credentials_until_normal_migration_and_records_success_only(self):
+        from types import SimpleNamespace
+        operator=load_script('operator-actions')
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);release=root/'releases/first';release.mkdir(parents=True)
+            credential=release/'migration.env';credential.write_text('private-fixture')
+            with patch.object(operator,'read_env',return_value={}),patch.object(operator,'client',return_value=([],{})),patch.object(operator.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=b'true')),patch.object(operator,'compose',side_effect=RuntimeError('migration failed')):
+                with self.assertRaises(RuntimeError):operator.bootstrap_first_database('staging',root,release,keep_migration=True)
+                self.assertFalse((root/'database-bootstrapped.json').exists())
+            with patch.object(operator,'read_env',return_value={}),patch.object(operator,'client',return_value=([],{})),patch.object(operator.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=b'true')),patch.object(operator,'compose'):
+                self.assertTrue(operator.bootstrap_first_database('staging',root,release,keep_migration=True))
+            self.assertTrue(credential.exists())
+            self.assertEqual(json.loads((root/'database-bootstrapped.json').read_text())['release'],'first')
+
+    def test_first_repository_access_never_initializes_an_accessible_repository(self):
+        from types import SimpleNamespace
+        operator=load_script('operator-actions');_,values,_=fixture()
+        with patch.object(operator,'read_env',return_value=values),patch.object(operator.subprocess,'run',return_value=SimpleNamespace(returncode=0)) as restic:
+            operator.ensure_backup_repository(Path('/unused'))
+        self.assertEqual(restic.call_count,1)
+        self.assertEqual(restic.call_args.args[0],['restic','snapshots','--json'])
+
+    def test_existing_repository_wrong_password_refuses_first_start(self):
+        from types import SimpleNamespace
+        operator=load_script('operator-actions');_,values,_=fixture()
+        with patch.object(operator,'read_env',return_value=values),patch.object(operator.subprocess,'run',side_effect=[SimpleNamespace(returncode=1),SimpleNamespace(returncode=1)]) as restic:
+            with self.assertRaises(RuntimeError):operator.ensure_backup_repository(Path('/unused'))
+        self.assertEqual(restic.call_count,2)
+
     def test_hosted_preflight_reports_settings_without_secret_values(self):
         _,values,_=fixture()
         sensitive='do-not-print-this-private-password'
         cases=[('RESTIC_PASSWORD', '', 'RESTIC_PASSWORD is missing or invalid'),
                ('INTERNAL_DEPLOY_TOKEN', sensitive, 'Deploy token needs'),
-               ('DATABASE_URL', 'postgresql://app:'+sensitive+'@host:invalid/postgres?sslmode=require', 'DATABASE_URL must use'),
+               ('DATABASE_URL', 'postgresql://app:'+sensitive+'@host:invalid/postgres?sslmode=require', 'DATABASE_URL must be'),
                ('SUPABASE_SECRET_KEY', sensitive, 'Server Supabase secret required'),
-               ('DATABASE_CA_CERT_BASE64', sensitive, 'Invalid database CA certificate'),
-               ('BACKUP_DATABASE_URL', values['DATABASE_URL'].replace('example-password',sensitive), 'credentials must be separate')]
+               ('DATABASE_CA_CERT_BASE64', sensitive, 'Invalid database CA certificate')]
         for name,value,expected in cases:
             with self.subTest(name=name),contextlib.redirect_stdout(io.StringIO()) as stdout,contextlib.redirect_stderr(io.StringIO()) as stderr:
                 self.assertEqual(configuration_check.check('staging',{**values,name:value}),1)
@@ -225,17 +268,23 @@ class DeploymentContractChecks(unittest.TestCase):
         for name in config.SECRETS:
             with self.assertRaises(ValueError):config.validate_values('staging',{**v,name:''})
 
-    def test_distinct_database_roles_cannot_be_faked_with_url_flags(self):
-        for encoded in ('%61pp','a%70p','ap%70'):
-            m,v,p=fixture()
-            v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('app:',encoded+':')
-            with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)
-        m,v,p=fixture()
-        v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('verify-full','require')
-        with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)
-        m,v,p=fixture()
-        v['BACKUP_DATABASE_URL']=v['DATABASE_URL'].replace('app:example-password@db.'+'a'*20+'.supabase.co','app.'+'a'*20+':different-password@aws-0-eu-central-1.pooler.supabase.com:5432')
-        with self.assertRaisesRegex(ValueError,'separate'):config.validate_values('staging',v)
+    def test_single_login_adds_verified_tls_and_uses_session_port(self):
+        _,values,_=fixture()
+        canonical=values['DATABASE_URL']
+        for url in (canonical,canonical.replace('verify-full','require'),canonical.split('?')[0],canonical.replace('.supabase.co/', '.supabase.co:6543/')):
+            checked=config.validate_values('staging',{**values,'DATABASE_URL':url})
+            self.assertEqual(checked['DATABASE_URL'],canonical if ':6543/' not in url else canonical.replace('.supabase.co/', '.supabase.co:5432/'))
+            self.assertEqual(values['DATABASE_URL'],canonical)
+        pooled=canonical.replace('postgres:', 'postgres.'+'a'*20+':').replace('db.'+'a'*20+'.supabase.co','aws-0-eu-central-1.pooler.supabase.com:6543')
+        checked=config.validate_values('staging',{**values,'DATABASE_URL':pooled.split('?')[0]})
+        self.assertEqual(checked['DATABASE_URL'],pooled.replace(':6543/', ':5432/'))
+
+    def test_shared_login_does_not_accept_ambiguous_or_disabled_tls(self):
+        _,values,_=fixture()
+        base=values['DATABASE_URL'].split('?')[0]
+        for query in ('sslmode=disable','sslmode=require&sslmode=verify-full','sslmode=require&sslrootcert=/unreviewed/path','sslmode='):
+            with self.subTest(query=query),self.assertRaises(ValueError):
+                config.validate_values('staging',{**values,'DATABASE_URL':base+'?'+query})
 
     def test_unknown_extension_metadata_cannot_reach_restore_sql(self):
         restore=load_script('restore-db')
@@ -250,17 +299,21 @@ class DeploymentContractChecks(unittest.TestCase):
                 release=prepare.prepare(m,v,root)
                 for service in config.SERVICES:
                     values=config.read_env(release/(service+'.env'))
+                    self.assertEqual(values['DATABASE_URL'],v['DATABASE_URL'])
+                    self.assertEqual(values['DATABASE_ROLE'],'dartspoint_app')
                     self.assertNotIn('MIGRATION_DATABASE_URL',values);self.assertNotIn('BACKUP_DATABASE_URL',values)
                     self.assertNotIn('RESTIC_PASSWORD',values);self.assertNotIn('AWS_SECRET_ACCESS_KEY',values)
                     if service!='worker':self.assertNotIn('RESEND_API_KEY',values)
                 self.assertEqual(set(config.read_env(release/'migration.env')),{'NODE_ENV','APP_ENV','DEPLOY_ENV','MIGRATION_DATABASE_URL','DATABASE_CA_CERT_BASE64'})
+                self.assertEqual(config.read_env(release/'migration.env')['MIGRATION_DATABASE_URL'],v['DATABASE_URL'])
+                self.assertEqual(config.read_env(release/'backup.env')['BACKUP_DATABASE_URL'],v['DATABASE_URL'])
                 self.assertEqual(config.read_env(release/'backup.env')['AWS_DEFAULT_REGION'],'fsn1')
                 self.assertEqual(config.read_env(release/'deploy.env')['WEB_PORT'],str(config.ports(env)[0]))
                 self.assertFalse((release/'compose.yml').exists())
 
     def test_libpq_mounts_real_host_trust_instead_of_assuming_image_ca(self):
         import postgres_client
-        m,v,p=fixture();v['POSTGRES_IMAGE']=p['POSTGRES_IMAGE']
+        m,v,p=fixture();v['POSTGRES_IMAGE']=p['POSTGRES_IMAGE'];v['BACKUP_DATABASE_URL']=v['DATABASE_URL']
         with tempfile.TemporaryDirectory() as folder:
             args,env=postgres_client.client(v,folder)
             self.assertEqual(env['PGSSLMODE'],'verify-full')
@@ -274,13 +327,12 @@ class DeploymentContractChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaisesRegex(ValueError,'Build-time'):prepare.prepare(m,v,Path(folder))
 
-    def test_cross_project_database_and_transaction_pooler_are_rejected(self):
+    def test_cross_project_database_and_unknown_ports_are_rejected(self):
         m,v,p=fixture()
-        for value in (v['DATABASE_URL'].replace('a'*20,'b'*20),v['DATABASE_URL'].replace('.supabase.co','.supabase.co:6543')):
+        for value in (v['DATABASE_URL'].replace('a'*20,'b'*20),v['DATABASE_URL'].replace('.supabase.co','.supabase.co:1234')):
             with self.assertRaises(ValueError):config.validate_values('staging',{**v,'DATABASE_URL':value})
         values={**v}
-        for key in ('DATABASE_URL','MIGRATION_DATABASE_URL','BACKUP_DATABASE_URL'):
-            values[key]=values[key].replace(':example-password@', '.'+'a'*20+':example-password@').replace('db.'+'a'*20+'.supabase.co','aws-0-eu-central-1.pooler.supabase.com:5432')
+        values['DATABASE_URL']=values['DATABASE_URL'].replace(':example-password@', '.'+'a'*20+':example-password@').replace('db.'+'a'*20+'.supabase.co','aws-0-eu-central-1.pooler.supabase.com:5432')
         config.validate_values('staging',values)
 
     def test_stale_or_duplicate_runs_cannot_reverse_release_order(self):

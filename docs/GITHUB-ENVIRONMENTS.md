@@ -2,21 +2,23 @@
 
 Configureer in GitHub → dartspoint/platform → Settings → Environments afzonderlijk `staging` en `production`. Alleen de gelijknamige beschermde branch mag zijn environment gebruiken. Beide draaien op dezelfde doel-VPS, met afzonderlijke externe Supabaseprojecten, accounts, mailkeys en backuprechten. Developmentcredentials mogen hier niet worden hergebruikt.
 
-## Secrets — negen per omgeving
+## Secrets — zeven per omgeving
 
-Alle negen zijn verplicht. De hosted stap `Validate settings without displaying secret values` controleert eerst hun formaat, het Supabaseproject, de afzonderlijke databaselogins en het Hetzner-endpoint. Bij een fout toont hij alleen de betreffende instelling of contractregel; hij maakt geen verbinding met providers en schrijft geen configuratiebestand. Daarna ontvangt `Deliver to the installed environment helper` de waarden voor de private overdracht. De hosted imagebuild ontvangt uitsluitend publieke variabelen. De private overdracht wordt na de helper verwijderd. Rolbestanden zijn app-owned en `0600`.
+Alle zeven zijn verplicht. De hosted stap `Validate settings without displaying secret values` controleert eerst hun formaat, het Supabaseproject, de databaseverbinding en het Hetzner-endpoint. Bij een fout toont hij alleen de betreffende instelling of contractregel; hij maakt geen verbinding met providers en schrijft geen configuratiebestand. Daarna ontvangt `Deliver to the installed environment helper` de waarden voor de private overdracht. De hosted imagebuild ontvangt uitsluitend publieke variabelen. De private overdracht wordt na de helper verwijderd. Rolbestanden zijn app-owned en `0600`.
 
 | Naam | Doel en herkomst | Consumer en tijdstip |
 |---|---|---|
 | `SUPABASE_SECRET_KEY` | `sb_secret_…` uit het betreffende Supabaseproject, Settings → API Keys | Serverauth in web/realtime/worker, runtime; eenmalig ownerbootstrap |
-| `DATABASE_URL` | Directe of session-pooler-URL van eigen app-login, lid van `dartspoint_app`, `NOSUPERUSER NOBYPASSRLS`; database `postgres`, `?sslmode=verify-full` | Appdriver/runtime en pre-deploy rol/TLS-verificatie |
-| `MIGRATION_DATABASE_URL` | Afzonderlijke privileged migratielogin; directe/sessionverbinding, TLS | Alleen tijdelijke migratiecontainer; bestand verwijderd na gebruik |
-| `BACKUP_DATABASE_URL` | Afzonderlijke backup-login, volledige leesrechten op auth/public/private/migratiegegevens en sequences; gecontroleerde RLS-bypass voor deze rol nodig | Snapshot-export en pg_dump, uitsluitend backuphelper |
+| `DATABASE_URL` | Eén beheerlogin van het betreffende Supabaseproject, doorgaans `postgres`, met rechten voor expand-migraties en volledige backups | De helper gebruikt dezelfde login voor app, migraties en backups. Appverbindingen schakelen vóór gebruik naar `dartspoint_app` |
 | `RESEND_API_KEY` | Omgevingsgebonden Resend-key voor geverifieerd verzenddomein | Alleen gewone worker, applicatiemail |
 | `INTERNAL_DEPLOY_TOKEN` | Eenmalig gegenereerde 32 random bytes, base64url zonder padding; bijvoorbeeld lokaal `openssl rand -base64 32` naar base64url omzetten; in kluis bewaren | Alleen realtime; interne drain/status/resume. Houd stabiel over releases |
 | `RESTIC_PASSWORD` | Zelf gekozen sterk wachtwoord bij nieuwe repository; genereer 32 random bytes in je wachtwoordmanager of lokaal met `openssl rand -base64 32` | Alleen Restic backup/restore/init/retention. Bewaar ook in de kluis; bestaande repository vereist oorspronkelijk wachtwoord |
 | `AWS_ACCESS_KEY_ID` | Hetzner Object Storage S3-access key met toegang uitsluitend tot de betreffende backupbucket | Alleen Restic/S3 |
 | `AWS_SECRET_ACCESS_KEY` | Bijbehorende Hetzner S3-secret; direct veilig bewaren bij aanmaken | Alleen Restic/S3 |
+
+`DATABASE_URL` is de enige database-secret. Kopieer de directe of session-pooler-URL uit Supabase Connect. De helper voegt ontbrekende TLS-configuratie toe, gebruikt `sslmode=verify-full` en zet bekende Supabase transaction-endpoints op session/direct-poort 5432. Dubbele, uitgeschakelde of andere ongeldige TLS-opties worden geweigerd; project, certificaat en hostname blijven gecontroleerd. URL-encode gereserveerde tekens in het wachtwoord.
+
+De helper schrijft dezelfde genormaliseerde URL onder de consumernaam `MIGRATION_DATABASE_URL` in het tijdelijke migratiebestand en `BACKUP_DATABASE_URL` in het backupbestand. Deze twee namen zijn geen vereiste GitHub-secrets meer; bestaande items kunnen blijven staan en worden niet gebruikt. De eerste migrations kennen de bestaande beheerlogin de wachtwoordloze rechtengroep `dartspoint_app` toe. Iedere nieuwe app-poolverbinding wacht op `SET ROLE dartspoint_app`; de live gate blijft NOSUPERUSER/NOBYPASSRLS op de effectieve app-rol controleren. De gedeelde login zelf houdt beheerrechten: `SET ROLE` is geen grens tegen misbruik van gelekte logincredentials.
 
 `AWS_*` zijn S3-clientnamen en verplichten niet tot Amazon AWS. Restic verzorgt encryptie; Hetzner bewaart de versleutelde objecten. [Hetzner Restic](https://docs.hetzner.com/storage/object-storage/howto-backups/restic/).
 

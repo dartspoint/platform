@@ -1,4 +1,4 @@
-import {postgresOptions} from './postgres';
+import {applicationPostgresOptions} from './postgres';
 import { Pool, type PoolClient } from 'pg';
 import { createClient } from 'redis';
 import { DomainError } from '../../contracts/src/index';
@@ -7,7 +7,7 @@ export function db():Pool {
  if(!pool) {
    const url=process.env.DATABASE_URL;
    if(!url) throw new DomainError('unavailable',503);
-   pool=new Pool({...postgresOptions(url),max:4,connectionTimeoutMillis:5000,idleTimeoutMillis:30000});
+   pool=new Pool({...applicationPostgresOptions(url),max:4,connectionTimeoutMillis:5000,idleTimeoutMillis:30000});
    pool.on('error',()=>console.error(JSON.stringify({event:'database_pool_error'})));
  }
  return pool;

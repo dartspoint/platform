@@ -75,7 +75,7 @@ def main():
         policy=json.loads((CONFIG/env/'public.json').read_text())
         if manifest['public']!=validate_public(env,policy):
             raise ValueError('Build public configuration differs from administrator-installed environment policy')
-        validate_values(env,bundle['values'])
+        bundle['values'] = validate_values(env,bundle['values'])
         username=verify(manifest,bundle['registryToken'])
         reject_old(root,manifest)
         release = module('prepare-release').prepare(manifest,bundle['values'],root)
@@ -83,6 +83,11 @@ def main():
             pull(manifest,bundle['registryToken'],release,username)
             verify(manifest,bundle['registryToken'])
             del bundle['registryToken']
+            first_start = module('operator-actions')
+            if first_start.bootstrap_first_database(env,root,release,keep_migration=True):
+                print('Proven empty database initialized; normal database/backup/restore gates remain mandatory',flush=True)
+            if not (root/'current').exists() and (root/'database-bootstrapped.json').exists():
+                first_start.ensure_backup_repository(release)
             module('deploy').execute(release,locked=True)
         except Exception:
             # Retain role config for deliberate recovery, but never retain registry tokens.

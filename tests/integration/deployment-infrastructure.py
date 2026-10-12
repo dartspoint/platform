@@ -13,8 +13,8 @@ ROOT=Path(__file__).resolve().parents[2]
 PINS=json.loads((ROOT/'ops/image-pins.json').read_text())
 TOOLS=Path(os.environ['DARTSPOINT_QA_TOOLS'])
 
-def run(args, env=None, expected=True, timeout=120):
-    result=subprocess.run(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
+def run(args, env=None, expected=True, timeout=120, input=None):
+    result=subprocess.run(args,env=env,input=input,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
     if expected and result.returncode: raise RuntimeError('Disposable infrastructure check failed; private provider details suppressed')
     return result
 
@@ -52,12 +52,22 @@ def tls_checks():
                 nodeenv=folder/'node.env';nodeenv.write_text('APP_ENV=staging\nDATABASE_URL=postgresql://postgres:'+password+'@'+hostname+'/postgres?sslmode=require\nDATABASE_CA_CERT_BASE64='+base64.b64encode((folder/(ca+'.crt')).read_bytes()).decode()+'\n')
                 result=docker('run','--rm','--network',network,'--user','node','--memory','256m','--cpus','0.5','--pids-limit','128','--env-file',str(nodeenv),'--mount','type=bind,source='+str(folder/'client.mjs')+',target=/tmp/client.mjs,readonly',PINS['NODE_IMAGE'],'node','/tmp/client.mjs',expected=False)
                 if (result.returncode==0)!=good: raise RuntimeError('Node database driver accepted an untrusted certificate or incorrect hostname')
+            # Same login/password, restricted effective role on every new pool connection.
+            fixture="create role dartspoint_app nologin nosuperuser nocreatedb nocreaterole nobypassrls;create schema auth;create table auth.provider_fixture(id int);insert into auth.provider_fixture values(1),(2);create table public.runtime_fixture(id int);alter table public.runtime_fixture enable row level security;create policy backend on public.runtime_fixture for all to dartspoint_app using(true) with check(true);grant usage on schema public to dartspoint_app;grant select,insert on public.runtime_fixture to dartspoint_app;"
+            fixture += (ROOT/'supabase/migrations/20261012001100_shared_login.sql').read_text()
+            docker('exec','-i',name,'psql','-U','postgres','-v','ON_ERROR_STOP=1',input=fixture.encode())
+            checker=folder/'role-check.ts'
+            checker.write_text("import assert from 'node:assert/strict';import {Pool} from 'pg';import {applicationPostgresOptions,postgresOptions} from "+json.dumps(str(ROOT/'packages/data/src/postgres.ts'))+";const p=new Pool({...applicationPostgresOptions(process.env.DATABASE_URL!),max:4,maxUses:1});const admin=new Pool({...postgresOptions(process.env.DATABASE_URL!),max:1});try{await Promise.all(Array.from({length:16},async(_,i)=>{const c=await p.connect();try{const r=(await c.query(\"select current_user,session_user,rolsuper,rolbypassrls from pg_roles where rolname=current_user\")).rows[0];assert.equal(r.current_user,'dartspoint_app');assert.equal(r.session_user,'postgres');assert.equal(r.rolsuper,false);assert.equal(r.rolbypassrls,false);await c.query('insert into public.runtime_fixture values($1)',[i]);await assert.rejects(c.query('select * from auth.provider_fixture'),{code:'42501'});await assert.rejects(c.query('create table public.unexpected_table(id int)'),{code:'42501'});}finally{c.release();}}));assert.equal(Number((await p.query('select count(*) n from public.runtime_fixture')).rows[0].n),16);assert.equal(Number((await admin.query('select count(*) n from auth.provider_fixture')).rows[0].n),2);}finally{await p.end();await admin.end();}")
+            run([str(ROOT/'node_modules/.bin/esbuild'),str(checker),'--bundle','--platform=node','--format=esm','--target=node24','--external:pg-native','--banner:js=import {createRequire} from "node:module";const require=createRequire(import.meta.url);','--outfile='+str(folder/'role-check.mjs')],env={**os.environ,'NODE_PATH':str(ROOT/'node_modules')})
+            (folder/'role-check.mjs').chmod(0o644)
+            nodeenv.write_text('APP_ENV=staging\nDATABASE_ROLE=dartspoint_app\nDATABASE_URL=postgresql://postgres:'+password+'@'+name+'/postgres?sslmode=verify-full\nDATABASE_CA_CERT_BASE64='+base64.b64encode((folder/'ca.crt').read_bytes()).decode()+'\n')
+            docker('run','--rm','--network',network,'--user','node','--memory','256m','--cpus','0.5','--pids-limit','128','--env-file',str(nodeenv),'--mount','type=bind,source='+str(folder/'role-check.mjs')+',target=/tmp/role-check.mjs,readonly',PINS['NODE_IMAGE'],'node','/tmp/role-check.mjs')
             probe="const fs=require('node:fs');if(fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim()!=='268435456')process.exit(1);const [q,p]=fs.readFileSync('/sys/fs/cgroup/cpu.max','utf8').trim().split(' ').map(Number);if(q/p!==0.5||fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()!=='128')process.exit(1);"
             docker('run','--rm','--memory','256m','--cpus','0.5','--pids-limit','128',PINS['NODE_IMAGE'],'node','-e',probe)
     finally:
         docker('rm','--force','--volumes',name,expected=False)
         docker('network','rm',network,expected=False)
-    print('Real libpq and Node TLS: trusted CA works; wrong CA/hostname refused; cgroup limits enforced')
+    print('Real libpq/Node TLS and cgroup limits passed; shared login uses restricted app role on 16 recycled/concurrent connections')
 
 def encrypted_restore():
     values=dict(line.split('=',1) for line in (ROOT/'.env.local').read_text().splitlines() if line and not line.startswith('#'))
@@ -67,6 +77,7 @@ def encrypted_restore():
     run(role_command,{**os.environ,**values})
     if run(role_command,{**os.environ,**values,'DATABASE_URL':values['MIGRATION_DATABASE_URL']},expected=False).returncode==0:
         raise RuntimeError('Application role verification accepted a superuser')
+    run(role_command,{**os.environ,**values,'DATABASE_URL':values['MIGRATION_DATABASE_URL'],'DATABASE_ROLE':'dartspoint_app'})
     with tempfile.TemporaryDirectory(prefix='dartspoint-restic-') as directory:
         folder=Path(directory);source=folder/'source';source.mkdir();dump=source/'database.dump'
         pg={**os.environ,'PGHOST':'supabase_db_dartspoint-development','PGPORT':'5432','PGUSER':unquote(p.username),'PGPASSWORD':unquote(p.password),'PGDATABASE':'postgres'}
@@ -97,6 +108,6 @@ def encrypted_restore():
 if __name__=='__main__':
     try:
         tls_checks();encrypted_restore()
-        (ROOT/'artifacts/deployment-infrastructure-result.json').write_text(json.dumps({'ok':True,'libpqAndNodeTLSVerified':True,'untrustedCAAndHostnameRejected':True,'rootlessLimitsEnforced':True,'encryptedResticRealDatabaseRestored':True,'wrongResticPasswordRejected':True,'externalHetznerTested':False},indent=2))
+        (ROOT/'artifacts/deployment-infrastructure-result.json').write_text(json.dumps({'ok':True,'libpqAndNodeTLSVerified':True,'untrustedCAAndHostnameRejected':True,'sharedLoginRestrictedAppRoleVerified':True,'concurrentAndRecycledConnectionsVerified':True,'rootlessLimitsEnforced':True,'encryptedResticRealDatabaseRestored':True,'wrongResticPasswordRejected':True,'externalHetznerTested':False},indent=2))
     except Exception:
         print('Deployment infrastructure acceptance failed; credentials/provider diagnostics suppressed',file=sys.stderr);sys.exit(1)

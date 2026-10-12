@@ -13,7 +13,7 @@ def main():
     if (manifest['sha'],manifest['run'],manifest['attempt']) != tuple(os.environ[k] for k in ('GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT')):
         raise ValueError('Artifact identity differs from current workflow')
     values = {k:os.environ.get(k,'') for k in SECRETS+VARIABLES+OPTIONAL}
-    validate_values(env, values)
+    values = validate_values(env, values)
     bundle = {'manifest':manifest,'values':values,'registryToken':scalar(os.environ['GITHUB_TOKEN'])}
     spool = SPOOL/env
     # Per-environment group grants only the corresponding app account read access.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """TARGET single-game-process deployment. Never force-stop an active match."""
 import argparse, contextlib, datetime as dt, fcntl, json, os, re, subprocess, sys, time, urllib.request
-from deployment_config import ROOT, CONFIG, MANAGED, SECRETS, ports, read_env
+from deployment_config import ROOT, CONFIG, MANAGED, PRIVATE_FIELDS, ports, read_env
 from pathlib import Path
 
 os.umask(0o077)
@@ -20,7 +20,7 @@ def run(args, release):
     diagnostic = result.stdout
     for path in release.glob('*.env'):
         for key, value in read_env(path).items():
-            if key in SECRETS and value: diagnostic = diagnostic.replace(value, '[redacted]')
+            if key in PRIVATE_FIELDS and value: diagnostic = diagnostic.replace(value, '[redacted]')
     with open(release / "operations.log", "a", encoding="utf-8") as log:
         log.write(diagnostic)
     if result.returncode:

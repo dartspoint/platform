@@ -1,7 +1,7 @@
 """Shared, strictly validated deployment contract. Never evaluate configuration as code."""
 import json, os, re, ssl, base64
 from pathlib import Path
-from urllib.parse import urlsplit, parse_qs, unquote
+from urllib.parse import urlsplit, urlunsplit, parse_qs, parse_qsl, urlencode, unquote
 
 ROOT = Path('/srv/dartspoint')
 CONFIG = Path('/etc/dartspoint')
@@ -11,8 +11,9 @@ REPOSITORY = 'dartspoint/platform'
 SERVICES = ('web', 'realtime', 'worker')
 PUBLIC = ('NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_REALTIME_URL', 'NEXT_PUBLIC_SUPABASE_URL',
           'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY')
-SECRETS = ('SUPABASE_SECRET_KEY', 'DATABASE_URL', 'MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL',
+SECRETS = ('SUPABASE_SECRET_KEY', 'DATABASE_URL',
            'RESEND_API_KEY', 'INTERNAL_DEPLOY_TOKEN', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY')
+PRIVATE_FIELDS = SECRETS + ('MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL')
 VARIABLES = PUBLIC + ('MAIL_FROM', 'MAIL_REPLY_TO', 'RESTIC_REPOSITORY', 'AWS_DEFAULT_REGION')
 OPTIONAL = ('DATABASE_CA_CERT_BASE64',)
 
@@ -48,6 +49,24 @@ def validate_database_url(name, value):
     except Exception: valid = False
     if not valid: raise ValueError(f'{name} must use exactly one required TLS mode and the reviewed CA configuration')
 
+def normalize_database_url(value):
+    """Use one Supabase login over a verified direct/session connection."""
+    try:
+        p = urlsplit(scalar(value))
+        query = parse_qsl(p.query, keep_blank_values=True, strict_parsing=True)
+        modes = [v for k,v in query if k == 'sslmode']
+        if len(modes) > 1 or modes and modes[0] not in ('require', 'verify-full'):
+            raise ValueError()
+        netloc = p.netloc
+        if p.port == 6543 and ((p.hostname or '').endswith('.pooler.supabase.com') or re.fullmatch(r'db\.[a-z0-9]{20}\.supabase\.co', p.hostname or '')):
+            netloc = netloc.rsplit(':',1)[0] + ':5432'
+        query = [(k,v) for k,v in query if k != 'sslmode'] + [('sslmode','verify-full')]
+        normalized = urlunsplit((p.scheme,netloc,p.path,urlencode(query),p.fragment))
+    except Exception:
+        raise ValueError('DATABASE_URL must be a valid Supabase connection with verified TLS') from None
+    validate_database_url('DATABASE_URL',normalized)
+    return normalized
+
 def validate_public(env, values):
     values = {k: scalar(values[k]) for k in PUBLIC}
     host = 'staging.dartspoint.nl' if environment(env) == 'staging' else 'dartspoint.nl'
@@ -72,21 +91,14 @@ def validate_values(env, values):
     for k in SECRETS + VARIABLES:
         try: scalar(values[k])
         except ValueError: raise ValueError(k + ' is missing or invalid') from None
+    values = {**values, 'DATABASE_URL':normalize_database_url(values['DATABASE_URL'])}
     validate_public(env, values); validate_backup(values)
     if not values['SUPABASE_SECRET_KEY'].startswith('sb_secret_'): raise ValueError('Server Supabase secret required')
     if not re.fullmatch('[A-Za-z0-9_-]{43,}', values['INTERNAL_DEPLOY_TOKEN']): raise ValueError('Deploy token needs 32 random bytes encoded base64url')
-    for k in ('DATABASE_URL', 'MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL'): validate_database_url(k, values[k])
     project = urlsplit(values['NEXT_PUBLIC_SUPABASE_URL']).hostname.split('.')[0]
-    for k in ('DATABASE_URL', 'MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL'):
-        database = urlsplit(values[k])
-        if database.hostname != 'db.'+project+'.supabase.co' and not (database.hostname.endswith('.pooler.supabase.com') and unquote(database.username).endswith('.'+project)):
-            raise ValueError('Database connection does not belong to this Supabase project')
-    def login(value):
-        parsed=urlsplit(value)
-        username=unquote(parsed.username)
-        return username.rsplit('.',1)[0] if parsed.hostname.endswith('.pooler.supabase.com') else username
-    if len({login(values[k]) for k in ('DATABASE_URL', 'MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL')}) != 3:
-        raise ValueError('App, migration and backup credentials must be separate')
+    database = urlsplit(values['DATABASE_URL'])
+    if database.hostname != 'db.'+project+'.supabase.co' and not (database.hostname.endswith('.pooler.supabase.com') and unquote(database.username).endswith('.'+project)):
+        raise ValueError('Database connection does not belong to this Supabase project')
     ca = values['DATABASE_CA_CERT_BASE64']
     if ca:
         try: ssl.PEM_cert_to_DER_cert(base64.b64decode(scalar(ca), validate=True).decode('ascii'))
