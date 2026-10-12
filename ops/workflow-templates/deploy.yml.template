@@ -25,6 +25,7 @@ jobs:
       name: ${{ github.ref_name }}
     env:
       DEPLOY_ENV: ${{ github.ref_name }}
+      BUILDX_CONFIG: /tmp/dartspoint-buildx-${{ github.run_id }}-${{ github.run_attempt }}
       NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
       NEXT_PUBLIC_REALTIME_URL: ${{ vars.NEXT_PUBLIC_REALTIME_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
@@ -36,11 +37,13 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Set up the builder for attested image publication
+        id: release_builder
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
         with:
           driver: docker-container
       - name: Publish exact commit for this environment
         env:
+          BUILDX_BUILDER: ${{ steps.release_builder.outputs.name }}
           REGISTRY_TOKEN: ${{ github.token }}
           REGISTRY_USER: ${{ github.actor }}
         run: |
