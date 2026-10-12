@@ -5,6 +5,7 @@ dist/
 .env.*
 !.env.example
 *.tsbuildinfo
+!reference/handoff/source-sites/tsconfig.tsbuildinfo
 artifacts/
 test-results/
 playwright-report/
