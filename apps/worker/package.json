@@ -1,0 +1,16 @@
+{
+  "name": "@dartspoint/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/worker.ts"
+  },
+  "dependencies": {
+    "pg": "8.20.0",
+    "redis": "5.11.0",
+    "jose": "6.2.1",
+    "@supabase/supabase-js": "2.98.0",
+    "zod": "4.1.12"
+  }
+}

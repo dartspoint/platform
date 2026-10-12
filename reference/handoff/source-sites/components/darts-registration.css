@@ -1,0 +1,16 @@
+.dp-register-login-link{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:0 13px;border:1px solid #b8d2c12b;border-radius:9px;font-size:11px;color:#cadccd;transition:background .2s,border-color .2s}
+.dp-register-login-link:hover{background:#294a343d;border-color:#b8d2c150}
+.dp-register-card h1{font-size:44px;letter-spacing:-2px;line-height:1.08;margin-bottom:19px;outline:none}
+.dp-register-card .dp-login-intro{font-size:12px;line-height:1.85;max-width:365px}
+.dp-register-field-help{font-size:10px;line-height:1.6;color:#92aa99;margin:8px 0 0}
+.dp-register-benefits{display:grid;gap:14px;padding:26px 0;color:#a6c2ad;font-size:11px;line-height:1.65}
+.dp-register-benefits>span{display:flex;align-items:center;gap:10px}.dp-register-benefits svg{flex-shrink:0;color:#87c69b}.dp-register-benefits strong{color:#f2f3e9;font-weight:600}
+.dp-register-profile{display:flex;align-items:center;gap:13px;border:1px solid #b3d0b52b;border-radius:14px;background:linear-gradient(125deg,#273d2e99,#14291f);padding:21px 17px;box-shadow:0 12px 40px #0002}
+.dp-register-avatar{display:grid;place-items:center;width:48px;height:48px;flex-shrink:0;border:1px solid #c2d3bd28;border-radius:13px;background:#b7cdae10;color:#e4e9dc;font-weight:650;font-size:16px}
+.dp-register-profile>div{min-width:0;flex:1}.dp-register-profile>div>strong{display:block;font-size:15px;color:#f1f1e8;overflow-wrap:anywhere;font-weight:600}.dp-register-profile>div>span{display:block;color:#98af9e;font-size:9px;line-height:1.6;margin-top:4px}
+.dp-register-rating{font-family:"Barlow Condensed",sans-serif;font-size:35px;line-height:1;color:#f4f4ed;letter-spacing:.5px;text-align:right;flex-shrink:0}.dp-register-rating>small{display:block;font-family:"Manrope Variable",sans-serif;font-size:7px;letter-spacing:1.3px;margin-top:7px;color:#96ac9c}
+.dp-register-rating-note{font-size:11px;line-height:1.8;color:#a1b8a7;margin:18px 0 22px}
+.dp-register-edit{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;width:100%;background:none;border:0;color:#a8c2af;font-size:11px;margin:8px 0 20px}.dp-register-edit:hover{color:#eff5e9}
+.dp-register-page .dp-login-demo-note{font-size:10px;color:#93ac9a;line-height:1.75}.dp-register-page .dp-login-new{margin-bottom:0}.dp-register-page .dp-login-board-scene{bottom:62px;right:-5px}
+@media(max-width:760px){.dp-register-login-link{font-size:11px;padding:0 11px}.dp-register-card h1{font-size:40px;margin-bottom:17px}.dp-register-card .dp-login-intro{font-size:12px}.dp-register-page .dp-login-entry{padding-top:37px;padding-bottom:36px}.dp-register-benefits{font-size:11px;gap:13px;padding:25px 0}.dp-register-page .dp-login-demo-note{font-size:10px}.dp-register-page .dp-login-new{font-size:10px}.dp-register-profile{padding:19px 15px}}
+@media(max-width:380px){.dp-register-login-link{gap:5px;padding:0 9px;font-size:10px}.dp-register-card h1{font-size:36px}.dp-register-profile{gap:10px;padding:17px 12px}.dp-register-avatar{width:42px;height:42px}.dp-register-profile>div>strong{font-size:13px}.dp-register-rating{font-size:31px}.dp-register-page .dp-login-header{gap:10px}}

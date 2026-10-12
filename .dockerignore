@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/.next
+.git
+.env*
+artifacts
+reference
+test-results
+playwright-report
+
+dist
+**/.env*
+**/*.tsbuildinfo

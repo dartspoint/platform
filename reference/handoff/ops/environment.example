@@ -1,0 +1,22 @@
+# INVENTORY ONLY. Do not source this file or deploy its placeholders.
+# GitHub Environment VARIABLES (staging / production separately):
+# DEPLOY_ENV: inferred from protected branch name, staging or production
+# NEXT_PUBLIC_SITE_URL: https://staging.dartspoint.nl OR https://dartspoint.nl
+# NEXT_PUBLIC_REALTIME_URL: https://realtime.staging.dartspoint.nl OR https://realtime.dartspoint.nl
+# NEXT_PUBLIC_SUPABASE_URL: project-specific https://<ref>.supabase.co
+# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: public client key, not secret/service_role
+# NEXT_PUBLIC_TURNSTILE_SITE_KEY: environment-specific public CAPTCHA site key
+# CAPTCHA secret: configure in Supabase Auth dashboard, never NEXT_PUBLIC or this VPS runtime
+# NODE_IMAGE: compatible stable Node LTS image pinned by @sha256:<64 hex>
+# REDIS_IMAGE: compatible stable Redis image pinned by @sha256:<64 hex>
+# MAIL_FROM: DartsPoint <noreply@dartspoint.nl> (staging use isolated verified sender)
+# MAIL_REPLY_TO: chosen monitored support mailbox
+# GitHub Environment SECRETS:
+# SUPABASE_SECRET_KEY: server only; never NEXT_PUBLIC, logs or browser artifacts
+# DATABASE_URL: restricted application DB role; TLS; direct/session pooler
+# MIGRATION_DATABASE_URL: separate privileged migrations role; TLS
+# RESEND_API_KEY: server worker application mail (SMTP auth configured in Supabase separately)
+# INTERNAL_DEPLOY_TOKEN: >=32 random bytes represented as safe ASCII, same current/next during deploy
+# BOOTSTRAP_OWNER_EMAIL: explicit Nick owner address, not yet supplied; bootstrap-only secret
+# Error monitoring / object-storage variables can be added when selected.
+# Neither blank values nor example credentials are accepted by prepare-release.py.

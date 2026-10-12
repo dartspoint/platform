@@ -1,0 +1,12 @@
+Je inlogcode voor DartsPoint
+
+Voer deze code in op het scherm waar je zojuist je e-mailadres hebt ingevuld. Dan ben je klaar voor je volgende potje.
+
+INLOGCODE: {{ .Token }}
+10 minuten geldig · één keer te gebruiken
+
+
+Deze code is 10 minuten geldig en kun je één keer gebruiken. Heb je geen code aangevraagd? Dan kun je deze e-mail negeren. Deel je code nooit: DartsPoint vraagt er niet naar via chat of e-mail.
+
+Jouw kamer. Jouw wedstrijd. Jouw avond.
+DartsPoint · https://dartspoint.nl

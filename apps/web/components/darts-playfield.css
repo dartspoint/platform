@@ -1,0 +1,184 @@
+/* The game uses the available viewport; opening social panels never remounts it. */
+.darts-app.dp-fullscreen .dp-game-panel {
+  --height-rail-width:70px;
+  --height-rail-gap:14px;
+  --throw-size:116px;
+  --aim-height:40px;
+  display:grid;
+  grid-template-rows:minmax(0,1fr) auto;
+  gap:8px;
+  width:100%;
+  height:100%;
+  min-height:0;
+  max-width:1100px;
+  margin:0 auto;
+  padding:10px 20px 12px;
+}
+.darts-app.dp-fullscreen .dp-board-stage {
+  --playfield-width:min(100cqw,780px,calc(100cqh - var(--aim-height) - 16px + var(--height-rail-width) + var(--height-rail-gap)));
+  container-type:size;
+  z-index:1;
+  display:grid;
+  place-items:start center;
+  width:100%;
+  min-width:0;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.darts-app.dp-fullscreen .dp-board-stage:after { display:none; }
+.darts-app.dp-fullscreen .dp-board-and-height {
+  /* The button has its own anchor by the table and no longer shrinks the board. */
+  width:var(--playfield-width);
+  max-width:780px;
+  min-width:0;
+  padding:0;
+  margin-top:8px;
+  display:grid;
+  grid-template-rows:var(--aim-height) auto;
+}
+.darts-app.dp-fullscreen .dp-aim-header {
+  height:var(--aim-height);
+  align-items:center;
+  padding:0 5px 12px;
+}
+.darts-app.dp-fullscreen .dp-direction-meter {
+  width:52%;
+  min-width:0;
+  max-width:280px;
+  padding:0;
+}
+.darts-app.dp-fullscreen .dp-direction-meter .dp-meter-row { gap:8px; }
+.darts-app.dp-fullscreen .dp-meter-track { height:11px; }
+.darts-app.dp-fullscreen .dp-meter-indicator { width:8px; height:25px; border-radius:4px; }
+.darts-app.dp-fullscreen .dp-height-meter .dp-meter-track-vertical { width:11px; height:auto; }
+.darts-app.dp-fullscreen .dp-height-meter .dp-meter-indicator { width:25px; height:8px; }
+.darts-app.dp-fullscreen .dp-height-meter>svg,
+.darts-app.dp-fullscreen .dp-meter-icon>svg { width:15px; height:15px; }
+.darts-app.dp-fullscreen .dp-oche-playfield {
+  width:100%;
+  padding-right:calc(var(--height-rail-width) + var(--height-rail-gap));
+}
+.darts-app.dp-fullscreen .dp-board-and-height .dp-dartboard {
+  width:100%;
+  max-width:none;
+  height:auto;
+  aspect-ratio:1;
+}
+.darts-app.dp-fullscreen .dp-oche-playfield>.dp-height-meter {
+  top:9%;
+  bottom:97px;
+  width:var(--height-rail-width);
+  gap:9px;
+}
+.darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button {
+  position:absolute;
+  z-index:3;
+  width:var(--throw-size);
+  height:var(--throw-size);
+  bottom:-18px;
+  /* Follow the score table edge so its finish text always clears the button. */
+  right:max(0px,calc((100cqw - 680px) / 2));
+  line-height:1;
+}
+.darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button span { font-size:15px; letter-spacing:1.1px; }
+.darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button svg { width:23px; height:23px; }
+.darts-app.dp-fullscreen .dp-score-area {
+  width:100%;
+  max-width:680px;
+  min-width:0;
+  margin:0 auto;
+  align-self:end;
+}
+.darts-app.dp-fullscreen .dp-match-score { width:100%; margin:0; }
+.dp-checkout-slot { height:32px; overflow:hidden; padding:0 calc(var(--throw-size) + 16px) 5px 2px; }
+.dp-checkout-hint { display:flex; align-items:center; gap:10px; height:27px; min-width:0; color:#a5dec0; font-size:11px; font-weight:650; line-height:1.4; }
+.dp-checkout-label { display:flex; align-items:center; gap:6px; flex:none; color:#86b399; font-size:8px; font-weight:650; letter-spacing:.9px; text-transform:uppercase; }
+.dp-checkout-label>i { width:4px; height:4px; border-radius:50%; background:#7fd6a5; box-shadow:0 0 8px #7fd6a533; }
+.dp-checkout-routes { display:flex; align-items:center; min-width:0; gap:12px; overflow-x:auto; white-space:nowrap; scrollbar-width:none; overscroll-behavior-x:contain; padding:3px 2px; font-variant-numeric:tabular-nums; }
+.dp-checkout-routes::-webkit-scrollbar { display:none; }
+.dp-checkout-routes:focus-visible { outline:1px solid #91d4aa; outline-offset:-1px; border-radius:3px; }
+.dp-checkout-option { display:inline-flex; flex:none; gap:12px; }
+.dp-checkout-divider { color:#527460; font-weight:400; }
+.dp-match-score-identity { display:flex; flex:1; align-items:center; gap:6px; min-width:0; }
+.dp-match-score-identity .dp-match-score-name { flex:0 1 auto; }
+.dp-match-score-rating { flex:none; font-size:10px; font-weight:550; letter-spacing:-.2px; }
+@container(max-width:380px) {
+  .dp-match-score-identity { gap:4px; }
+  .dp-match-score-rating { font-size:9px; }
+}
+@container(max-width:330px) {
+  .dp-match-score-small-col { width:24px; }
+  .dp-match-score-points-col { width:48px; }
+  .dp-match-score-visit-col { width:44px; }
+  .dp-match-score-table tbody th { padding-left:8px; padding-right:4px; }
+  .dp-match-score-person { gap:5px; }
+}
+.darts-app.dp-fullscreen .dp-match-score-table caption { padding:8px 12px; }
+.darts-app.dp-fullscreen .dp-match-score-table caption>span:last-child { text-transform:none; letter-spacing:.3px; }
+.darts-app.dp-fullscreen .dp-match-score-table thead th { height:25px; }
+.darts-app.dp-fullscreen .dp-match-score-table tbody th,
+.darts-app.dp-fullscreen .dp-match-score-table tbody td { height:45px; padding-top:5px; padding-bottom:5px; }
+.darts-app.dp-fullscreen .dp-match-score-points,
+.darts-app.dp-fullscreen .dp-match-score-visit { min-height:33px; }
+
+@media(max-width:740px) {
+  .darts-app.dp-fullscreen .dp-game-panel {
+    --height-rail-width:54px;
+    --height-rail-gap:6px;
+    --throw-size:104px;
+    --aim-height:36px;
+    padding:6px 10px 9px;
+    gap:6px;
+  }
+  .darts-app.dp-fullscreen .dp-aim-header { padding-bottom:10px; }
+  .darts-app.dp-fullscreen .dp-direction-meter { width:55%; }
+  .darts-app.dp-fullscreen .dp-oche-playfield>.dp-height-meter { gap:7px; bottom:77px; }
+  .darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button span { font-size:14px; letter-spacing:1px; }
+  .darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button svg { width:21px; height:21px; }
+  .darts-app.dp-fullscreen .dp-match-score-table caption { padding:7px 10px; }
+  .darts-app.dp-fullscreen .dp-match-score-table tbody th,
+  .darts-app.dp-fullscreen .dp-match-score-table tbody td { height:44px; }
+}
+
+/* A short landscape viewport has room beside the board instead of below it. */
+@media(min-width:640px) and (max-height:540px) and (orientation:landscape) {
+  .darts-app.dp-fullscreen .dp-game-panel {
+    --height-rail-width:52px;
+    --height-rail-gap:8px;
+    --throw-size:76px;
+    --aim-height:34px;
+    max-width:1040px;
+    grid-template-columns:minmax(0,1fr) minmax(280px,.85fr);
+    grid-template-rows:minmax(0,1fr);
+    column-gap:18px;
+    padding:8px 16px 10px;
+  }
+  .darts-app.dp-fullscreen .dp-score-area { align-self:center; }
+  .darts-app.dp-fullscreen .dp-oche-playfield>.dp-height-meter { gap:5px; bottom:89px; }
+  .darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button { bottom:8px; }
+  .darts-app.dp-fullscreen .dp-checkout-slot { padding-right:2px; }
+}
+
+/* Retain a clear board corner when browser chrome leaves very little height. */
+@container(max-height:240px) {
+  .darts-app.dp-fullscreen .dp-board-stage>.dp-throw-button {
+    width:64px;
+    height:64px;
+  }
+}
+
+/* Long set formats and game IDs stay legible without widening the table. */
+.darts-app.dp-fullscreen .dp-match-score-table caption { text-align:left; }
+.darts-app.dp-fullscreen .dp-match-score-table caption>span { vertical-align:top; }
+.darts-app.dp-fullscreen .dp-match-score-table caption>span:first-child { display:inline-block; max-width:70%; overflow-wrap:anywhere; }
+.darts-app.dp-fullscreen .dp-match-score-table caption>span:last-child { max-width:45%; overflow-wrap:anywhere; }
+@container(max-width:380px) {
+  .dp-match-score-identity { flex-wrap:wrap; row-gap:1px; }
+  .dp-match-score-identity .dp-match-score-name { max-width:100%; flex-shrink:1; }
+  .dp-match-score-identity .dp-match-score-rating { font-size:9px; line-height:1.3; }
+}

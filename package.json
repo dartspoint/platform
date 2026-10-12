@@ -1,0 +1,43 @@
+{
+  "name": "dartspoint-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": "24.18.x"
+  },
+  "scripts": {
+    "dev:web": "npm run dev --workspace @dartspoint/web",
+    "dev:realtime": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/realtime/src/server.ts",
+    "dev:worker": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/worker/src/worker.ts",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace @dartspoint/web",
+    "test": "tsx --test tests/unit/*.test.ts",
+    "verify:ci": "npm run typecheck && npm test && python3 ops/scripts/check-ops.py",
+    "build:deploy": "node scripts/build-deploy.mjs",
+    "db:migrate": "tsx scripts/migrate.ts --expand-only",
+    "owner:bootstrap": "tsx scripts/owner-bootstrap.ts",
+    "dev": "node scripts/dev.mjs",
+    "local:setup": "bash scripts/local-setup.sh",
+    "test:integration": "bash scripts/test-local.sh"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.98.0",
+    "jose": "6.2.1",
+    "pg": "8.20.0",
+    "redis": "5.11.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "@types/express": "5.0.6",
+    "@types/node": "22.19.19",
+    "@types/pg": "8.15.6",
+    "esbuild": "0.28.2",
+    "supabase": "2.109.1",
+    "tsx": "4.22.1",
+    "typescript": "5.9.3"
+  }
+}

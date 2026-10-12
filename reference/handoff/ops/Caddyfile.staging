@@ -1,0 +1,19 @@
+# Import into the staging host Caddy configuration. Not production's file.
+staging.dartspoint.nl {
+    encode zstd gzip
+    @internal path /internal /internal/*
+    respond @internal 404
+    header X-Robots-Tag "noindex, nofollow, noarchive"
+    header X-Content-Type-Options nosniff
+    reverse_proxy 127.0.0.1:4300
+}
+realtime.staging.dartspoint.nl {
+    @internal path /internal /internal/*
+    respond @internal 404
+    header X-Robots-Tag "noindex, nofollow, noarchive"
+    reverse_proxy 127.0.0.1:42567 {
+        stream_close_delay 5m
+    }
+}
+# Restrict staging access at VPN/firewall or application allowlist if needed.
+# Basic auth on WS origins requires deliberate client support; don't add blindly.

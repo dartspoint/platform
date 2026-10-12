@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {writeFile} from 'node:fs/promises';
+import {Client,type Room} from '@colyseus/sdk';
+import {createClient} from '@supabase/supabase-js';
+import {db,redis,transaction} from '../../packages/data/src/db';
+import {authAdmin,actorById,type Actor} from '../../packages/data/src/auth';
+import {joinRoom} from '../../packages/data/src/community';
+import {createMatch,matchAccess} from '../../packages/data/src/matches';
+
+assert.equal(process.env.APP_ENV,'development');
+const sockets:Room[]=[],latencies:number[]=[];const admin=authAdmin();const ids:string[]=[];
+try{
+ const profiles=(await db().query("select p.id from profiles p where p.username like 'qa%' and p.status='active' and not exists(select 1 from active_player_reservations a where a.user_id=p.id) and not exists(select 1 from user_roles r where r.user_id=p.id and revoked_at is null) order by p.created_at desc limit 50")).rows;assert.equal(profiles.length,50);
+ const users:{actor:Actor;token:string}[]=[];
+ for(const p of profiles){
+  const user=await admin.auth.admin.getUserById(p.id);const link=await admin.auth.admin.generateLink({type:'magiclink',email:user.data.user!.email!});assert.equal(link.error,null);
+  const auth=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});const verified=await auth.auth.verifyOtp({type:'email',token_hash:link.data.properties!.hashed_token});assert.equal(verified.error,null);users.push({actor:await actorById(p.id,Date.now()+3600000),token:verified.data.session!.access_token});
+ }
+ const rooms:string[]=[];for(let index=0;index<2;index++){const name='qa-load-'+randomUUID();const room=(await db().query("insert into community_rooms(name,slug,description,capacity) values($1,$1,'Explicit load fixture',50) returning id",[name])).rows[0].id;await db().query("insert into channels(kind,room_id) values('community',$1)",[room]);rooms.push(room);}
+ for(let index=0;index<50;index++)await joinRoom(users[index].actor,{roomId:rooms[index%2]});
+ const sdk=new Client('ws://127.0.0.1:42567');
+ const pairs:{a:typeof users[number];b:typeof users[number];id:string;sockets:Room[]}[]=[];
+ for(let index=0;index<8;index++){
+  // Allocate four matches per room; user indices do not overlap.
+  const a=users[(index%2)+Math.floor(index/2)*4],b=users[(index%2)+Math.floor(index/2)*4+2];
+  const result=await transaction(c=>createMatch(c,a.actor,b.actor.id,rooms[index%2],{startScore:701,doubleIn:false,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},'casual'));ids.push(result.matchId);
+  const playerSockets=[];for(const user of [a,b]){const socket=await sdk.joinOrCreate('match',{matchId:result.matchId,token:user.token});socket.onMessage('snapshot',()=>{});sockets.push(socket);playerSockets.push(socket);}
+  pairs.push({a,b,id:result.matchId,sockets:playerSockets});
+ }
+ // Sixteen players and thirty-four spectators, fifty live WebSocket connections.
+ for(let index=16;index<50;index++){const pair=pairs.find((_,n)=>n%2===index%2)!;const socket=await sdk.joinOrCreate('match',{matchId:pair.id,token:users[index].token});socket.onMessage('snapshot',()=>{});sockets.push(socket);}
+ async function command(pair:typeof pairs[number],seat:number,type:string){
+  const state=await matchAccess([pair.a,pair.b][seat].actor,pair.id),socket=pair.sockets[seat],start=performance.now();
+  await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('Realtime load receipt timeout')),10000);const offReceipt=socket.onMessage('receipt',()=>{clearTimeout(timeout);offReceipt();offError();resolve();});const offError=socket.onMessage('error',(e:any)=>{clearTimeout(timeout);offReceipt();offError();reject(new Error('Realtime load rejected: '+e.code));});socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type});});latencies.push(performance.now()-start);
+ }
+ await Promise.all(pairs.map(async pair=>{await command(pair,0,'match.ready');await command(pair,1,'match.ready');for(let dart=0;dart<3;dart++){await command(pair,0,'dart.stop_horizontal');await command(pair,0,'dart.stop_vertical');await new Promise(r=>setTimeout(r,750));}}));
+ assert.equal(sockets.filter(s=>s.connection.isOpen).length,50);
+ const response=await fetch('http://127.0.0.1:42567/internal/deploy/metrics',{headers:{Authorization:'Bearer '+process.env.INTERNAL_DEPLOY_TOKEN}});assert.ok(response.ok);const metrics=await response.json();
+ latencies.sort((a,b)=>a-b);const p95=latencies[Math.ceil(latencies.length*.95)-1];assert.ok(p95<1000,'Local p95 receipt latency exceeds one second');assert.ok(metrics.eventLoopP95Ms<200,'Local event loop p95 exceeds 200ms');
+ await Promise.all(pairs.map(pair=>command(pair,0,'match.forfeit')));
+ await writeFile('artifacts/load-result.json',JSON.stringify({ok:true,rooms:2,matches:8,players:16,spectators:34,connections:50,commands:latencies.length,p95ReceiptMs:p95,...metrics,scope:'Local smoke load; no production capacity claim'},null,2));console.log('Two rooms, eight matches and fifty real WebSocket connections passed bounded local load');
+}finally{
+ await Promise.allSettled(sockets.map(s=>s.leave()));
+ if(ids.length)await db().query("update matches set lifecycle='cancelled',ended_at=now() where id=any($1::uuid[]) and lifecycle in('assigned','playing','paused')",[ids]);
+ if(ids.length){await db().query('delete from active_player_reservations where match_id=any($1::uuid[])',[ids]);await db().query('delete from board_reservations where match_id=any($1::uuid[])',[ids]);}
+ await db().end();await(await redis()).quit();
+}

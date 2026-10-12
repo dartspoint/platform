@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { DARTS_EMAIL_EXAMPLES, renderDartsEmail, renderDartsOtpEmail, renderSupabaseOtpTemplate, safeDartsEmailUrl } from "../lib/darts-email-templates.ts";
+const otp = renderDartsOtpEmail({ code: "012345", expiresMinutes: 10, mode: "preview" });
+assert.match(otp.html, /012345/);
+assert.match(otp.text, /INLOGCODE: 012345/);
+assert.ok(!otp.subject.includes("012345") && !otp.preheader.includes("012345"));
+assert.match(otp.html, /src="\/assets\/emails\/dartspoint-logo.png"/);
+assert.ok(!otp.html.includes("E-mailvoorkeuren"));
+for (const code of ["", "12345", "1234567", "12 345", "abcdef", "{{ .Token }}", "<img>"]) assert.throws(() => renderDartsOtpEmail({ code }));
+assert.throws(() => renderDartsOtpEmail({ code: "123456", expiresMinutes: 60 }));
+const safe = renderDartsEmail({ type: "welcome", username: '<img src=x onerror="alert(1)"> & Nick' });
+assert.ok(!safe.html.includes('<img src=x'));
+assert.ok(safe.html.includes("&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; Nick"));
+const header = renderDartsEmail({ type: "friend-request", username: "Nick", fromUsername: "Mila\r\nBcc:bad@example.test" });
+assert.ok(!/[\r\n]/.test(header.subject));
+const template = renderSupabaseOtpTemplate();
+assert.ok(template.html.includes("{{ .Token }}") && template.text.includes("{{ .Token }}"));
+assert.ok(!template.html.includes("000000") && !template.text.includes("000000"));
+assert.ok(!template.subject.includes(".Token") && !template.preheader.includes(".Token"));
+assert.match(renderSupabaseOtpTemplate({ origin: "https://staging.dartspoint.nl" }).html, /src="https:\/\/staging.dartspoint.nl\/assets\/emails/);
+assert.throws(() => renderDartsEmail({ type: "welcome", username: "Nick" }, { origin: "https://evil.example" }));
+for (const url of ["javascript:alert(1)", "http://dartspoint.nl/lobby", "//dartspoint.nl/lobby", "https://dartspoint.nl.evil.test/lobby", "https://dartspoint.nl@evil.test/lobby", "https://evil.test/lobby", "https://dartspoint.nl:444/lobby", "https://a:b@dartspoint.nl/lobby", "https://dartspoint.nl/redirect?to=https://evil.test", "https://dartspoint.nl/lobby?next=https://evil.test", "https://dartspoint.nl/\\evil.test", "https://dartspoint.nl/lobby\n"]) assert.throws(() => safeDartsEmailUrl(url), url);
+for (const url of ["https://dartspoint.nl/lobby", "https://dartspoint.nl/lobby?view=friends", "https://dartspoint.nl/#toernooien", "https://staging.dartspoint.nl/toernooi/cup-1", "https://dartspoint.app/divisies"]) assert.equal(safeDartsEmailUrl(url), url);
+for (const example of DARTS_EMAIL_EXAMPLES) {
+  const result = renderDartsEmail(example.input);
+  assert.match(result.html, /<html lang="nl">/);
+  assert.match(result.html, /max-width:600px/);
+  assert.match(result.html, /role="presentation"/);
+  assert.ok(!/<script|<svg|<form|<iframe/.test(result.html));
+  assert.ok(result.text.length > 150 && result.subject.length > 5);
+}
+console.log("Email checks passed: seven templates, six-digit OTP/expiry, escaping, headers, safe URLs, staging origins, plaintext and dynamic Supabase token.");

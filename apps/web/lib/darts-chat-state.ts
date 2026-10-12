@@ -1,0 +1,32 @@
+"use client";
+import {useEffect,useMemo,useSyncExternalStore} from 'react';
+import {api,mutate,getPlatform,usePlatform,playerId,selfName,subscribePlatform,refreshPlatform} from './platform-client';
+export type ChatMessage={id:number;name:string;text:string;time:string;system?:boolean;messageId?:string};
+export type PrivateChatPreview={name:string;text:string;time:string;lastId:number;sender:string};
+const EMPTY:ChatMessage[]=[];const channels=new Map<string,ChatMessage[]>(),drafts=new Map<string,string>(),ids=new Map<string,string>(),tracked=new Set<string>(),timers=new Map<string,ReturnType<typeof setTimeout>>();
+let cacheActor:string|undefined;
+function resetAccount(){const id=getPlatform().actor?.id;if(id===cacheActor)return;cacheActor=id;for(const timer of timers.values())clearTimeout(timer);timers.clear();channels.clear();drafts.clear();ids.clear();tracked.clear();}
+let hydrated=false,version=0;const listeners=new Set<()=>void>();
+function emit(){resetAccount();version++;listeners.forEach(fn=>fn());}
+export function subscribeChat(fn:()=>void){listeners.add(fn);const stop=subscribePlatform(fn);return ()=>{listeners.delete(fn);stop();};}
+function context(key:string){const parts=key.split(':');return {kind:parts[0],target:parts[0]==='match'?parts.at(-2):parts.slice(1).join(':')};}
+async function resolve(key:string){resetAccount();const account=cacheActor;if(ids.has(key))return ids.get(key)!;const p=context(key);const result=await api('chat/resolve',p);if(account!==getPlatform().actor?.id)throw new Error('Account gewijzigd');ids.set(key,result.channelId);return result.channelId as string;}
+async function load(key:string){if(!key||!getPlatform().actor)return;const account=getPlatform().actor.id;try{const id=await resolve(key);const data=await api<any[]>('chat/'+id);if(account!==getPlatform().actor?.id)return;channels.set(key,data.map(m=>({id:Number(m.seq),name:m.username,text:m.body,messageId:m.id,time:new Date(m.created_at).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})})));emit();}catch{if(account!==getPlatform().actor?.id)return;channels.set(key,EMPTY);emit();}}
+export async function markChatRead(key:string,cursor:number){if(!key||!cursor)return;const channelId=await resolve(key);await api('chat/preference',{channelId,readCursor:cursor});await refreshPlatform();}
+export function getInitialChatChannel(_key:string){return EMPTY;}
+export function getChatChannel(key:string){resetAccount();const p=context(key);if(p.kind==='match'&&!/^[0-9a-f-]{36}$/i.test(p.target??''))return EMPTY;if(typeof window!=='undefined'&&key)tracked.add(key);return channels.get(key)??EMPTY;}
+export function hydrateChat(){if(hydrated)return;hydrated=true;emit();setInterval(()=>{if(getPlatform().actor){for(const channel of getPlatform().channels)tracked.add('private:'+channel.name);for(const key of tracked)void load(key);}},1500);}
+export async function appendChatMessage(key:string,message:ChatMessage){const channelId=await resolve(key);await api('chat/send',{channelId,clientMessageId:crypto.randomUUID(),body:message.text});await load(key);await refreshPlatform();return true;}
+export function getChatDraft(key:string){resetAccount();return drafts.get(key)??(key.startsWith('private:')?getPlatform().channels.find(c=>c.name===key.slice(8))?.draft??'':'');}
+export function updateChatDraft(key:string,text:string){resetAccount();const account=cacheActor;drafts.set(key,text.slice(0,2000));emit();clearTimeout(timers.get(key));timers.set(key,setTimeout(()=>{if(account!==getPlatform().actor?.id)return;void resolve(key).then(channelId=>{if(account===getPlatform().actor?.id)return api('chat/preference',{channelId,draft:text.slice(0,2000)});}).catch(()=>{});},400));}
+export function getOpenPrivateChatTabs():readonly string[]{return getPlatform().channels.filter(c=>!c.closed).map(c=>c.name);}
+export function useChatHydrated(){useEffect(hydrateChat,[]);return useSyncExternalStore(subscribeChat,()=>hydrated,()=>false);}
+export function useOpenPrivateChatTabs(){const p=usePlatform();return useMemo(()=>p.channels.filter(c=>!c.closed).map(c=>c.name),[p.channels]);}
+export async function openPrivateChatTab(name:string){try{await mutate('private-channel',{targetId:playerId(name)});await load('private:'+name);return true;}catch{return false;}}
+export function resolveChatTab(requested:string,names:readonly string[],lobby=false){if(requested.startsWith('private:')&&names.includes(requested.slice(8)))return requested;if(!lobby&&['match','room'].includes(requested))return requested;return lobby?(names[0]?'private:'+names[0]:''):'match';}
+export function nextChatTabAfterClose(name:string,activeTab:string,names:readonly string[],lobby=false){const index=names.indexOf(name),remaining=names.filter(n=>n!==name);if(activeTab!=='private:'+name)return resolveChatTab(activeTab,remaining,lobby);const next=remaining[Math.min(Math.max(index,0),remaining.length-1)];return next?'private:'+next:lobby?'':'match';}
+export async function closePrivateChatTab(name:string,activeTab:string,lobby=false,visibleNames?:readonly string[]){const next=nextChatTabAfterClose(name,activeTab,visibleNames??getOpenPrivateChatTabs(),lobby);const channelId=await resolve('private:'+name);await mutate('chat/preference',{channelId,closed:true,draft:getChatDraft('private:'+name)});return next;}
+export function usePrivateChatPreview(name:string){const v=useSyncExternalStore(subscribeChat,()=>version,()=>0);useEffect(hydrateChat,[]);return useMemo(()=>{const messages=getChatChannel('private:'+name),last=messages.at(-1);return {text:last?.text??'',time:last?.time??'',lastId:last?.id??0,sender:last?.name??''};},[name,v]);}
+export function usePrivateChatInbox():PrivateChatPreview[]{const p=usePlatform(),v=useSyncExternalStore(subscribeChat,()=>version,()=>0);useEffect(hydrateChat,[]);return useMemo(()=>p.channels.map(c=>{const last=getChatChannel('private:'+c.name).at(-1);return {name:c.name,text:last?.text??'',time:last?.time??'',lastId:last?.id??0,sender:last?.name??''};}),[p.channels,v]);}
+export function receivePrivateMessage(_name:string,_text:string){throw new Error('Berichten komen uitsluitend van geverifieerde afzenders.');}
+export async function sendQuickChat(text:string,{roomName='',opponentName='',gameId='',channel='match'}:{roomName?:string;opponentName?:string;gameId?:string;channel?:'match'|'room'}={}){return appendChatMessage(channel==='room'?'room:'+roomName:`match:${roomName}:${gameId}:${opponentName}`,{id:0,name:selfName(),text,time:''});}

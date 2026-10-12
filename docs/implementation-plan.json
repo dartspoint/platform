@@ -1,0 +1,32 @@
+{
+  "sourceSHA": "f57c505709e317d457de447f00c822c270edcdaf",
+  "target": "/home/codex/repos/dartspoint",
+  "reference": "reference/handoff/source-sites",
+  "runtime": {
+    "node": "24.18.0",
+    "next": "16.3.8",
+    "react": "19.2.6",
+    "colyseus": "0.18.1",
+    "schema": "5.0.8"
+  },
+  "dependencyChanges": [
+    "Native Node target excludes Sites/Vinext/Cloudflare/D1 tooling.",
+    "Backend Zod 4.1.12 satisfies Colyseus 0.18.1 peer requirement; web keeps source Zod 3.25.76.",
+    "Next 16.3.8 and esbuild 0.28.2 contain security fixes; source React/UI pins retained.",
+    "Preserve relative symlinks when packaging traced Next monorepo standalone output."
+  ],
+  "phases": [
+    "Capture unchanged reference and native UI baseline",
+    "SQL migrations, RLS, OTP, onboarding, owner bootstrap",
+    "Room and social services; authoritative matches and recovery",
+    "Server results, Elo, competitions and durable planning",
+    "Wire all existing components to real services",
+    "Outbox, health, deployment drain and rollback contracts",
+    "Integration, browser, visual and restore acceptance",
+    "Push accepted implementation to verified origin/main"
+  ],
+  "status": "implemented and locally accepted; external staging provider, runner and physical-device gates documented",
+  "schemaMigrations": 11,
+  "protocolVersion": 1,
+  "acceptance": "docs/LOCAL-ACCEPTANCE.md"
+}

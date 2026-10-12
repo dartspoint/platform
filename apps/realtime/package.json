@@ -1,0 +1,20 @@
+{
+  "name": "@dartspoint/realtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@colyseus/core": "0.18.1",
+    "@colyseus/schema": "5.0.8",
+    "@colyseus/ws-transport": "0.18.1",
+    "@supabase/supabase-js": "2.98.0",
+    "express": "5.2.1",
+    "jose": "6.2.1",
+    "pg": "8.20.0",
+    "redis": "5.11.0",
+    "zod": "4.1.12"
+  }
+}
