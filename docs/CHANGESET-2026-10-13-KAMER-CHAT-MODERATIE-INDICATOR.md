@@ -806,3 +806,71 @@ ubuntu-24.04 vastgezet en bewaart begrensde 1-Hz-capaciteitmetadata plus
 HTTPS-fixturefasen; de 90-seconden-HTTPSgate blijft gelijk. SDK-operations en
 cleanup hebben afzonderlijke harde grenzen; gesloten owned rooms wachten
 niet op een toekomstige leave-event. Nieuwe CI/liveacceptatie volgen apart.
+
+### Hosted failure van e579484 en gerichte beperking van bordrenders
+
+De [main-CI van e579484](https://github.com/dartspoint/platform/actions/runs/38461550402)
+faalde op wedstrijdpoging vijf met de vaste Chromium Headless Shell
+145.0.7632.6: **57,7 ms** van native-eventtijd tot eerste frozen geometrie.
+Daarvan lag **20,4 ms vóór de capturelistener**; het stop/send-commandwerk
+was circa **0,2 ms**. De handler bleef met 20,8 ms binnen zijn grens, maar
+de volledige lokale framegrens werd overschreden. De failurediagnostiek
+bevatte een echte receipt met oorspronkelijke sampleouderdom **48 ms
+binnen 54 ms** en geen admissionviolaties. De normale exacte-outcome-
+classificatie werd door de eerdere harde frameassert niet bereikt; deze
+receipt maakt de mislukte test geen PASS. Alle vijf pogingen bleven bewaard.
+De grenzen **50 ms en 1 CSS px** zijn ongewijzigd.
+
+De 1-Hz-hostmetadata liet op deze **2-CPU-VM** gedurende de laatste tien
+seconden gemiddeld 91,52% CPU-bezetting zien, met een maximum van 100%.
+De laatste CPU-PSI `some avg10` was **54,91%**, terwijl circa **5 GiB**
+geheugen beschikbaar bleef, geheugen-PSI nul was en geen swap-I/O werd
+gemeten. De waargenomen cgroup had geen expliciete CPU-quota, throttling
+of OOM-events. De dichtstbijzijnde hostsample lag 81 ms vóór de oorspronkelijke
+serverontvangst; de browser-time-origin was niet afzonderlijk vastgelegd.
+Dit bewijst CPU-druk rond de test, geen oorzaak van de exacte framepauze.
+Main en staging gebruikten afzonderlijke hosted runner-VM's, ondanks de
+overlap van hun jobs. Bewijs: `artifacts/ci-e579-main/`.
+
+De daaropvolgende gerichte appwijziging voegt standaard React-memoization
+toe aan `Dartboard` en `PracticeBoard` en houdt de wedstrijd-darts-array
+stabiel wanneer de bordgegevens gelijk blijven. Hiermee wordt onnodig
+renderwerk voor de bestaande 80 wedstrijd- en 60 oefenbordsegmenten bij
+alleen een wijziging van de verzendstatus beperkt. Bordvormgeving,
+spelregels, scoreberekening, samplekeuze en het serveracceptatievenster
+blijven gelijk. Dit is geen bewezen verklaring of oplossing voor de
+57,7-ms-failure: nieuwe lokale metingen, de volledige nieuwe pipeline en
+verse live stagingacceptatie zijn nog vereist. De eerdere geslaagde
+lokale bundel blijft historisch bewijs voor de eerdere bronversie.
+
+De [staging-CI van dezelfde e579484-bron](https://github.com/dartspoint/platform/actions/runs/38461549389)
+faalde eveneens bij poging vijf: **60,4 ms**, waarvan **31,3 ms vóór de
+capturelistener** en circa 0,2 ms stop/send-commandwerk. De failurediagnostiek
+bevatte een receipt met **39 ms sampleouderdom binnen 54 ms**, zonder
+admissionviolaties; ook hier werd de normale exacte-outcomeclassificatie
+door de harde frameassert niet bereikt. Imagepublicatie en deployment zijn
+overgeslagen. Beide CI-failures blijven apart bewaard; de memoization is
+een daaropvolgende bronwijziging en vereist een nieuwe commit/pipeline.
+Bewijs: `artifacts/ci-e579-staging/`.
+
+De nieuwe ongeprofilede lokale bundel na deze bordwijziging staat in
+`artifacts/local-final-proof/board-memo-acceptance-20261013T203710Z/`.
+Met dezelfde vaste Headless Shell en één seriële uitvoering slaagt de
+wedstrijd: **8/8 exact geaccepteerd, native eerste-geometrie p95/max 36,0 ms**,
+alle zes ACK-delaycohorten, verloren ACK en reconnect, vier impacts met
+maximaal **0,000014 CSS px** fout, nul freeze-/ACK-verspringing. Oefenen
+slaagt met **16/16 HTTP 200, p95/max 31,6 ms**, acht impacts maximaal
+**0,000014 CSS px**, nul freeze-/ACK-verspringing; koude calibratie en de
+afzonderlijke bewust 160 ms oude claim blijven correct geblokkeerd.
+De volledige workspacecontrole slaagt **21/21** en **15/15 canonieke
+HTTP-200-chatberichten**. Tijdens exact drie floodseeds plus een echte
+overlappende vierde HTTP-429-request stoppen beide assen binnen
+**22,6/15,0 ms**, met nul freeze-/ACK-verspringing en oorspronkelijke
+sampleouderdom **13/10 ms binnen 54 ms**. Chat-p95 11,2/236,1 ms blijft
+informatief; alle werpgrenzen blijven hard. Iedere normale native poging
+blijft in de resultaten. Bronhashes en 1-Hz-hostmetadata koppelen deze
+bundel aan de gewijzigde build, niet aan e579484 of de oudere stagingrelease.
+Typecheck, bestaande unittests, productiebuild en readiness zijn geslaagd.
+Dit lokale resultaat bewijst geen oorzakelijke vergelijking van twee
+verschillend geplande CI-interacties; nieuwe exacte-SHA-CI en verse live
+stagingcontroles volgen nog.

@@ -5,7 +5,7 @@ import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} fro
 /* Native links preserve the prototype's reliable full-page mobile navigation. */
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, BookOpen, Check, CheckCircle2, ChevronRight, Crosshair, Flame, LockKeyhole, RotateCcw, Sparkles, Target } from "lucide-react";
 import { BOARD_GEOMETRY, DART_NUMBERS, applyDart, dartPoseAt, dartTipPosition, dartTransform, scoreDart, type DartHit } from "@/lib/darts-rules";
@@ -86,7 +86,7 @@ function PracticeDart({ hit, flying, onLand }: { hit: DartHit; flying: boolean; 
   </g>;
 }
 
-function PracticeBoard({ target, dart, flying, chip, onLand }: { target: string | null; dart: { id: number; hit: DartHit } | null; flying: boolean; chip: boolean; onLand: () => void }) {
+const PracticeBoard = memo(function PracticeBoard({ target, dart, flying, chip, onLand }: { target: string | null; dart: { id: number; hit: DartHit } | null; flying: boolean; chip: boolean; onLand: () => void }) {
   const uid = useId().replace(/:/g, "");
   const g = BOARD_GEOMETRY;
   const position = dart ? dartTipPosition(dart.hit) : null;
@@ -105,7 +105,7 @@ function PracticeBoard({ target, dart, flying, chip, onLand }: { target: string 
     {dart && <PracticeDart key={dart.id} hit={dart.hit} flying={flying} onLand={onLand}/>}
     {chip && dart && position && <g transform={`translate(${Math.max(32, Math.min(408, position.x))} ${Math.max(37, position.y - 21)})`}><rect x="-25" y="-24" width="50" height="29" rx="9" fill="#eee4af" stroke="#fff7d1"/><path d="M-4 5 L0 10 L4 5" fill="#eee4af"/><text y="-9" fill="#183023" fontSize="13" fontWeight="800" textAnchor="middle" dominantBaseline="central">{dart.hit.label}</text></g>}
   </svg>;
-}
+});
 
 type PracticeMode = "free" | "doubles" | "bull" | "checkout" | "challenge";
 type PracticePhase = "horizontal" | "vertical" | "flying" | "pause" | "done";

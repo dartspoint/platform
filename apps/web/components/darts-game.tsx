@@ -1,7 +1,7 @@
 "use client";
 import {timingInput} from "@/lib/use-timing-input";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { ArrowDown, ArrowUp, ArrowRight, ArrowUpRight, RotateCcw } from "lucide-react";
 import { BOARD_GEOMETRY, DART_NUMBERS, dartPoseAt, dartTipPosition, dartTransform, opponentTarget, scoreDart, type DartHit } from "@/lib/darts-rules";
@@ -127,7 +127,7 @@ function LandedDartChip({ dart, lessMotion }: { dart: BoardDart; lessMotion: boo
   </g>;
 }
 
-export function Dartboard({ darts, pendingId, onLand, lessMotion, checkoutHit }: { darts: BoardDart[]; pendingId: number | null; onLand: (id: number) => void; lessMotion: boolean; checkoutHit?: DartHit }) {
+export const Dartboard = memo(function Dartboard({ darts, pendingId, onLand, lessMotion, checkoutHit }: { darts: BoardDart[]; pendingId: number | null; onLand: (id: number) => void; lessMotion: boolean; checkoutHit?: DartHit }) {
   const uid = useId().replace(/:/g, "");
   const { center, bull, outerBull, trebleInner, trebleOuter, doubleInner, doubleOuter } = BOARD_GEOMETRY;
   const latestLandedDart = pendingId === null ? darts.at(-1) : undefined;
@@ -165,7 +165,7 @@ export function Dartboard({ darts, pendingId, onLand, lessMotion, checkoutHit }:
     </g>
     {latestLandedDart && <LandedDartChip key={latestLandedDart.id} dart={latestLandedDart} lessMotion={lessMotion} />}
   </svg>;
-}
+});
 
 function CheckoutHint({ game, reducedMotion }: { game: DartsGame; reducedMotion: boolean }) {
   const remaining = game.scores[game.turn];
@@ -226,6 +226,8 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
   const previousDarts = useRef(game.dartCount[0] + game.dartCount[1]);
   const active = game.phase === "horizontal" || game.phase === "vertical";
   const disabled = game.phase === "opponent" || game.phase === "flight" || interactionBlocked || !game.ready || !!game.offlineUntil || game.sending || (active && !game.timingReady);
+  // Sending-only renders keep the unchanged board and flight props stable.
+  const boardDarts = useMemo(() => game.pendingDart ? [...(game.freshVisit ? [] : game.landedDarts), game.pendingDart] : game.landedDarts, [game.pendingDart, game.freshVisit, game.landedDarts]);
 
   useEffect(() => {
     setActive(true);
@@ -317,7 +319,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
           </div>
         </div>
         <div className="dp-oche-playfield">
-          <Dartboard key={game.id} darts={game.pendingDart ? [...(game.freshVisit ? [] : game.landedDarts), game.pendingDart] : game.landedDarts} pendingId={game.pendingDart?.id ?? null} onLand={game.landDart} lessMotion={lessMotion} checkoutHit={game.celebration === "checkout" && game.events.at(-1)?.hit.double ? game.events.at(-1)?.hit : undefined} />
+          <Dartboard key={game.id} darts={boardDarts} pendingId={game.pendingDart?.id ?? null} onLand={game.landDart} lessMotion={lessMotion} checkoutHit={game.celebration === "checkout" && game.events.at(-1)?.hit.double ? game.events.at(-1)?.hit : undefined} />
           <div className={`dp-height-meter ${game.phase === "vertical" ? "is-running" : ""}`} aria-label="Verticale timingbalk voor de hoogte van je worp">
             <ArrowUp size={12} aria-hidden="true" />
             <div className="dp-meter-track dp-meter-track-vertical"><span ref={game.yIndicator} className="dp-meter-indicator" style={{ top: "50%" }} /></div>
