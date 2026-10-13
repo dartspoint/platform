@@ -240,6 +240,10 @@ herstellen; daarna zijn geldige horizontale/verticale stops en precies één
 gescoorde pijl vereist. Dit is geen p95-meetreeks. De chat-leesfixture wacht
 vanaf een succesvol ontvangen antwoord, zodat haar gewone leescontroles binnen
 de ongewijzigde serverlimiet van drie berichten per twee seconden blijven.
+De geïsoleerde landingproxy wacht op een echte HTTPS 200-respons met body en
+volledige certificaat-/hostnaamverificatie. Een aangemaakt CA-bestand alleen
+bewijst geen gereed listener-/leafcertificaat. Daarna worden alle 22 bestaande
+routecontroles éénmaal uitgevoerd; alleen de begrensde startupcontrole wacht.
 
 Implementatie-SHA, CI-runs en actieve staging-SHA worden na deployment
 en acceptatie hieronder vastgelegd. Chromiumemulatie,

@@ -14,10 +14,21 @@ with tempfile.TemporaryDirectory(prefix='dartspoint-landing-proxy-') as director
         caddy=subprocess.Popen([str(TOOLS/'caddy'),'run','--config',str(config),'--adapter','caddyfile'],env=env,stdout=log,stderr=subprocess.STDOUT)
         try:
             ca=folder/'data/caddy/pki/authorities/local/root.crt'
-            for _ in range(60):
-                if ca.exists():break
+            # The CA can exist before the listener and its leaf certificate are ready.
+            # Retry only startup transport checks; the route matrix below runs once.
+            deadline=time.monotonic()+15;attempts=0;startup_errors=[]
+            while time.monotonic()<deadline:
+                if caddy.poll() is not None:raise RuntimeError('Disposable landing Caddy exited before HTTPS readiness')
+                attempts+=1
+                try:
+                    ctx=ssl.create_default_context(cafile=str(ca))
+                    assert ctx.check_hostname and ctx.verify_mode==ssl.CERT_REQUIRED
+                    with urllib.request.urlopen('https://127.0.0.1:49444/',context=ctx,timeout=min(2,max(.1,deadline-time.monotonic()))) as response:
+                        if response.status==200 and response.read():break
+                except (OSError,urllib.error.URLError) as error:startup_errors.append(type(error).__name__)
                 time.sleep(.1)
-            ctx=ssl.create_default_context(cafile=str(ca));results=[]
+            else:raise RuntimeError('Disposable landing Caddy did not become ready with verified HTTPS')
+            results=[]
             def request(method,path,status,body=None,origin='http://127.0.0.1:4300'):
                 req=urllib.request.Request('https://127.0.0.1:49444'+path,data=body,headers={'Origin':origin,'Content-Type':'application/json'},method=method)
                 try:
@@ -33,6 +44,15 @@ with tempfile.TemporaryDirectory(prefix='dartspoint-landing-proxy-') as director
             request('POST','/api/launch-signups',400,b'{}')
             request('POST','/api/launch-signups',403,b'{}','https://evil.test')
             request('POST','/api/launch-unsubscribe',200,json.dumps({'token':'a'*43}).encode())
-            (ROOT/'artifacts/landing-proxy-result.json').write_text(json.dumps({'ok':True,'queryPreserved':True,'routeMatrix':results},indent=2))
+            (ROOT/'artifacts/landing-proxy-result.json').write_text(json.dumps({'ok':True,'queryPreserved':True,'verifiedHTTPSReadyBeforeRouteMatrix':True,'certificateChainVerified':True,'hostnameVerified':True,'startupAttempts':attempts,'startupTransportErrors':startup_errors,'routeMatrix':results},indent=2))
             print('Public landing Caddy host exposes only root and two exact POST endpoints')
-        finally:caddy.terminate();caddy.wait(timeout=15)
+        except Exception:
+            log.flush();private=ROOT/'artifacts/landing-proxy-startup-private.log'
+            fd=os.open(private,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,'wb') as retained:
+                os.fchmod(retained.fileno(),0o600);retained.write((folder/'private.log').read_bytes())
+            raise
+        finally:
+            caddy.terminate()
+            try:caddy.wait(timeout=15)
+            except subprocess.TimeoutExpired:caddy.kill();caddy.wait()
