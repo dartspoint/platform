@@ -38,3 +38,14 @@ test('Cold asymmetric uplink does not create a 13ms future render claim; legacy 
  const drawn=clock.phaseNow('v3',600);assert.equal(drawn,100595);assert.equal(clock.phaseOffset('v3'),99995);assert.equal(admittedSample(drawn,100600,54,100000,0,100700),drawn);
  const newPhaseStart=100600;assert.ok(clock.phaseNow('new-v3-phase',600)<newPhaseStart,'UI must wait for the phase start before drawing/accepting its sample');assert.equal(clock.phaseNow('new-v3-phase',605),newPhaseStart);
 });
+test('V3 drawing and admission agree when fractional browser time reaches integer ingress in under 1ms',()=>{
+ const clock=new ServerClock();for(let i=0;i<3;i++)clock.sample(1_000_000+i*100,i*100,i*100+.1,1_000_000+i*100);
+ // The mapped lower bound is physically conservative, but a later Date.now
+ // capture independently floors 1000005.9 to 1000005. The old float was +.75ms.
+ const at=5.85,receivedAt=Math.floor(1_000_005.9),drawn=clock.phaseNow('sub-ms-phase',at),oldFloat=clock.phaseOffset('sub-ms-phase')!+at;
+ assert.equal(oldFloat-receivedAt,.75);assert.throws(()=>admittedSample(oldFloat,receivedAt,54,1_000_000,0,receivedAt+100));assert.equal(drawn,receivedAt);
+ const admitted=admittedSample(drawn,receivedAt,54,1_000_000,0,receivedAt+100);assert.equal(admitted,drawn);
+ for(const axis of ['horizontal','vertical'] as const){assert.equal(meterPosition(admitted,1_000_000,axis),meterPosition(drawn,1_000_000,axis));for(const width of [220,500,900])assert.equal((meterFraction(admitted,1_000_000,axis)-meterFraction(drawn,1_000_000,axis))*width,0);}
+ assert.equal(clock.phaseNow('sub-ms-phase',at+.01),drawn);assert.equal(clock.phaseNow('sub-ms-phase',at+1),drawn+1,'The fixed phase mapping stays nondecreasing');assert.throws(()=>admittedSample(drawn+1,receivedAt,54,1_000_000,0,receivedAt+100),'A genuinely future claim still fails');
+ for(const version of ['receive-v1','bounded-latency-v2'] as const){const legacy=clock.phaseNow(version,at,version);assert.equal(Number.isInteger(legacy),false);assert.ok(Math.abs(legacy-(clock.offset!+at))<1e-9,'Legacy versions preserve their floating midpoint mapping');}
+});

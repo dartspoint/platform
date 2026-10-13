@@ -52,7 +52,9 @@ export class ServerClock {
  phaseNow(phaseToken:string,at=performance.now(),version:TimingVersion=TIMING_VERSION){
   if(!this.ready)throw new Error('clock_not_calibrated');
   let epoch=this.phases.get(phaseToken);if(epoch===undefined){epoch=version===TIMING_VERSION?this.conservativeEpoch!:this.epoch!;this.phases.set(phaseToken,epoch);if(this.phases.size>8)this.phases.delete(this.phases.keys().next().value!);}
-  return epoch+at;
+  // Date.now ingress is integer milliseconds. Quantize the v3 render before
+  // drawing so a sub-ms loopback cannot make its exact claim appear future.
+  const mapped=epoch+at;return version===TIMING_VERSION?Math.floor(mapped):mapped;
  }
  now(at=performance.now()){return (this.epoch??Date.now()-at)+at;}
 }

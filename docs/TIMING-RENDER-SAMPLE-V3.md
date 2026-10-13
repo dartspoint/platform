@@ -32,6 +32,13 @@ heeft bereikt, wordt geen nieuwe sample getekend of als stop geaccepteerd.
 Verbeterde metingen gelden pas voor een volgende fase of expliciet herstel na
 een afwijzing. Legacy v1/v2 behouden hun midpoint-mapping en ontvangstbeleid.
 
+V3 rondt de gemapte sampletijd vóór het tekenen naar beneden af op hele
+milliseconden, dezelfde resolutie als de serveringress. Zonder die stap kan
+een fractie van een milliseconde bij een zeer snelle verbinding onterecht
+na de afgeronde ontvangsttijd vallen. De getekende en verstuurde sample blijven
+identiek; het acceptatievenster en de afwijzing van toekomstige claims blijven
+ongewijzigd. De oudere timingversies behouden hun oorspronkelijke precisie.
+
 Een stop draagt naast UUID, stateVersion en phaseToken een **onvertrouwde**
 `renderSample: {sampleAt, connectionId, dartNumber}`. Alleen de server kent de
 gemeten verbinding en bepaalt het venster. Voor minstens drie geldige

@@ -74,6 +74,10 @@ verbinding en venster worden duurzaam vastgelegd vóór de commandowachtrij.
 Een geldige claim gaat exact door de gedeelde golf; buiten het venster volgt
 een expliciete afwijzing. De 90 ms netwerkgrens plus afzonderlijk 34 ms
 renderleeftijd zijn toegelicht in [het timingcontract](TIMING-RENDER-SAMPLE-V3.md).
+V3 tekent en verstuurt hele milliseconden, gelijk aan de resolutie van de
+serveringress. De regressie voor een snelle verbinding reproduceert de
+vroegere afwijzing van een sample die slechts 0,75 ms na de afgeronde
+ontvangsttijd leek te liggen; het toelatingsvenster blijft strikt behouden.
 Score, beurt, raakpunt en impact blijven serverbesluiten. Bestaande partijen
 behouden hun eerdere timingversie.
 
@@ -199,7 +203,7 @@ De 12 aanvullende lokale regressies slagen: domain, multiplayer, practice,
 visual, auth, interface, update, chat-read, HTTPS-proxy, landing-proxy, drain
 en load. De gerichte en brede backendintegraties slagen eveneens, inclusief
 filter/rechten/naamprojecties, realtimeprivacy, timing, services, competities,
-herstel, owner en mail. De productiebuild, typechecks, 31 units, oorspronkelijke
+herstel, owner en mail. De productiebuild, typechecks, 32 units, oorspronkelijke
 spelregels, 39 operationele checks en source parity zijn geslaagd. De
 updatebrowser behield alle 30 foreground-stops: eerste-frame p95 14,4 ms,
 maximum 16,7 ms en freeze/bevestiging 0 px; alle vier Chromiumvertragingen
