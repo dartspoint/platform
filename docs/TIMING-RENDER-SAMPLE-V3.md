@@ -194,12 +194,18 @@ oorspronkelijke bronmanifest matcht de gebruikte wedstrijdharness. Bewijs staat 
 en de private modelog. De eerste smoke-401 blijft bewaard; de oorzaak is niet
 vastgesteld. De latere gerichte identiteitscontrole en normale smoke slagen.
 De eerste live oefenpoging geeft `409 invalid_render_sample`, zonder afgeronde
-oefensamples of geslaagde acceptance. Haar oorspronkelijke serveringress en
-afwijsoorzaak zijn nog onbekend; de oorspronkelijke failure blijft behouden.
+oefensamples of geslaagde acceptance. Een latere beperkte read-only
+operatorcontrole vindt de oorspronkelijke ingress van exact die eigen actor,
+UUID en a74-release: sampleleeftijd **138 ms**, gemeten latency **45 ms** en
+venster **124 ms**. Alleen de old-grens is overschreden, met **14 ms**; fase-start,
+phaseToken, fase en overige tijdgrenzen kloppen. De read-only query controleert
+geen connection-ID. De afwijzing was correct en de
+oorspronkelijke failure blijft behouden. Bewijs:
+`artifacts/staging-a74-final/operator-original-practice-ingress-proof.json`.
 Er is afzonderlijk een fixturetransportverschil vastgesteld: `route.fetch`
 verstuurde de stop via een nieuwe Node HTTPS/proxy/CONNECT/TLS-verbinding,
 terwijl de via `route.continue` gekalibreerde ping de Chromiumverbinding
-gebruikte. Dat is geen bewezen verklaring voor deze 409. Een geautoriseerde
+gebruikte. Dat bewijst niet alle oorzaken van de extra transportleeftijd. Een geautoriseerde
 nieuwe oefenfixture gebruikt native browserfetch met dezelfde originele UUID
 en echte response, zonder de werpgrenzen te wijzigen. Haar bronhash en bewijs
 worden afzonderlijk van het oorspronkelijke release-manifest vastgelegd.
@@ -218,8 +224,9 @@ Het nieuwe `native-practice-source-manifest.json` onderscheidt de gewijzigde
 oefenfixture (SHA-256 `b750e103ef6871e005b7b389bb4a9fd398a1faccea40a534484bffd884521791`)
 van de oorspronkelijke release: de wrapper en wedstrijdfixture matchen a74,
 en alle applicatiebronnen zijn ongewijzigd. De preflight bevestigt dezelfde
-exacte release op web en realtime. De oorzaak van de eerste oefen-409 blijft
-onbekend. De afsluitende controle van de volledige pre-finale reeks bevestigt
+exacte release op web en realtime. De eerste oefen-409 is afzonderlijk
+bewezen correct via de oorspronkelijke ingress; de nieuwe meting verwijdert
+die oude failure niet. De afsluitende controle van de volledige pre-finale reeks bevestigt
 web en realtime met HTTP 200 en exact dezelfde a74-release, ongewijzigde
 applicatiebroncode en nog overeenkomende gebruikte manifesthashes. Het
 gecombineerde bewijs staat in
@@ -248,3 +255,52 @@ gerapporteerd, met de actieve release-SHA. Headless Chromium en geïnjecteerde
 vertraging zijn geen fysieke 60/120/144 Hz-beeldschermtests; dergelijke hardware
 is hier niet beschikbaar. Een stagingfix is pas geverifieerd na browsermetingen
 tegen de actieve stagingrelease.
+
+De opvolgende commit `5e19b05e641ac62b9084621956a253a6cd618e97` is niet deployed;
+actief blijft a74. Haar staging-CI bewaart vijftien oorspronkelijke chatsamples
+met lokale p95 **56,3 ms** en ontvanger-p95 **389 ms**, waarna de toen harde
+lokale chatgate faalt. Publicatie/deployment zijn overgeslagen. De eerder
+uitgevoerde updategate accepteert alle dertig werppogingen, met eerste-frame
+p95 **14,6 ms** en maximum **17,8 ms**; nieuwe flood-, wedstrijd- en
+oefencontroles zijn niet bereikt. De afzonderlijke main-CI faalt op een
+verticale floodmeting van **479,8 ms** tot de eerste frozen geometrie, bij een
+handler van **6,4 ms**. Die failure blijft een niet geslaagde harde werpgate.
+Beide volledige private CI-logs en veilige samenvattingen staan onder
+`artifacts/staging-final-proof/5e19*`.
+
+Volgens de expliciete gebruikersprioriteit zijn voortaan **beide**
+chatlatenties informatief: `targets: {localMs: 50, recipientMs: 250}`,
+`localTargetMet` en `recipientTargetMet`, met voor beide gates
+`reported-only-user-priority-2026-10-13`. Alle vijftien echte regels,
+canonieke aflevering, autorisatie, idempotency en documentfocus/zichtbaarheid
+blijven verplicht. Playwright emuleert documentfocus; fysieke OS-focus is niet
+bewezen. Er worden geen samples verwijderd of opnieuw gemeten. Alle werphandler- en
+eerste-framegrenzen van **50 ms**, getekende freeze/pending/ACK/impactgrenzen
+van **1 CSS px**, oorspronkelijke **90 + 34 ms** admissiongrenzen en volledige
+state-/versiebehoudcontroles blijven hard. De applicatiebronnen in apps,
+packages, Supabase en ops zijn gelijk aan actieve a74; CI-uitvoering,
+fixtures, rapportage en documentatie zijn gewijzigd.
+
+De aanvullende flooddiagnostiek onderscheidt RAF-entry van afgeronde
+DOM-geometrie; de harde 50-ms-grens blijft op de laatste meting gelden.
+Long-task-, long-animation-frame- en focus/zichtbaarheidmetadata zijn begrensd
+tot 64 entries per type, met support-/dropped-tellers en zonder attributie,
+scripts, URL's of requestinhoud. CI voert de onafhankelijke wedstrijd- en
+oefenwerpproeven eerder uit en bewaart de beschikbare gesaneerde meet-JSON
+met voorbereiding en upload onder `if: always()`; credentials, cookies,
+berichtinhoud en private joblogs worden niet geüpload.
+
+De eenmalige lokale native controle van deze gemeten fixture slaagt met
+21/21 functionele checks en 15/15 chatsamples; lokale/ontvanger-chat-p95 zijn
+13,1/206,9 ms en beide informatief. Horizontale handler/geometrie meten
+0,8/19,5 ms, verticale 2,1/23,7 ms. RAF-entry is 19,5/23,7 ms; synchrone
+layoutduur is bij beide 0 ms. Beide eerste stops worden exact bevestigd,
+freeze/ACK verschuiven 0 CSS px en behouden de DOM-nodes tijdens werkelijke
+overlap met de afgewezen floodrequest. Sampleleeftijden 19/22 ms passen binnen
+54 ms. Ondersteunde performance-observers melden geen long tasks of lange
+animation frames; state-events en dropped-tellers zijn nul. De oorspronkelijke
+479,8-ms-failure is niet gereproduceerd en haar oorzaak is niet vastgesteld.
+Private bewijsbestanden en het bronhashmanifest met
+`measuredFixtureUnchanged: true` staan in
+`artifacts/local-final-proof/workspace-flood-diagnostics-20261013T185535Z/`.
+Dit is lokaal headless bewijs; staging en fysieke apparaten blijven apart.

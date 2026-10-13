@@ -210,7 +210,7 @@ persoonlijke Colyseus-inbox.
 
 | Meetpunt vanaf verzenden | p95 | Projectdoel |
 |---|---:|---:|
-| Eigen optimistic bericht zichtbaar | 24,7 ms | ≤50 ms, verplicht |
+| Eigen optimistic bericht zichtbaar | 24,7 ms | ≤50 ms, gerapporteerd streefdoel |
 | HTTP-responseheaders ontvangen | 219,2 ms | Afzonderlijk gemeten |
 | HTTP-ontvangstbevestiging van het opgeslagen bericht | 226,4 ms | Afzonderlijk gemeten |
 | Persoonlijke realtimepush ontvangen | 229,0 ms | Afzonderlijk gemeten |
@@ -370,8 +370,8 @@ De oorspronkelijke pure timingtest reproduceerde -18,182 CSS-px bij warmup en
 browser gaf bij twee horizontale stops eerst -1,663/+7,470 px hersampling en
 uiteindelijk +36,609/-14,078 px bevestigingsverschuiving. Nieuwe geldige stops
 moeten op beide assen en bij impact binnen **1 CSS-pixel** blijven; lokaal
-chat/input p95 blijft maximaal 50 ms; normale chatontvangst behoudt het
-rapportagedoel van maximaal 250 ms.
+werphandler en eerste frozen frame blijven maximaal 50 ms. Beide chatlatenties
+behouden gerapporteerde doelen: lokaal 50 ms en bij de ontvanger 250 ms.
 Alle samples en eventuele weigeringen blijven zichtbaar in het meetrapport.
 
 De 12 aanvullende lokale regressies slagen: domain, multiplayer, practice,
@@ -463,12 +463,14 @@ Alle chatmetingen en beide floodpogingen staan in
 `artifacts/local-final-proof/workspace-chat-final-coverage-20261013T172224Z/`.
 De gewone opgave van beide fixturewedstrijden en SDK-cleanup zijn geslaagd.
 
-De opdrachtgever geeft daarna expliciet voorrang aan het gooien. Daarom is
-de ontvangstlatentie van chat vanaf deze aanvulling een gerapporteerd doel
-van 250 ms, geen deploymentblokkade. Alle vijftien echte samples blijven in
-het rapport; een overschrijding wordt zichtbaar gemeld. Functionele chat,
-autorisatie, filters, exacte berichtidentiteit en lokale responsiviteit blijven
-gecontroleerd. Alle werpgates blijven hard: echte foreground-invoer, maximaal
+De opdrachtgever geeft daarna expliciet voorrang aan het gooien en vraagt
+zich geen zorgen te maken over chat. Daarom zijn beide chatlatenties
+gerapporteerde doelen: lokaal 50 ms en bij de ontvanger 250 ms, zonder
+deploymentblokkade op die meetwaarden. Alle vijftien echte samples blijven in
+het rapport; overschrijdingen worden zichtbaar gemeld. Functionele chat,
+autorisatie, filters, exacte berichtidentiteit, alle vijftien zichtbare lokale
+regels, canonieke aflevering en focus blijven verplichte controles. Alle
+werpgates blijven hard: echte foreground-invoer, maximaal
 50 ms, maximaal 1 CSS px, exacte getekende sample binnen de oorspronkelijke
 servergrenzen, onveranderde state bij weigering en geen extra pijl bij reconnect.
 De tijdelijke uitgebreide chatprobe wordt privé behouden en niet in de
@@ -590,14 +592,20 @@ de gecontroleerde actieve SHA.
 
 De eerste live oefencontrole stopte bij haar eerste horizontale poging met
 `409 invalid_render_sample`; er zijn nul afgeronde oefensamples en geen
-geslaagd acceptancebestand. De oorspronkelijke serveringress en afwijsoorzaak
-zijn nog niet vastgesteld. Deze failure blijft behouden in
+geslaagd acceptancebestand. De latere beperkte operatorcontrole bevestigt de
+oorspronkelijke onveranderlijke ingress van die eigen speler en command-UUID
+op exact a74: sampleleeftijd **138 ms**, latency **45 ms**, samplevenster
+**124 ms**. Alleen de old-grens is overschreden, met **14 ms**; fase-start,
+phaseToken, fase, toekomstgrens en lastAcceptedAt-controle kloppen. De query
+controleert geen connection-ID. De afwijzing was dus correct.
+Bewijs: `operator-original-practice-ingress-proof.json`. De failure blijft behouden in
 `sequence-practice-rejected.json`, `sequence-practice-failure-summary.json` en
 de private modelog. De lokale Playwright-stack toont wel een concreet verschil
 in de fixturetransporten: `route.fetch` verstuurt de stop opnieuw via Node HTTPS
 met een nieuwe proxyverbinding, CONNECT en TLS, terwijl de kalibratieping via
-`route.continue` de Chromiumverbinding gebruikt. Dat verschil bewijst niet de
-oorzaak van deze 409. Een afzonderlijk geautoriseerde fixturecorrectie gebruikt
+`route.continue` de Chromiumverbinding gebruikt. Dat verschil bewijst niet
+alle oorzaken van de gemeten transportleeftijd. Een afzonderlijk
+geautoriseerde fixturecorrectie gebruikt
 de echte browserfetch voor uitgaande vertraging en behoudt de originele UUID,
 response en alle werpgrenzen. De actieve applicatie blijft dezelfde release.
 
@@ -621,12 +629,13 @@ met SHA-256 `b750e103ef6871e005b7b389bb4a9fd398a1faccea40a534484bffd884521791`.
 De wrapper en wedstrijdfixture matchen nog de oorspronkelijke release;
 applicatie-, package-, migratie-, ops- en scriptbronnen zijn ongewijzigd.
 `native-practice-preflight.json` bevestigt voor web en realtime HTTP 200 en
-exacte release `a74fbf5`. De oorspronkelijke mislukte oefenpoging wordt door
-dit nieuwe transportbewijs niet retrospectief verklaard of verwijderd.
+exacte release `a74fbf5`. Dit nieuwe transportbewijs verwijdert de oorspronkelijke
+mislukte poging niet; haar correcte old-afwijzing is afzonderlijk vastgesteld
+via de oorspronkelijke serveringress.
 
 De volledige live chatcontrole slaagt met **15/15 oorspronkelijke berichten**,
 allemaal echte HTTP 200 en een correcte canonieke persoonlijke SDK-push.
-Eigen optimistic DOM-p95 is **8,4 ms**, binnen de harde grens van 50 ms.
+Eigen optimistic DOM-p95 is **8,4 ms**, binnen het gerapporteerde doel van 50 ms.
 Ontvanger-DOM-p95 is **693,8 ms**: het gerapporteerde 250-ms-streefdoel is
 hier **niet gehaald**. Dit blijft volgens de expliciete gebruikersprioriteit
 een informatieve meting; er is geen hogere limiet ingesteld, optimalisatieronde,
@@ -642,8 +651,9 @@ dezelfde actieve release `a74fbf5`; de gebruikte manifesthashes zijn nog
 gelijk en de applicatiebroncode is nog ongewijzigd ten opzichte van die release.
 `artifacts/staging-a74-final/final-stage-proof.json` koppelt de geslaagde
 smoke-, wedstrijd-, oefen- en chatacceptatie aan hun afzonderlijke meetwaarden
-en afsluitende controle. De eerste smoke-401 en oefen-409 blijven bewaard met
-onbekende oorspronkelijke oorzaak. Deze volledige reeks bewijst de pre-finale
+en afsluitende controle. De eerste smoke-401 blijft bewaard met onbekende
+oorspronkelijke oorzaak; de bewaarde oefen-409 is een bewezen correcte afwijzing
+van een 138 ms oude sample buiten 124 ms. Deze volledige reeks bewijst de pre-finale
 release a74 en geen fysieke apparaten.
 
 De opvolgende release krijgt opnieuw eigen geverifieerde release- en
@@ -652,3 +662,64 @@ browseracceptatie. Haar gereserveerde private eindlocatie is
 wordt hier niet als geslaagd aangemerkt. Ongewijzigde applicatiebroncode bewijst
 geen byte-identieke Dockerimages: een nieuwe release-SHA en build-ID kunnen
 de gebouwde uitvoer wijzigen.
+
+### Latere CI en gebruikersprioriteit
+
+Commit `5e19b05e641ac62b9084621956a253a6cd618e97` is nog **niet deployed**.
+De [stagingpipeline 38446406866](https://github.com/dartspoint/platform/actions/runs/38446406866)
+faalde onder de toen geldende lokale chatgate met alle **15/15** samples:
+lokale p95 **56,3 ms**, ontvanger-p95 **389 ms**. De ontvangerwaarde was al
+informatief. Images en gecontroleerde deployment zijn overgeslagen; actief
+blijft exact `a74fbf556b9428841bf7e381593d2719bd27e4fb`. De eerdere updategate in
+die CI accepteerde alle dertig werppogingen, met eerste-frame-p95 **14,6 ms**
+en maximum **17,8 ms**. Nieuwe wedstrijd-, oefen- en floodwerpcontroles zijn
+in die run niet bereikt. Ruwe log en veilige samenvatting blijven bewaard in
+`artifacts/staging-final-proof/5e19-staging-ci-{failure-private.log,safe-proof.json,status.json}`.
+
+De [main-CI 38446405884](https://github.com/dartspoint/platform/actions/runs/38446405884)
+faalde afzonderlijk op de harde floodwerpgate: de verticale handler duurde
+**6,4 ms**, maar de eerste frozen geometrie werd na **479,8 ms** gemeten,
+boven 50 ms. De horizontale meting was **1,1/18,4 ms**. Beide echte
+chatverzoeken gaven `429 chat_burst_limited`. Deze failure blijft behouden in
+`5e19b05-main-ci-failure-summary.json` en de private joblog onder dezelfde map;
+zij wordt niet door de chatprioriteit tot een geslaagde werptest verklaard.
+
+De expliciete gebruikersprioriteit geldt nu consequent voor **beide**
+chatlatenties. Rapporten bewaren `targets: {localMs: 50, recipientMs: 250}`,
+afzonderlijke `localTargetMet`/`recipientTargetMet` en voor beide gates
+`reported-only-user-priority-2026-10-13`. Alle vijftien functionele,
+geautoriseerde, canonieke afleveringen en documentfocus/zichtbaarheid blijven
+verplicht. Playwright emuleert documentfocus; fysieke OS-focus is niet bewezen.
+Geen grens is verhoogd en geen sample gefilterd, verwijderd of opnieuw gemeten.
+Alle werphandler-/framegrenzen van 50 ms, 1-CSS-pixelgrenzen en oorspronkelijke
+admission-/statecontroles blijven hard. De applicatiebroncode in apps,
+packages, Supabase en ops is ongewijzigd ten opzichte van actieve a74;
+CI-uitvoering, fixtures, rapportagebeleid en documentatie zijn gewijzigd.
+
+De aanvullende flooddiagnostiek bewaart apart de RAF-callbacktijd en de tijd
+tot de afgeronde DOM-geometriemeting. De harde 50-ms-gate blijft gelden tot
+die afgeronde geometrie. Long-task-, long-animation-frame- en
+focus/zichtbaarheidmetadata hebben elk maximaal 64 entries, met expliciete
+support- en dropped-tellers; attributie, scripts, URL's en requestinhoud worden
+niet gelezen. CI draait de wedstrijd- en oefenwerpproeven vóór de bredere
+workspacecontrole. Voorbereiding en upload van de beperkte, gesaneerde
+JSON-meetrapporten gebruiken `if: always()`, zodat een latere failure reeds
+gegenereerd werpbewijs bewaart. Credentials, cookies, berichtinhoud en private
+joblogs worden niet in dat artifact opgenomen.
+
+Eén lokale native controle met de ongewijzigde gemeten fixture slaagt met
+**21/21 functionele checks** en **15/15 chatsamples**. Chat-p95 is lokaal
+**13,1 ms** en bij de ontvanger **206,9 ms**; beide blijven informatief.
+De horizontale werphandler/geometrie zijn **0,8/19,5 ms**, de verticale
+**2,1/23,7 ms**. RAF-entry is respectievelijk **19,5/23,7 ms**; gemeten
+synchrone layoutduur is bij beide **0 ms**. Beide eerste pogingen zijn exact
+geaccepteerd, met **0 CSS px** freeze/ACK, dezelfde DOM-nodes en werkelijke
+overlap met een `429 chat_burst_limited`-response. Sampleleeftijden **19/22 ms**
+vallen binnen hun **54 ms** venster. Ondersteunde long-task/animation-frame-
+observers melden geen events; state-events en dropped-tellers zijn nul.
+Dit reproduceert de oorspronkelijke **479,8 ms** niet en bewijst haar oorzaak
+niet. Bewijs staat in
+`artifacts/local-final-proof/workspace-flood-diagnostics-20261013T185535Z/`,
+met private log, ruwe `generated-files`, samenvatting en bronhashmanifest
+(`measuredFixtureUnchanged: true`). Dit is lokale headless browseracceptatie;
+staging en fysieke apparaten blijven apart.

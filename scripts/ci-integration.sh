@@ -43,6 +43,9 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/recov
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/owner.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/load.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/mail.ts
+# Preserve independent throwing evidence before the broader workspace checks.
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/game-timing.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/render-sample-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/visual.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-moderation-ui.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
@@ -57,6 +60,3 @@ python3 tests/integration/landing-proxy.py
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-read.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-chat.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-density.ts
-
-node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/game-timing.ts
-node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/render-sample-timing.ts

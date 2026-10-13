@@ -47,3 +47,74 @@ jobs:
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
         run: python3 tests/integration/deployment-infrastructure.py
+      - name: Prepare audited browser measurements
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, re, stat
+          from pathlib import Path
+          os.umask(0o077)
+          destination = Path('artifacts/ci-safe')
+          reports = {
+              'artifacts/workspace-chat/results.json': 'workspace-chat-results.json',
+              'artifacts/workspace-chat/latency.json': 'workspace-chat-latency.json',
+              'artifacts/game-timing-result.json': 'game-timing-result.json',
+              'artifacts/game-timing-progress.json': 'game-timing-progress.json',
+              'artifacts/render-sample-timing-result.json': 'render-sample-timing-result.json',
+              'artifacts/render-sample-timing-progress.json': 'render-sample-timing-progress.json',
+              'artifacts/render-sample-rejected.json': 'render-sample-rejected.json',
+          }
+          omitted = {
+              'message', 'body', 'text', 'stack', 'headers', 'authorization',
+              'cookie', 'cookies', 'password', 'passwd', 'secret', 'secrets',
+              'session', 'sessions', 'email', 'emails', 'containersrc',
+          }
+          uuid = re.compile(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}')
+          credential_value = re.compile(r'(?:Bearer\s|(?:postgres|postgresql)://|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)')
+          def safe(value):
+              if isinstance(value, dict):
+                  result = {}
+                  for key, item in value.items():
+                      compact = re.sub(r'[^a-z0-9]', '', key.lower())
+                      if compact in omitted or compact.endswith('url') or 'secret' in compact or 'password' in compact:
+                          continue
+                      if 'token' in compact:
+                          if compact != 'phasetoken' or not isinstance(item, str) or not uuid.fullmatch(item):
+                              continue
+                      result[key] = safe(item)
+                  return result
+              if isinstance(value, list):
+                  return [safe(item) for item in value]
+              if isinstance(value, str) and credential_value.search(value):
+                  return None
+              return value
+          for source, name in reports.items():
+              path = Path(source)
+              if not path.exists():
+                  continue
+              if path.is_symlink() or not stat.S_ISREG(path.stat().st_mode):
+                  raise SystemExit('Safe browser report export refused an unexpected file type')
+              try:
+                  data = json.loads(path.read_text())
+              except (OSError, ValueError):
+                  raise SystemExit('Safe browser report export refused invalid JSON')
+              destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+              target = destination / name
+              target.write_text(json.dumps(safe(data), indent=2, allow_nan=False) + '\n')
+              target.chmod(0o600)
+          PY
+      - name: Preserve safe browser measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dartspoint-browser-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            artifacts/ci-safe/workspace-chat-results.json
+            artifacts/ci-safe/workspace-chat-latency.json
+            artifacts/ci-safe/game-timing-result.json
+            artifacts/ci-safe/game-timing-progress.json
+            artifacts/ci-safe/render-sample-timing-result.json
+            artifacts/ci-safe/render-sample-timing-progress.json
+            artifacts/ci-safe/render-sample-rejected.json

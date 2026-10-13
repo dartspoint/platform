@@ -17,8 +17,8 @@ const epochNow=()=>performance.timeOrigin+performance.now();
 const pageState=(page:Page)=>page.evaluate(()=>({focused:document.hasFocus(),visibility:document.visibilityState}));
 async function writeLatencyProof(){
  if(!report.chat.length)return;
- const locals=report.chat.map((r:any)=>r.localMs).filter((v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)),recipients=report.chat.map((r:any)=>r.recipientMs).filter((v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v));
- report.latency={samples:report.chat.length,completedSamples:recipients.length,localP95Ms:locals.length?p95(locals):null,recipientP95Ms:recipients.length?p95(recipients):null,limits:{localMs:50},targets:{recipientMs:250},recipientGate:'reported-only-user-priority-2026-10-13',recipientTargetMet:recipients.length===15?p95(recipients)<=250:null,environment:'Native built web, local PostgreSQL/Redis/Colyseus, Chromium two authenticated users, no added network delay; actual page focus and visibility recorded per sample'};
+ const locals=report.chat.map((r:any)=>r.localMs),recipients=report.chat.map((r:any)=>r.recipientMs),allLocal=locals.every(Number.isFinite),allRecipient=recipients.every(Number.isFinite);
+ report.latency={samples:report.chat.length,completedSamples:recipients.reduce((count:number,value:unknown)=>count+(typeof value==='number'&&Number.isFinite(value)?1:0),0),localP95Ms:locals.length&&allLocal?p95(locals):null,recipientP95Ms:recipients.length&&allRecipient?p95(recipients):null,targets:{localMs:50,recipientMs:250},localGate:'reported-only-user-priority-2026-10-13',recipientGate:'reported-only-user-priority-2026-10-13',localTargetMet:locals.length===15&&allLocal?p95(locals)<=50:null,recipientTargetMet:recipients.length===15&&allRecipient?p95(recipients)<=250:null,environment:'Native built web, local PostgreSQL/Redis/Colyseus, Chromium two authenticated users, no added network delay; actual page focus and visibility recorded per sample'};
  const proof={measurement:report.measurement,latency:report.latency,samples:report.chat};
  await writeFile(dir+'/latency.json',JSON.stringify(proof,null,2));await writeFile(dir+'/results.json',JSON.stringify(report,null,2));
  console.log('Workspace/chat raw latency proof '+JSON.stringify(proof));
@@ -33,9 +33,9 @@ async function readyFloodStop(page:Page,axis:'horizontal'|'vertical'){
 }
 async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'vertical',matchId:string,actorId:string){
  await page.bringToFront();const button=await readyFloodStop(page,axis);if(axis==='vertical')await button.focus();
- assert.equal(await page.evaluate(()=>document.hasFocus()&&document.visibilityState==='visible'),true,'Flood timing has real foreground focus');
+ assert.equal(await page.evaluate(()=>document.hasFocus()&&document.visibilityState==='visible'),true,'Flood timing has document focus and visible state');
  const baseline=await get(page,'match/'+matchId);assert.equal(baseline.lifecycle,'playing');assert.equal(baseline.state.phase,axis);assert.equal(baseline.seat,baseline.state.turn);
- const attemptIndex=report.floodTiming.length,clientMessageId=randomUUID(),attempt:any={axis,input:axis==='horizontal'?'pointer':'keyboard',clientMessageId,httpStatus:null,httpCode:null,seeds:[]};report.floodTiming.push(attempt);
+ const attemptIndex=report.floodTiming.length,clientMessageId=randomUUID(),attempt:any={axis,input:axis==='horizontal'?'pointer':'keyboard',clientMessageId,httpStatus:null,httpCode:null,seeds:[],focusEvidence:report.floodFocusEvidence,baseline:{stateVersion:baseline.stateVersion,lifecycle:baseline.lifecycle,phase:baseline.state.phase,phaseToken:baseline.state.phaseToken,phaseStartedAt:baseline.state.phaseStartedAt,lastAcceptedAt:baseline.state.lastAcceptedAt??0,seat:baseline.seat,turn:baseline.state.turn}};report.floodTiming.push(attempt);
  // Read the authoritative baseline before filling the real 3/2s budget. The
  // fourth request starts inside this same actor's actual native input capture.
  await pause(2100);await Promise.all([0,1,2].map(async i=>{const clientMessageId=randomUUID(),body='Game chat '+runId+' '+(attemptIndex?attemptIndex+' ':'')+i;await post(page,'chat/send',{channelId,clientMessageId,body});attempt.seeds.push({clientMessageId,completedAt:epochNow()});}));
@@ -46,14 +46,14 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  if(axis==='horizontal')await button.click();else await button.press('Enter');
  await page.waitForFunction(()=>!!(window as any).__floodFirst);
  const local=await page.evaluate(()=>({timeOrigin:performance.timeOrigin,input:(window as any).__floodInput,first:(window as any).__floodFirst,flood:(window as any).__floodRequest,mark:performance.getEntriesByName('dp-local-stop').at(-1)?.toJSON(),trace:(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark)?.detail}));
- Object.assign(attempt,{captureEpoch:local.input?.epoch,inputEpoch:local.trace?local.timeOrigin+local.trace.inputAt:undefined,floodStartedAt:local.flood?.floodStartedAt,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
+ Object.assign(attempt,{browserTimeOrigin:local.timeOrigin,captureEpoch:local.input?.epoch,inputEpoch:local.trace?local.timeOrigin+local.trace.inputAt:undefined,floodStartedAt:local.flood?.floodStartedAt,captureState:local.input?.state,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
  assert.ok(local.trace,'A genuine flood stop captures its rendered v3 sample');
- Object.assign(attempt,{handlerMs:local.mark!.startTime-local.input.at,firstFrameMs:local.first.at-local.input.at,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
+ Object.assign(attempt,{handlerMs:local.mark!.startTime-local.input.at,firstFrameMs:local.first.at-local.input.at,rafEntryMs:local.first.rafEntryAt-local.input.at,rafGeometryMs:local.first.geometryCompletedAt-local.first.geometryStartedAt,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
  console.log(JSON.stringify({event:'workspace_flood_stop_attempt',axis,clientMessageId,commandId:local.trace.commandId,captureEpoch:attempt.captureEpoch,inputEpoch:attempt.inputEpoch,floodStartedAt:attempt.floodStartedAt,handlerMs:attempt.handlerMs,firstFrameMs:attempt.firstFrameMs}));
  await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
- const receipt=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
- attempt.receipt=receipt;
- const acknowledged=await page.evaluate(axis=>{const w=window as any,element=document.querySelector(axis==='horizontal'?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator')!,r=element.getBoundingClientRect();return {indicator:axis==='horizontal'?r.left+r.width/2:r.top+r.height/2,sameNode:element===w.__floodMeters[axis],sameBoard:document.querySelector('.dp-board-stage')===w.__boardBefore};},axis);
+ const observed=await page.evaluate(commandId=>({receipt:((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),at:performance.now(),state:{focused:document.hasFocus(),visibility:document.visibilityState}}),local.trace.commandId),receipt=observed.receipt;
+ Object.assign(attempt,{receipt,receiptObservedAt:observed.at,receiptObservedState:observed.state});
+ const acknowledged=await page.evaluate(axis=>{const w=window as any,element=document.querySelector(axis==='horizontal'?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator')!,r=element.getBoundingClientRect();return {indicator:axis==='horizontal'?r.left+r.width/2:r.top+r.height/2,sameNode:element===w.__floodMeters[axis],sameBoard:document.querySelector('.dp-board-stage')===w.__boardBefore,state:{focused:document.hasFocus(),visibility:document.visibilityState}};},axis);
  Object.assign(attempt,{acknowledged,ackJumpPx:Math.abs(acknowledged.indicator-local.input.geometry.indicator),ackJumpFraction:Math.abs(acknowledged.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
  const flood=await page.evaluate(async()=>{const w=window as any;await w.__floodRequestPromise;return w.__floodRequest;});assert.ok(flood,'The native input started its genuine browser request');Object.assign(attempt,flood);assert.equal(attempt.floodError,undefined,'The real concurrent browser request completes');
  console.log(JSON.stringify({event:'workspace_flood_http_complete',axis,clientMessageId,commandId:local.trace.commandId,floodStartedAt:attempt.floodStartedAt,inputEpoch:attempt.inputEpoch,floodCompletedAt:attempt.floodCompletedAt,httpStatus:attempt.httpStatus,httpCode:attempt.httpCode}));
@@ -69,6 +69,14 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  assert.equal(row.timing_version,'render-sample-v3');assert.equal(local.trace.timingVersion,'render-sample-v3');assert.equal(local.trace.phaseToken,baseline.state.phaseToken);assert.equal(local.trace.phaseStartedAt,baseline.state.phaseStartedAt);assert.ok(windowMs>=54&&windowMs<=124);assert.ok(Number(row.latency_ms)>=0&&Number(row.latency_ms)<=90);
  const violations=[sampleAt>receivedAt?'future':null,sampleAt<receivedAt-windowMs?'old':null,sampleAt<baseline.state.phaseStartedAt?'before-phase':null,sampleAt<(baseline.state.lastAcceptedAt??0)?'before-last-accepted':null].filter(Boolean);
  attempt.ingress={receivedAt,windowMs,sampleAt,sampleAgeMs:receivedAt-sampleAt,admissible:violations.length===0,violations};
+ attempt.performance=await page.evaluate(inputAt=>{
+  const w=window as any;w.__floodDrainPerformance?.();const data=w.__floodDiagnostics,observedAt=performance.now();
+  const overlaps=(entry:any)=>entry.startTime+entry.duration>=inputAt-1000&&entry.startTime<=observedAt;
+  return {startedAt:data.startedAt,observedAt,capacityPerType:data.capacityPerType,supported:data.supported,dropped:data.dropped,longTasks:data.longTasks.filter(overlaps),longAnimationFrames:data.longAnimationFrames.filter(overlaps),stateEvents:data.stateEvents.filter((entry:any)=>entry.at>=inputAt-1000&&entry.at<=observedAt)};
+ },local.input.at);
+ // Keep the complete metadata-only attempt in hosted stdout before a hard
+ // gate can fail. The runner's private report may not otherwise survive.
+ console.log(JSON.stringify({event:'workspace_flood_complete_attempt',...attempt}));
  assert.ok(attempt.handlerMs>=0&&attempt.handlerMs<=50,'Flood handler freeze <=50ms');assert.ok(attempt.firstFrameMs>=0&&attempt.firstFrameMs<=50,'Flood first frozen RAF <=50ms');
  assert.equal(acknowledged.sameNode,true);assert.equal(acknowledged.sameBoard,true);
  if(violations.length){
@@ -148,9 +156,9 @@ try{
  }
  // Persist every raw sample before any canonical-row or percentile assertion.
  await writeLatencyProof();assert.equal(report.chat.length,15);assert.equal(report.latency.completedSamples,15);
- for(const sample of report.chat){assert.ok(sample.localMs!==null,'Every local optimistic row is observed');assert.ok(Object.values(sample.canonicalPush).every(Boolean),'Eligible authenticated recipients receive the actual canonical stored row');}
+ for(const sample of report.chat){assert.ok(Number.isFinite(sample.localMs),'Every local optimistic row is observed');assert.ok(Object.values(sample.canonicalPush).every(Boolean),'Eligible authenticated recipients receive the actual canonical stored row');}
  report.checks.authorizedRealtimeStoredRow=true;await personal.leave();cleanupPersonal=undefined;
- assert.ok(report.latency.localP95Ms<=50,JSON.stringify(report.latency));if(!report.latency.recipientTargetMet)console.warn('Workspace/chat recipient p95 '+report.latency.recipientP95Ms+' ms exceeds the informational 250 ms target; reported only at the user\'s request.');
+ if(!report.latency.localTargetMet)console.warn('Workspace/chat local p95 '+report.latency.localP95Ms+' ms exceeds the informational 50 ms target; reported only at the user\'s request.');if(!report.latency.recipientTargetMet)console.warn('Workspace/chat recipient p95 '+report.latency.recipientP95Ms+' ms exceeds the informational 250 ms target; reported only at the user\'s request.');
  // The same fixed surface survives practice and gameplay without a duplicate chat.
  for(const [width,height] of [[1280,720],[1366,768],[1920,1080]]){await a.page.setViewportSize({width,height});await a.page.goto(origin+'/oefenen');await a.page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();await desktopGeometry(a.page,'practice');}
  // Keep the real dialog open while only its recipient becomes reserved in
@@ -173,30 +181,51 @@ try{
  const own=await get(a.page,'bootstrap');assert.equal(own.players.find((p:any)=>p.id===a.id).playing,true);report.checks.authoritativeBusy=true;
  // Chat updates and a refused flood cannot remount the running game surface.
  report.floodTiming=[];
+ report.floodFocusEvidence={documentFocusEmulatedByPlaywright:true,physicalOsFocusVerified:false};
  await a.page.evaluate(()=>{
   const w=window as any;w.__boardBefore=document.querySelector('.dp-board-stage');w.__floodMeters={horizontal:document.querySelector('.dp-meter-row .dp-meter-indicator'),vertical:document.querySelector('.dp-meter-track-vertical .dp-meter-indicator')};
+  // Observe only bounded numeric scheduling metadata. Attribution, scripts,
+  // URLs, request payloads and credentials are never read or retained.
+  const capacity=64,diagnostics={startedAt:performance.now(),capacityPerType:capacity,supported:{longtask:false,'long-animation-frame':false},dropped:{longtask:0,'long-animation-frame':0,state:0},longTasks:[] as any[],longAnimationFrames:[] as any[],stateEvents:[] as any[]};w.__floodDiagnostics=diagnostics;
+  const observers=new Map<string,PerformanceObserver>();
+  const append=(type:'longtask'|'long-animation-frame',entries:PerformanceEntry[])=>{
+   const target=type==='longtask'?diagnostics.longTasks:diagnostics.longAnimationFrames;
+   for(const entry of entries){const metadata:Record<string,number>={startTime:entry.startTime,duration:entry.duration};
+    if(type==='long-animation-frame')for(const key of ['renderStart','styleAndLayoutStart','blockingDuration','firstUIEventTimestamp']){const value=(entry as any)[key];if(typeof value==='number'&&Number.isFinite(value))metadata[key]=value;}
+    target.push(metadata);if(target.length>capacity){target.shift();diagnostics.dropped[type]++;}
+   }
+  };
+  if(typeof PerformanceObserver!=='undefined')for(const type of ['longtask','long-animation-frame'] as const){
+   if(!PerformanceObserver.supportedEntryTypes.includes(type))continue;
+   try{const observer=new PerformanceObserver(list=>append(type,list.getEntries()));observer.observe({type});observers.set(type,observer);diagnostics.supported[type]=true;}catch{/* Unsupported metadata is explicitly reported as unavailable. */}
+  }
+  w.__floodDrainPerformance=()=>{for(const [type,observer] of observers)append(type as 'longtask'|'long-animation-frame',observer.takeRecords());};
+  const stateEvent=(event:Event)=>{diagnostics.stateEvents.push({at:performance.now(),event:event.type,focused:document.hasFocus(),visibility:document.visibilityState});if(diagnostics.stateEvents.length>capacity){diagnostics.stateEvents.shift();diagnostics.dropped.state++;}};
+  window.addEventListener('focus',stateEvent);window.addEventListener('blur',stateEvent);document.addEventListener('visibilitychange',stateEvent);
+  w.__floodStopPerformance=()=>{w.__floodDrainPerformance();for(const observer of observers.values())observer.disconnect();window.removeEventListener('focus',stateEvent);window.removeEventListener('blur',stateEvent);document.removeEventListener('visibilitychange',stateEvent);};
   const capture=(event:Event)=>{
    const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;
-   const at=performance.now(),prepared=w.__floodPrepared;if(!prepared)return;w.__floodPrepared=undefined;
+   const at=performance.now(),prepared=w.__floodPrepared;if(!prepared)return;w.__floodPrepared=undefined;const state={focused:document.hasFocus(),visibility:document.visibilityState};
    // Start real fetch in this input's capture phase, before the actual React
    // stop handler. No route hold, delayed response or cross-process clock.
    const request={clientMessageId:prepared.clientMessageId,floodStartedAt:performance.timeOrigin+performance.now(),httpStatus:null,httpCode:null} as any;w.__floodRequest=request;
    w.__floodRequestPromise=fetch('/api/platform/chat/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:prepared.body}).then(async response=>{const data=await response.json();Object.assign(request,{floodCompletedAt:performance.timeOrigin+performance.now(),httpStatus:response.status,httpCode:data.code});},error=>{Object.assign(request,{floodCompletedAt:performance.timeOrigin+performance.now(),floodError:error instanceof Error?error.name:'request-error'});});
-   const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at,epoch:performance.timeOrigin+at,geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};
-   requestAnimationFrame(()=>{const r=element.getBoundingClientRect();w.__floodFirst={at:performance.now(),indicator:horizontal?r.left+r.width/2:r.top+r.height/2};});
+   const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at,epoch:performance.timeOrigin+at,state,geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};
+   requestAnimationFrame(rafTimestamp=>{const rafEntryAt=performance.now(),state={focused:document.hasFocus(),visibility:document.visibilityState},geometryStartedAt=performance.now(),r=element.getBoundingClientRect(),geometryCompletedAt=performance.now();w.__floodFirst={at:geometryCompletedAt,rafEntryAt,rafTimestamp,geometryStartedAt,geometryCompletedAt,state,indicator:horizontal?r.left+r.width/2:r.top+r.height/2};});
   };w.__floodCapture=capture;window.addEventListener('pointerdown',capture,true);window.addEventListener('keydown',capture,true);
  });
  const floodReceipts=[];
- for(const axis of ['horizontal','vertical'] as const){let receipt:any;
-  // One explicitly rejected, unchanged stop may be followed by one new
-  // controlled action. Every attempt remains in the report; no luck reruns.
-  for(let action=0;action<2;action++){
-   receipt=await stopDuringFlood(a.page,roomChannel,axis,match,a.id);if(receipt)break;
+ try{
+  for(const axis of ['horizontal','vertical'] as const){let receipt:any;
+   // One explicitly rejected, unchanged stop may be followed by one new
+   // controlled action. Every attempt remains in the report; no luck reruns.
+   for(let action=0;action<2;action++){
+    receipt=await stopDuringFlood(a.page,roomChannel,axis,match,a.id);if(receipt)break;
+   }
+   assert.ok(receipt,'Each flood axis requires an actual accepted exact-sample stop');floodReceipts.push(receipt);
   }
-  assert.ok(receipt,'Each flood axis requires an actual accepted exact-sample stop');floodReceipts.push(receipt);
- }
- assert.equal(floodReceipts[1].hit.x,floodReceipts[0].lockedX);assert.equal(floodReceipts[1].hit.y,floodReceipts[1].lockedY);
- await a.page.evaluate(()=>{const w=window as any;window.removeEventListener('pointerdown',w.__floodCapture,true);window.removeEventListener('keydown',w.__floodCapture,true);});
+  assert.equal(floodReceipts[1].hit.x,floodReceipts[0].lockedX);assert.equal(floodReceipts[1].hit.y,floodReceipts[1].lockedY);
+ }finally{await a.page.evaluate(()=>{const w=window as any;window.removeEventListener('pointerdown',w.__floodCapture,true);window.removeEventListener('keydown',w.__floodCapture,true);w.__floodStopPerformance?.();});}
  await a.page.getByText('Game chat '+runId+' 2',{exact:true}).waitFor();assert.equal(await a.page.evaluate(()=>(window as any).__boardBefore===document.querySelector('.dp-board-stage')),true);report.checks.chatFloodNoBoardRemount=true;report.checks.chatFloodExactStopAndInput=true;
  // A practice menu hands off the selected user's UUID to the actual spectator view.
  try{await viewer.page.goto(origin+'/oefenen');await viewer.page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();const watched=viewer.page.waitForResponse(response=>response.url().endsWith('/match/'+match)&&response.ok());await viewer.page.getByRole('button',{name:'Kijk mee bij '+newName,exact:true}).click();await viewer.page.waitForURL(origin+'/spelen');await viewer.page.getByRole('heading',{name:'Langs de oche',exact:true}).waitFor();await viewer.page.locator('.spectator-scores').getByText(newName,{exact:true}).waitFor();const watchedState=await(await watched).json();assert.equal(watchedState.matchId,match);assert.equal(watchedState.seat,null);report.checks.practiceSpectatorStableTarget=true;}finally{await viewer.context.close();}

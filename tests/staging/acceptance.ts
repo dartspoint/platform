@@ -46,10 +46,11 @@ const epochNow=()=>performance.timeOrigin+performance.now();
 const pageState=(page:Page)=>page.evaluate(()=>({focused:document.hasFocus(),visibility:document.visibilityState}));
 function writeChatProof(){
  if(!chatProof)return;
- const percentile=(field:string)=>{const values=chatProof.samples.map((r:any)=>r[field]).filter((v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)).sort((a:number,b:number)=>a-b);return values.length?values[Math.ceil(values.length*.95)-1]:null;};
+ const percentile=(field:string)=>{const values=chatProof.samples.map((r:any)=>r[field]);if(!values.length||!values.every(Number.isFinite))return null;values.sort((a:number,b:number)=>a-b);return values[Math.ceil(values.length*.95)-1];};
  chatProof.completedSamples=chatProof.samples.filter((r:any)=>Number.isFinite(r.recipientMs)).length;
  chatProof.localP95Ms=percentile('localMs');chatProof.recipientP95Ms=percentile('recipientMs');
- chatProof.recipientTargetMet=chatProof.completedSamples===15?chatProof.recipientP95Ms<=250:null;
+ chatProof.localTargetMet=chatProof.samples.length===15&&Number.isFinite(chatProof.localP95Ms)?chatProof.localP95Ms<=50:null;
+ chatProof.recipientTargetMet=chatProof.completedSamples===15&&Number.isFinite(chatProof.recipientP95Ms)?chatProof.recipientP95Ms<=250:null;
  writeFileSync('artifacts/staging-chat-latency.json',JSON.stringify(chatProof,null,2));
  console.log('Staging/chat raw latency proof '+JSON.stringify(chatProof));
 }
@@ -86,7 +87,7 @@ try{
   // Login contexts never start tracing; screenshots run after the measured phase.
   await first.page.bringToFront();await first.page.getByLabel('Chatbericht',{exact:true}).focus();
   const senderState=await pageState(first.page),receiverState=await pageState(second.page),samples:any[]=[];
-  chatProof={release:expectedRelease,samples,limits:{localMs:50},targets:{recipientMs:250},recipientGate:'reported-only-user-priority-2026-10-13',measurement:{sender:senderState,receiver:receiverState,receiverUnfocused:!receiverState.focused,tracing:false,screenshotsDuringMeasurement:false,warmupSamplesExcluded:0},environment:'Staging web/PostgreSQL/Redis/Colyseus over Tailscale; two Chromium sessions, actual focus and visibility recorded per sample; no injected delay'};
+  chatProof={release:expectedRelease,samples,targets:{localMs:50,recipientMs:250},localGate:'reported-only-user-priority-2026-10-13',recipientGate:'reported-only-user-priority-2026-10-13',measurement:{sender:senderState,receiver:receiverState,receiverUnfocused:!receiverState.focused,tracing:false,screenshotsDuringMeasurement:false,warmupSamplesExcluded:0},environment:'Staging web/PostgreSQL/Redis/Colyseus over Tailscale; two Chromium sessions, actual focus and visibility recorded per sample; no injected delay'};
   assert.equal(senderState.focused,true,'Measured staging sender has document focus');assert.equal(senderState.visibility,'visible','Measured staging sender is visible');
   for(let n=0;n<15;n++){
    if(n%3===0)await first.page.waitForTimeout(2200);
@@ -107,8 +108,8 @@ try{
   }
   // Keep all fifteen raw observations before assertions, and again in finally.
   writeChatProof();assert.equal(samples.length,15);assert.equal(chatProof.completedSamples,15);
-  for(const sample of samples){assert.ok(sample.localMs!==null,'Each staging optimistic row is observed');assert.ok(Object.values(sample.canonicalPush).every(Boolean),'Each staging recipient receives the actual canonical stored row');}
-  assert.ok(chatProof.localP95Ms<=50,'Staging local chat p95 <=50ms');if(!chatProof.recipientTargetMet)console.warn('Staging/chat recipient p95 '+chatProof.recipientP95Ms+' ms exceeds the informational 250 ms target; reported only at the user\'s request.');
+  for(const sample of samples){assert.ok(Number.isFinite(sample.localMs),'Each staging optimistic row is observed');assert.ok(Object.values(sample.canonicalPush).every(Boolean),'Each staging recipient receives the actual canonical stored row');}
+  if(!chatProof.localTargetMet)console.warn('Staging/chat local p95 '+chatProof.localP95Ms+' ms exceeds the informational 50 ms target; reported only at the user\'s request.');if(!chatProof.recipientTargetMet)console.warn('Staging/chat recipient p95 '+chatProof.recipientP95Ms+' ms exceeds the informational 250 ms target; reported only at the user\'s request.');
   await first.page.screenshot({path:'artifacts/staging-chat-desktop.png'});
   await first.page.setViewportSize({width:390,height:844});
   assert.equal(await first.page.locator('.chat-panel').count(),1,'Mobile room has exactly one mounted chat');
