@@ -26,11 +26,16 @@ export async function login(browser:Browser,label:string,{hasTouch=false}:{hasTo
  const suffix=randomUUID().replaceAll('-','').slice(0,8),email=`qa-${label}-${suffix}@dartspoint.local`,name=`${label}${suffix}`;
  await page.goto(origin+'/inloggen');await page.getByLabel('E-mailadres',{exact:true}).fill(email);await page.getByRole('button',{name:'Ontvang je inlogcode'}).click();await page.getByLabel('Je eenmalige code').waitFor();
  let code:string|undefined;
- for(let attempt=0;attempt<40&&!code;attempt++){
-  const listing=await(await fetch('http://127.0.0.1:62424/api/v1/messages')).json();const sent=listing.messages.find((m:any)=>m.To.some((t:any)=>t.Address.toLowerCase()===email.toLowerCase()));
-  if(sent){const mail=await(await fetch('http://127.0.0.1:62424/api/v1/message/'+sent.ID)).json();code=(mail.Text||mail.HTML).match(/\b\d{6}\b/)?.[0];}if(!code)await new Promise(r=>setTimeout(r,100));
- }
- if(!code)throw new Error('OTP message not received');
+ const otpPoll={pollAttempts:0,listingHTTPStatus:null as number|null,mailboxCount:null as number|null,recipientMailFound:false,mailDetailHTTPStatus:null as number|null,otpPatternPresent:false};
+ const otpPollStartedAt=performance.now();
+ try{
+  for(let attempt=0;attempt<40&&!code;attempt++){
+   otpPoll.pollAttempts++;const listingResponse=await fetch('http://127.0.0.1:62424/api/v1/messages');otpPoll.listingHTTPStatus=listingResponse.status;
+   const listing=await listingResponse.json();otpPoll.mailboxCount=Array.isArray(listing.messages)?listing.messages.length:null;const sent=listing.messages.find((m:any)=>m.To.some((t:any)=>t.Address.toLowerCase()===email.toLowerCase()));
+   if(sent){otpPoll.recipientMailFound=true;const mailResponse=await fetch('http://127.0.0.1:62424/api/v1/message/'+sent.ID);otpPoll.mailDetailHTTPStatus=mailResponse.status;const mail=await mailResponse.json();code=(mail.Text||mail.HTML).match(/\b\d{6}\b/)?.[0];otpPoll.otpPatternPresent=Boolean(code);}if(!code)await new Promise(r=>setTimeout(r,100));
+  }
+  if(!code)throw new Error('OTP message not received');
+ }catch(error){console.error(JSON.stringify({event:'otp_delivery_poll_failed',...otpPoll,elapsedMs:performance.now()-otpPollStartedAt}));throw error;}
  await page.getByLabel('Je eenmalige code').fill(code);await page.getByRole('button',{name:'Bevestig je code'}).click();await page.getByLabel('Spelersnaam',{exact:true}).waitFor();await page.getByLabel('Spelersnaam',{exact:true}).fill(name);await page.getByRole('button',{name:'Bevestig mijn spelersnaam'}).click();await page.getByRole('button',{name:'Open de lobby'}).waitFor();await page.getByRole('button',{name:'Open de lobby'}).click();await page.waitForURL('**/lobby');
  const state=await get(page,'bootstrap');
  const cookies=await context.cookies();const parts=cookies.filter(c=>/^sb-.*-auth-token(?:\.\d+)?$/.test(c.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>c.value).join('');

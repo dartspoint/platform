@@ -974,3 +974,32 @@ Sockettype, eigenaar-UID, private parent en afwezige other-permissions blijven
 verplicht. Alleen begrensde UID/GID/mode-/booleanmetadata wordt gelogd.
 De daadwerkelijke afwijkende socketmetadata en oorzaak moeten door de
 volgende CI bevestigd worden; er wordt nog geen succesvolle test geclaimd.
+
+De volgende commit `9d243933a27c2e95b44970dbc2f5bd2fc7d6dcf5` bevestigt
+de socketoorzaak werkelijk: UID **1005**, GID **428667** behoort tot de
+exclusieve eigen subgid-range en verschilt van de primaire GID. Context-,
+build-, ops- en browserdependencycontroles slagen. [Main](https://github.com/dartspoint/platform/actions/runs/38472972193)
+stopt vervolgens bij `OTP message not received`; [staging](https://github.com/dartspoint/platform/actions/runs/38472972866)
+stopt in preclean met `qa_test_port_occupied`. Beide zijn afzonderlijk
+behouden; publicatie en deployment blijven overgeslagen. De main-EXIT en
+de daaropvolgende stack-/workspacecleanup zijn aantoonbaar geslaagd.
+
+De gerichte vervolgaanpassing maakt uitsluitend de publieke, HEAD-byte-identieke
+OTP-template leesbaar voor de container en controleert beide werkelijke
+Kong-template-endpoints vanuit de eigen Auth-container. De eerdere mailmelding
+onderscheidde ontbrekende mail niet van ontbrekende OTP-tekst; alleen veilige
+foutmetadata wordt toegevoegd. Alle **40 × 100 ms**, bestaande authflow,
+stagingloginbranch en harde werpgates blijven gelijk. De werkelijke oude
+templatepermissies en mailoorzaak zijn hiermee nog niet vastgesteld; de nieuwe
+CI-preflight legt de permissies en geserveerde publieke inhoud vast.
+
+Een echte lokale ephemeral-TCP-proef toont daarnaast dat een gesloten
+verbinding in TIME_WAIT een gewone bindprobe nog kan weigeren. Met
+`SO_REUSEADDR` slaagt die probe, terwijl een actieve LISTEN-socket nog
+`EADDRINUSE` geeft. De QA-preclean gebruikt daarom die veilige bindoptie
+en logt bij een echte weigering alleen het poortnummer. De oude stagingfailure
+bevat geen poortnummer; haar exacte poortoorzaak blijft onbekend.
+Achttien helper/componentcases, vier mailpollmocks, typecheck en **39/39**
+ops-contracttests slagen. Alle **29** integrationtestcommando's blijven exact
+gelijk. Bewijs staat in de private `ci-9d2439-*`- en `staging-3faea-final`-mappen;
+nieuwe exacte-SHA-CI en verse live stagingacceptatie blijven vereist.

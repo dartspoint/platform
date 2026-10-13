@@ -27,6 +27,8 @@ Zet repositoryvariabele `DARTSPOINT_QA_ON_VPS` op de exacte tekst `true` nadat i
 
 Pull requests en production-verificatie blijven op `ubuntu-24.04`. Configuration- en publishjobs behouden hun bestaande hosted route; deployments behouden de aparte staging- en productionrunners. Er zijn geen extra providersecrets nodig. Alle bestaande tests en harde werpgrenzen blijven verplicht. De eerste echte QA-CI moet ook de browserdependencies, containerlimieten en `test-host-capacity.json` bewijzen; een installatiecontrole vervangt die acceptatie niet.
 
+De private runner-umask kan een uitgecheckte publieke OTP-template als `0600` aanmaken. Voor lokale Supabase-start maakt de QA-helper uitsluitend de vaste, eigen `supabase/templates/otp.html` leesbaar als `0644`, na vergelijking met HEAD en controle op symlinks/hardlinks. Envfiles en homedirectories behouden hun private rechten. Een afzonderlijke preflight verifieert vervolgens beide door CLI `2.109.1` geconfigureerde template-endpoints vanuit de eigen Auth-container: HTTP 200, de tokenmacro en volledige bytegelijkheid met de publieke bron zijn verplicht. Loginpolling blijft 40 pogingen met 100 ms wachttijd; bij falen worden alleen aantallen, statussen en booleans gelogd.
+
 ## Status controleren
 
 Als beheerder op de VPS:
@@ -51,7 +53,7 @@ Print geen environmentbestanden, tokens, Docker-containerconfig of private testl
 
 Preclean verwijdert alleen de eigen Supabase-projectresources `dartspoint-development` en de expliciet gelabelde Redis-container `dartspoint-development-redis` op de geverifieerde QA-daemon. Supabase wordt met `stop --no-backup --project-id dartspoint-development` gestopt; als dependencies nog ontbreken, gebruikt de helper dezelfde exacte naam-/labelcontrole voor achtergebleven resources. Geen algemene Docker-prune of cleanup van andere accounts.
 
-De integration-EXIT sluit uitsluitend zijn eigen native processen af, gecontroleerd op oorspronkelijke PID-starttijd en parent. Bij falen ruimt hij ook de QA-stack op. Bij succes blijft de database beschikbaar voor de volgende echte TLS-/restoretest. Na die test en de veilige artifactupload ruimt de `always()`-stap de stack op en daarna uitsluitend de exacte repositoryworkspace. Bij een mislukte scope- of cleanupcontrole worden workspacebestanden behouden. Een afgebroken job krijgt bij de volgende start opnieuw preclean; bezette onbekende testpoorten veroorzaken een fout, geen willekeurige proceskill.
+De integration-EXIT sluit uitsluitend zijn eigen native processen af, gecontroleerd op oorspronkelijke PID-starttijd en parent. Bij falen ruimt hij ook de QA-stack op. Bij succes blijft de database beschikbaar voor de volgende echte TLS-/restoretest. Na die test en de veilige artifactupload ruimt de `always()`-stap de stack op en daarna uitsluitend de exacte repositoryworkspace. Bij een mislukte scope- of cleanupcontrole worden workspacebestanden behouden. Een afgebroken job krijgt bij de volgende start opnieuw preclean; de poortprobe gebruikt `SO_REUSEADDR` voor achtergebleven TCP TIME_WAIT, terwijl actieve listeners geweigerd blijven. Bezette onbekende testpoorten veroorzaken een fout met alleen het poortnummer, geen willekeurige proceskill.
 
 Voor uitschakelen:
 

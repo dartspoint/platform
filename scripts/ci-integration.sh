@@ -65,12 +65,16 @@ trap cleanup_owned_services EXIT
 # Both routes use disposable local provider credentials, never Environment secrets.
 if [[ "${DARTSPOINT_QA_RUNNER:-false}" == true ]]; then
   python3 scripts/qa-runner-context.py preclean
+  python3 scripts/qa-runner-context.py prepare-template
 fi
 # CLI 2.109.1 names the unused Storage API service "storage". Auth, PostgreSQL,
 # PostgREST, Kong and mail remain present for the same real acceptance checks.
 node_modules/.bin/supabase start --exclude studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime,storage >artifacts/supabase-start-private.log 2>&1
 python3 scripts/bind-local-services.py
 node scripts/configure-local.mjs
+if [[ "${DARTSPOINT_QA_RUNNER:-false}" == true ]]; then
+  python3 scripts/qa-runner-context.py template-probe
+fi
 # Build with the actual local public configuration and exercise the production
 # server. Cold development compilation must not consume a player's turn clock.
 node --env-file=.env.local scripts/build-deploy.mjs >artifacts/acceptance-build-private.log 2>&1
