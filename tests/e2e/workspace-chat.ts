@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
-import {chromium,type Page} from '@playwright/test';
+import {chromium,expect,type Page} from '@playwright/test';
 import {Client} from '@colyseus/sdk';
 import {randomUUID} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {login,get,post,origin} from './helpers';
 import {forfeitGame} from './game-command';
+import {meterPosition} from '../../packages/game-core/src/timing';
 const browser=await chromium.launch(),pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 const runId=randomUUID().slice(0,6),oldFetchBody='Nieuwe regel tijdens oude fetch '+runId;
 const dir='artifacts/workspace-chat';await mkdir(dir,{recursive:true});
 let cleanupMatch:string|undefined,cleanupPage:Page|undefined,cleanupPages:Page[]=[],cleanupPersonal:{leave:()=>Promise<unknown>}|undefined;
+let ingressPool:import('pg').Pool|undefined;
 const report:any={physicalDevices:false,desktop:[],mobile:[],chat:[],checks:{}};
 function p95(values:number[]){return values.slice().sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1];}
 const epochNow=()=>performance.timeOrigin+performance.now();
@@ -16,12 +18,64 @@ const pageState=(page:Page)=>page.evaluate(()=>({focused:document.hasFocus(),vis
 async function writeLatencyProof(){
  if(!report.chat.length)return;
  const locals=report.chat.map((r:any)=>r.localMs).filter((v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)),recipients=report.chat.map((r:any)=>r.recipientMs).filter((v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v));
- report.latency={samples:report.chat.length,completedSamples:recipients.length,localP95Ms:locals.length?p95(locals):null,recipientP95Ms:recipients.length?p95(recipients):null,limits:{localMs:50,recipientMs:250},environment:'Native built web, local PostgreSQL/Redis/Colyseus, Chromium two authenticated users, no added network delay; actual page focus and visibility recorded per sample'};
+ report.latency={samples:report.chat.length,completedSamples:recipients.length,localP95Ms:locals.length?p95(locals):null,recipientP95Ms:recipients.length?p95(recipients):null,limits:{localMs:50},targets:{recipientMs:250},recipientGate:'reported-only-user-priority-2026-10-13',recipientTargetMet:recipients.length===15?p95(recipients)<=250:null,environment:'Native built web, local PostgreSQL/Redis/Colyseus, Chromium two authenticated users, no added network delay; actual page focus and visibility recorded per sample'};
  const proof={measurement:report.measurement,latency:report.latency,samples:report.chat};
  await writeFile(dir+'/latency.json',JSON.stringify(proof,null,2));await writeFile(dir+'/results.json',JSON.stringify(report,null,2));
  console.log('Workspace/chat raw latency proof '+JSON.stringify(proof));
 }
 async function desktopGeometry(page:Page,screen:string){await pause(100);const g=await page.evaluate(()=>{const box=(selector:string)=>{const e=document.querySelector(selector);if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right};};return {viewport:{width:innerWidth,height:innerHeight},left:box('.dp-workspace>main'),right:box('.dp-desktop-community'),top:box('.dp-desktop-community-top'),members:box('.dp-desktop-players'),friends:box('.dp-desktop-friends'),chat:box('.dp-desktop-chat'),composer:box('.dp-desktop-chat .chat-compose'),chatPanels:document.querySelectorAll('.chat-panel').length,scrollWidth:document.documentElement.scrollWidth};});assert.equal(g.chatPanels,1,screen+' uses one mounted chat');assert.ok(Math.abs(g.left!.width-g.right!.width)<2,screen+' equal workspace halves');assert.ok(Math.abs(g.members!.width-g.friends!.width)<2,screen+' equal top columns');assert.ok(Math.abs(g.top!.height-g.chat!.height)<2,screen+' equal right halves');if(g.composer)assert.ok(g.composer.bottom<=g.viewport.height+1&&g.composer.y>=g.chat!.y,screen+' composer reachable');else assert.equal(screen,'lobby','Only an unopened lobby conversation has no composer');assert.ok(g.scrollWidth<=g.viewport.width+1,screen+' no horizontal overflow');report.desktop.push({screen,...g});await page.screenshot({path:`${dir}/${screen}-${g.viewport.width}x${g.viewport.height}.png`});}
+async function readyFloodStop(page:Page,axis:'horizontal'|'vertical'){
+ const button=page.getByRole('button',{name:axis==='horizontal'?'Stop horizontale indicator':'Stop verticale indicator en gooi',exact:true});
+ await expect(button).toBeEnabled();
+ const selector=axis==='horizontal'?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator',property=axis==='horizontal'?'left':'top',before=await page.locator(selector).evaluate((element,property)=>(element as HTMLElement).style.getPropertyValue(property),property);
+ await page.waitForFunction(({selector,property,before})=>(document.querySelector(selector) as HTMLElement)?.style.getPropertyValue(property)!==before,{selector,property,before},{polling:'raf'});
+ return button;
+}
+async function stopDuringFlood(page:Page,sender:Page,channelId:string,axis:'horizontal'|'vertical',matchId:string,actorId:string){
+ await page.bringToFront();const button=await readyFloodStop(page,axis);if(axis==='vertical')await button.focus();
+ assert.equal(await page.evaluate(()=>document.hasFocus()&&document.visibilityState==='visible'),true,'Flood timing has real foreground focus');
+ const baseline=await get(page,'match/'+matchId);assert.equal(baseline.lifecycle,'playing');assert.equal(baseline.state.phase,axis);assert.equal(baseline.seat,baseline.state.turn);
+ await page.evaluate(()=>{performance.clearMarks('dp-local-stop');(window as any).__floodFirst=undefined;(window as any).__floodInput=undefined;});
+ const attempt:any={axis,input:axis==='horizontal'?'pointer':'keyboard',httpStatus:null,httpCode:null};report.floodTiming.push(attempt);
+ const floodStartedAt=epochNow(),flood=sender.request.post(origin+'/api/platform/chat/send',{data:{channelId,clientMessageId:randomUUID(),body:'Flood during '+axis+' '+runId}}).then(async response=>{attempt.floodCompletedAt=epochNow();attempt.httpStatus=response.status();attempt.httpCode=(await response.json()).code;},error=>{attempt.floodError=error instanceof Error?error.message:String(error);return {error};});
+ attempt.floodStartedAt=floodStartedAt;
+ // Native pointer/keyboard dispatch captures the drawn geometry before the
+ // handler and one real RAF opportunity. No screenshot or tracing runs here.
+ if(axis==='horizontal')await button.click();else await button.press('Enter');
+ await page.waitForFunction(()=>!!(window as any).__floodFirst);
+ const local=await page.evaluate(()=>({input:(window as any).__floodInput,first:(window as any).__floodFirst,mark:performance.getEntriesByName('dp-local-stop').at(-1)?.toJSON(),trace:(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark)?.detail}));
+ Object.assign(attempt,{inputEpoch:local.input?.epoch,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
+ assert.ok(local.trace,'A genuine flood stop captures its rendered v3 sample');
+ Object.assign(attempt,{handlerMs:local.mark!.startTime-local.input.at,firstFrameMs:local.first.at-local.input.at,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
+ await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
+ const receipt=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
+ attempt.receipt=receipt;
+ const acknowledged=await page.evaluate(axis=>{const w=window as any,element=document.querySelector(axis==='horizontal'?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator')!,r=element.getBoundingClientRect();return {indicator:axis==='horizontal'?r.left+r.width/2:r.top+r.height/2,sameNode:element===w.__floodMeters[axis],sameBoard:document.querySelector('.dp-board-stage')===w.__boardBefore};},axis);
+ Object.assign(attempt,{acknowledged,ackJumpPx:Math.abs(acknowledged.indicator-local.input.geometry.indicator),ackJumpFraction:Math.abs(acknowledged.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
+ const floodFailure=await flood;if(floodFailure)throw floodFailure.error;
+ assert.equal(attempt.httpStatus,429,'Concurrent new-message flood is actually refused');assert.equal(attempt.httpCode,'chat_burst_limited');
+ assert.ok(local.input.epoch>=floodStartedAt&&local.input.epoch<=attempt.floodCompletedAt,'Actual stop input overlaps the still-pending flood request');
+ // Classify against the immutable original database ingress, after the actual
+ // frame/ACK measurement. Local/CI only; no staging database introspection.
+ assert.equal(process.env.APP_ENV,'development');assert.equal(new URL(origin).hostname,'127.0.0.1');
+ assert.equal(new URL(process.env.DATABASE_URL!).hostname,'127.0.0.1','Ingress diagnostics use only the disposable local PostgreSQL');
+ if(!ingressPool){const {db}=await import('../../packages/data/src/db');ingressPool=db();}
+ const row=(await ingressPool.query("select received_at,latency_ms,admission_window_ms,timing_version from private.command_ingress where scope='match' and actor_id=$1 and command_id=$2",[actorId,local.trace.commandId])).rows[0];assert.ok(row,'Every actual stop retains its original server ingress');
+ const receivedAt=new Date(row.received_at).getTime(),windowMs=Number(row.admission_window_ms),sampleAt=local.trace.rendered.sampleAt;
+ assert.equal(row.timing_version,'render-sample-v3');assert.equal(local.trace.timingVersion,'render-sample-v3');assert.equal(local.trace.phaseToken,baseline.state.phaseToken);assert.equal(local.trace.phaseStartedAt,baseline.state.phaseStartedAt);assert.ok(windowMs>=54&&windowMs<=124);assert.ok(Number(row.latency_ms)>=0&&Number(row.latency_ms)<=90);
+ const violations=[sampleAt>receivedAt?'future':null,sampleAt<receivedAt-windowMs?'old':null,sampleAt<baseline.state.phaseStartedAt?'before-phase':null,sampleAt<(baseline.state.lastAcceptedAt??0)?'before-last-accepted':null].filter(Boolean);
+ attempt.ingress={receivedAt,windowMs,sampleAt,sampleAgeMs:receivedAt-sampleAt,admissible:violations.length===0,violations};
+ assert.ok(attempt.handlerMs>=0&&attempt.handlerMs<=50,'Flood handler freeze <=50ms');assert.ok(attempt.firstFrameMs>=0&&attempt.firstFrameMs<=50,'Flood first frozen RAF <=50ms');
+ assert.equal(acknowledged.sameNode,true);assert.equal(acknowledged.sameBoard,true);
+ if(violations.length){
+  assert.equal(receipt.event,'rejected');assert.equal(receipt.code,'invalid_render_sample');await expect(page.locator('.dp-connection-note').filter({hasText:'timingmeting'})).toBeVisible();
+  const unchanged=await get(page,'match/'+matchId);assert.equal(unchanged.stateVersion,baseline.stateVersion);assert.deepEqual(unchanged.state,baseline.state,'Invalid flood sample preserves all authoritative phase/locks/score/darts');await readyFloodStop(page,axis);
+  attempt.outcome='rejected-invalid-unchanged';attempt.visibleError=true;attempt.controlledRestore=true;return null;
+ }
+ assert.equal(receipt.event,'receipt','An admissible sample must be accepted exactly');assert.equal(receipt.timing.receivedAt,receivedAt);assert.equal(receipt.timing.admissionWindowMs,windowMs);assert.equal(receipt.timing.admittedAt,sampleAt,'Receipt preserves the exact drawn sample');
+ assert.equal(axis==='horizontal'?receipt.lockedX:receipt.lockedY,meterPosition(sampleAt,local.trace.phaseStartedAt,axis));assert.ok(attempt.freezeJumpPx<=1,'Flood first freeze <=1CSSpx');assert.ok(attempt.ackJumpPx<=1,'Flood authoritative ACK <=1CSSpx');attempt.outcome='accepted-exact-sample';
+ return receipt;
+}
 try{
  const a=await login(browser,'LayoutA'),b=await login(browser,'LayoutB');cleanupPage=a.page;cleanupPages=[a.page,b.page];await a.context.addInitScript('globalThis.__name = (fn) => fn;');await b.context.addInitScript('globalThis.__name = (fn) => fn;');for(const page of cleanupPages)await page.addInitScript(()=>{const nativeSend=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))(window as any).__qaGameSocket=this;return nativeSend.call(this,data);};});a.page.setDefaultTimeout(15000);b.page.setDefaultTimeout(15000);
  for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1024,768]]){await a.page.setViewportSize({width,height});await a.page.goto(origin+'/lobby');await a.page.locator('.dp-desktop-community').waitFor();await desktopGeometry(a.page,'lobby');assert.ok(await a.page.getByText('Kies een kamer',{exact:true}).count());}
@@ -77,6 +131,7 @@ try{
   let headersAt:number|undefined;const ack=a.page.waitForResponse(r=>r.url().endsWith('/chat/send')).then(response=>{headersAt=epochNow();sample.httpStatus=response.status();return response;});
   const started=await a.page.evaluate(()=>{if(!document.hasFocus()||document.visibilityState!=='visible')throw new Error('Measured sender lost foreground focus');const at=performance.timeOrigin+performance.now();document.querySelector('.chat-compose input')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));return at;});
   const response=await ack,saved=await response.json();sample.responseHeadersMs=headersAt!-started;sample.httpReceiptMs=epochNow()-started;sample.httpCode=typeof saved.code==='string'&&/^[A-Z0-9_-]+$/i.test(saved.code)?saved.code:null;
+  sample.clientMessageId=saved.client_message_id;
   // This is receipt of a committed response, not a measurement of DB commit time.
   sample.commitResponseMs=sample.httpReceiptMs;
   const local=await a.page.evaluate(body=>(window as any).__chatSeen[body]??null,body);sample.localMs=local===null?null:local-started;
@@ -91,19 +146,46 @@ try{
  await writeLatencyProof();assert.equal(report.chat.length,15);assert.equal(report.latency.completedSamples,15);
  for(const sample of report.chat){assert.ok(sample.localMs!==null,'Every local optimistic row is observed');assert.ok(Object.values(sample.canonicalPush).every(Boolean),'Eligible authenticated recipients receive the actual canonical stored row');}
  report.checks.authorizedRealtimeStoredRow=true;await personal.leave();cleanupPersonal=undefined;
- assert.ok(report.latency.localP95Ms<=50,JSON.stringify(report.latency));assert.ok(report.latency.recipientP95Ms<=250,JSON.stringify(report.latency));
+ assert.ok(report.latency.localP95Ms<=50,JSON.stringify(report.latency));if(!report.latency.recipientTargetMet)console.warn('Workspace/chat recipient p95 '+report.latency.recipientP95Ms+' ms exceeds the informational 250 ms target; reported only at the user\'s request.');
  // The same fixed surface survives practice and gameplay without a duplicate chat.
  for(const [width,height] of [[1280,720],[1366,768],[1920,1080]]){await a.page.setViewportSize({width,height});await a.page.goto(origin+'/oefenen');await a.page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();await desktopGeometry(a.page,'practice');}
+ // Keep the real dialog open while only its recipient becomes reserved in
+ // another authenticated player's match. This runs after the 15 latency samples.
+ const viewer=await login(browser,'LayoutView');await post(viewer.page,'room',{roomId:room.id});await viewer.page.addInitScript(()=>{const nativeSend=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))(window as any).__qaGameSocket=this;return nativeSend.call(this,data);};});
+ await a.page.bringToFront();await a.page.locator('.dp-desktop-players').getByRole('button',{name:'Acties voor '+newName,exact:true}).first().click();await a.page.getByRole('menuitem',{name:'Uitnodigen voor een wedstrijd',exact:true}).click();
+ const staleDialog=a.page.getByRole('dialog',{name:'Klaar voor een partij?',exact:true}),inviteButton=staleDialog.getByRole('button',{name:'Uitnodigen & spelen',exact:true});await expect(inviteButton).toBeEnabled();
+ let dialogInviteRequests=0;const observeDialogInvite=(request:any)=>{if(request.url().endsWith('/api/platform/invite'))dialogInviteRequests++;};a.page.on('request',observeDialogInvite);
+ const occupiedInvite=await post(viewer.page,'invite',{targetId:b.id,roomId:room.id,rules:{startScore:501,doubleIn:false,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},ranked:false}),occupiedMatch=(await post(b.page,'invite/respond',{inviteId:occupiedInvite.id,action:'accept'})).matchId;
+ cleanupMatch=occupiedMatch;cleanupPage=b.page;cleanupPages=[b.page,viewer.page];
+ await expect(staleDialog.getByRole('status')).toHaveText('Deze speler zit al in een wedstrijd');await expect(inviteButton).toBeDisabled();
+ const busyState=await get(a.page,'bootstrap');assert.equal(busyState.players.find((p:any)=>p.id===a.id).playing,false);assert.equal(busyState.players.find((p:any)=>p.id===b.id).playing,true);
+ await inviteButton.evaluate((button:HTMLButtonElement)=>button.click());await pause(150);assert.equal(dialogInviteRequests,0,'Disabled stale dialog creates no invite request');
+ const denied=await a.page.request.post(origin+'/api/platform/invite',{data:{targetId:b.id,roomId:room.id,rules:{startScore:501,doubleIn:false,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},ranked:false}});assert.equal(denied.status(),409);assert.equal((await denied.json()).code,'target_already_playing');
+ const afterDenied=await get(b.page,'bootstrap');assert.deepEqual(afterDenied.matches.filter((m:any)=>m.players.some((p:any)=>p.id===b.id)).map((m:any)=>m.id),[occupiedMatch]);assert.equal(afterDenied.invites.some((i:any)=>i.state==='pending'&&i.inviter_id===a.id),false);assert.equal(afterDenied.notifications.some((n:any)=>n.kind==='game-invite'&&n.payload?.name===a.name),false);
+ await forfeitGame(b.page,occupiedMatch,cleanupPages);cleanupMatch=undefined;cleanupPage=a.page;cleanupPages=[a.page,b.page];await expect(staleDialog.getByRole('status')).toHaveCount(0);await expect(inviteButton).toBeEnabled();await staleDialog.getByRole('button',{name:'Close',exact:true}).click();await expect(staleDialog).toHaveCount(0);a.page.off('request',observeDialogInvite);report.checks.openInviteRecipientBecomesBusy=true;
  const invited=await post(a.page,'invite',{targetId:b.id,roomId:room.id,rules:{startScore:501,doubleIn:false,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},ranked:false});const match=(await post(b.page,'invite/respond',{inviteId:invited.id,action:'accept'})).matchId;cleanupMatch=match;
  await a.page.goto(origin+'/spelen?match='+match);await b.page.goto(origin+'/spelen?match='+match);await a.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await a.page.getByRole('tab',{name:/Spelchat/}).waitFor();const order=await a.page.locator('[data-chat-tab]').evaluateAll(elements=>elements.map(e=>(e as HTMLElement).dataset.chatTab));assert.deepEqual(order.slice(0,2),['match','room']);await a.page.getByRole('tab',{name:/Kamerchat/}).click();await a.page.waitForTimeout(350);assert.equal(await a.page.getByRole('tab',{name:/Kamerchat/}).getAttribute('data-state'),'active');report.checks.tabOrderAndSelection=true;
  for(const [width,height] of [[1280,720],[1366,768],[1920,1080]]){await a.page.setViewportSize({width,height});await desktopGeometry(a.page,'game');}
  const own=await get(a.page,'bootstrap');assert.equal(own.players.find((p:any)=>p.id===a.id).playing,true);report.checks.authoritativeBusy=true;
  // Chat updates and a refused flood cannot remount the running game surface.
- await a.page.evaluate(()=>{(window as any).__boardBefore=document.querySelector('.dp-board-stage');});
- await pause(2100);for(let i=0;i<3;i++)await post(b.page,'chat/send',{channelId:roomChannel,clientMessageId:randomUUID(),body:'Game chat '+runId+' '+i});
- const flood=await b.page.request.post(origin+'/api/platform/chat/send',{data:{channelId:roomChannel,clientMessageId:randomUUID(),body:'Flood attempt'}});assert.equal(flood.status(),429);await a.page.getByText('Game chat '+runId+' 2',{exact:true}).waitFor();assert.equal(await a.page.evaluate(()=>(window as any).__boardBefore===document.querySelector('.dp-board-stage')),true);report.checks.chatFloodNoBoardRemount=true;
+ report.floodTiming=[];
+ await a.page.evaluate(()=>{const w=window as any;w.__boardBefore=document.querySelector('.dp-board-stage');w.__floodMeters={horizontal:document.querySelector('.dp-meter-row .dp-meter-indicator'),vertical:document.querySelector('.dp-meter-track-vertical .dp-meter-indicator')};const capture=(event:Event)=>{const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at:performance.now(),epoch:performance.timeOrigin+performance.now(),geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};requestAnimationFrame(()=>{const r=element.getBoundingClientRect();w.__floodFirst={at:performance.now(),indicator:horizontal?r.left+r.width/2:r.top+r.height/2};});};w.__floodCapture=capture;window.addEventListener('pointerdown',capture,true);window.addEventListener('keydown',capture,true);});
+ await expect(a.page.getByRole('button',{name:'Stop horizontale indicator',exact:true})).toBeEnabled();await pause(2100);await Promise.all([0,1,2].map(i=>post(b.page,'chat/send',{channelId:roomChannel,clientMessageId:randomUUID(),body:'Game chat '+runId+' '+i})));
+ const floodReceipts=[];
+ for(const axis of ['horizontal','vertical'] as const){let receipt:any;
+  // One explicitly rejected, unchanged stop may be followed by one new
+  // controlled action. Every attempt remains in the report; no luck reruns.
+  for(let action=0;action<2;action++){
+   if(axis==='vertical'||action>0){await pause(2100);await Promise.all([0,1,2].map(i=>post(b.page,'chat/send',{channelId:roomChannel,clientMessageId:randomUUID(),body:'Game chat '+axis+' actie '+action+' '+i+' '+runId})));}
+   receipt=await stopDuringFlood(a.page,b.page,roomChannel,axis,match,a.id);if(receipt)break;
+  }
+  assert.ok(receipt,'Each flood axis requires an actual accepted exact-sample stop');floodReceipts.push(receipt);
+ }
+ assert.equal(floodReceipts[1].hit.x,floodReceipts[0].lockedX);assert.equal(floodReceipts[1].hit.y,floodReceipts[1].lockedY);
+ await a.page.evaluate(()=>{const w=window as any;window.removeEventListener('pointerdown',w.__floodCapture,true);window.removeEventListener('keydown',w.__floodCapture,true);});
+ await a.page.getByText('Game chat '+runId+' 2',{exact:true}).waitFor();assert.equal(await a.page.evaluate(()=>(window as any).__boardBefore===document.querySelector('.dp-board-stage')),true);report.checks.chatFloodNoBoardRemount=true;report.checks.chatFloodExactStopAndInput=true;
  // A practice menu hands off the selected user's UUID to the actual spectator view.
- const viewer=await login(browser,'LayoutView');try{await post(viewer.page,'room',{roomId:room.id});await viewer.page.goto(origin+'/oefenen');await viewer.page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();const watched=viewer.page.waitForResponse(response=>response.url().endsWith('/match/'+match)&&response.ok());await viewer.page.getByRole('button',{name:'Kijk mee bij '+newName,exact:true}).click();await viewer.page.waitForURL(origin+'/spelen');await viewer.page.getByRole('heading',{name:'Langs de oche',exact:true}).waitFor();await viewer.page.locator('.spectator-scores').getByText(newName,{exact:true}).waitFor();const watchedState=await(await watched).json();assert.equal(watchedState.matchId,match);assert.equal(watchedState.seat,null);report.checks.practiceSpectatorStableTarget=true;}finally{await viewer.context.close();}
+ try{await viewer.page.goto(origin+'/oefenen');await viewer.page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();const watched=viewer.page.waitForResponse(response=>response.url().endsWith('/match/'+match)&&response.ok());await viewer.page.getByRole('button',{name:'Kijk mee bij '+newName,exact:true}).click();await viewer.page.waitForURL(origin+'/spelen');await viewer.page.getByRole('heading',{name:'Langs de oche',exact:true}).waitFor();await viewer.page.locator('.spectator-scores').getByText(newName,{exact:true}).waitFor();const watchedState=await(await watched).json();assert.equal(watchedState.matchId,match);assert.equal(watchedState.seat,null);report.checks.practiceSpectatorStableTarget=true;}finally{await viewer.context.close();}
  await forfeitGame(a.page,match,cleanupPages);cleanupMatch=undefined;report.checks.matchReservationReleased=true;
  console.log('Workspace/chat acceptance '+JSON.stringify(report.latency));
-}catch(error){report.failure={message:error instanceof Error?error.message:String(error),pointerEvents:cleanupPage?await cleanupPage.evaluate(()=>({body:document.body.style.pointerEvents,dialogs:document.querySelectorAll('[role=dialog]').length,menus:document.querySelectorAll('[role=menu]').length})).catch(()=>null):null};if(cleanupPage)await cleanupPage.screenshot({path:dir+'/failure.png'}).catch(()=>{});throw error;}finally{try{try{if(cleanupPersonal)await cleanupPersonal.leave();}finally{if(cleanupMatch&&cleanupPage)await forfeitGame(cleanupPage,cleanupMatch,cleanupPages);}}finally{await writeLatencyProof();await writeFile(dir+'/results.json',JSON.stringify(report,null,2));await browser.close();}}
+}catch(error){report.failure={message:error instanceof Error?error.message:String(error),pointerEvents:cleanupPage?await cleanupPage.evaluate(()=>({body:document.body.style.pointerEvents,dialogs:document.querySelectorAll('[role=dialog]').length,menus:document.querySelectorAll('[role=menu]').length})).catch(()=>null):null};if(cleanupPage)await cleanupPage.screenshot({path:dir+'/failure.png'}).catch(()=>{});throw error;}finally{try{try{if(cleanupPersonal)await cleanupPersonal.leave();}finally{if(cleanupMatch&&cleanupPage)await forfeitGame(cleanupPage,cleanupMatch,cleanupPages);}}finally{await writeLatencyProof();await writeFile(dir+'/results.json',JSON.stringify(report,null,2));try{await browser.close();}finally{await ingressPool?.end();}}}

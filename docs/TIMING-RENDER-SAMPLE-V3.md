@@ -128,16 +128,20 @@ Colyseus-wedstrijden met uitgaande/inkomende injectie, oude receipt en verlies
 van een bevestiging. Geldige stops hebben een harde grens van 1 CSS px; kleine
 verschillen door CSS-subpixelafronding blijven zichtbaar in de resultaten.
 
-De uiteindelijke lokale native build doorstond beide browsertests. Oefenen
+De afzonderlijke native timingrun na de DartVisual-fix doorstond beide browsertests. Oefenen
 mat 16 stops op desktop en mobiel: maximale verschuiving bij freeze en receipt
-was `0 CSS px` (`0` van de balkbreedte/-hoogte), de lokale input-p95 was `0,5 ms` en het maximale verschil van
-de gelande pijlpunt met het serverraakpunt was `0,000012 CSS px`. De echte
+was `0 CSS px` (`0` van de balkbreedte/-hoogte), de lokale input-p95 was `0,6 ms` en het maximale verschil van
+de gelande pijlpunt met het serverraakpunt was minder dan `0,000014 CSS px`. De echte
 wedstrijd mat zes stops: freeze en receipt versprongen maximaal `0 CSS px`,
-de handler nam maximaal `0,7 ms` en de eerstvolgende frozen frame kwam binnen
-`21,5 ms`, op beide assen. De pijlpunt week maximaal `0,000009 CSS px` af. Bevestigingen werden
+de handler nam maximaal `0,5 ms` en de eerstvolgende frozen frame kwam binnen
+`30,9 ms`, op beide assen. De eerste grounded pijlpunt week minder dan `0,000014 CSS px` af en bleef drie volgende frames op dezelfde transform. Bevestigingen werden
 100/325/1050 ms vertraagd met 0/10/20 ms uitgaande stopvertraging. Gelijktijdige
 kamerchat, replay van een oude receipt en verlies/herstel van een echte
 bevestiging slaagden; de oorspronkelijke UUID werd hersteld zonder extra pijl.
+Deze meetwaarden staan in
+`artifacts/local-final-proof/final-combined-render-sample-timing-result.json`
+en `final-combined-game-timing-result.json`; de actuele stagingmeting staat
+afzonderlijk bij de exacte gedeployde release in de changeset.
 Deze waarden betreffen de lokale build, niet de nog te meten stagingrelease.
 
 De aanvullende updatebrowser bewaart alle 30 native invoerpogingen met

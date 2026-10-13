@@ -13,8 +13,100 @@ import {scoreDart} from '../../packages/game-core/src/darts-rules';
 import {DEFAULT_TOURNAMENT_SETTINGS} from '../../packages/game-core/src/darts-tournament-model';
 import {transaction} from '../../packages/data/src/db';
 import {deliverGameInviteNotification} from '../../packages/data/src/notifications';
+import {Pool,type PoolClient} from 'pg';
+import {postgresOptions} from '../../packages/data/src/postgres';
 assert.equal(process.env.APP_ENV,'development');assert.equal(new URL(process.env.MIGRATION_DATABASE_URL!).hostname,'127.0.0.1');
 const prefix='Chat'+randomUUID().slice(0,7),auth=authAdmin();
+async function joinBoundaryAndConcurrentInvites(){
+ assert.equal(new URL(process.env.DATABASE_URL!).hostname,'127.0.0.1');
+ const privileged=new Pool({...postgresOptions(process.env.MIGRATION_DATABASE_URL!),max:2}),ownedUsers:string[]=[],ownedRooms:string[]=[];
+ const checks={roomJoinBudget10:false,renewalsAtJoinLimitDoNotConsume:false,denied11thJoinUnchanged:false,concurrentInviteAcceptExactlyOne:false,concurrentInviteCancelledNoNotification:false,ownedBoundaryFixturesRemoved:false};
+ try{
+  const actors:Actor[]=[];
+  for(let i=0;i<4;i++){
+   const {data,error}=await auth.auth.admin.createUser({email:`${prefix}-boundary-${i}@dartspoint.local`,email_confirm:true});assert.equal(error,null);assert.ok(data.user);ownedUsers.push(data.user.id);
+   const initial=await actorById(data.user.id,Date.now()+3600000,false);await onboard(initial,{username:prefix+'J'+i});actors.push(await actorById(initial.id,initial.expiresAt));
+  }
+  const [visitor,left,right,receiver]=actors;
+  ownedRooms.push(...(await privileged.query('insert into community_rooms(name,slug,capacity) values($1,$1,50),($2,$2,50) returning id',[prefix+'Visits1',prefix+'Visits2'])).rows.map(r=>r.id));
+  await privileged.query("insert into channels(kind,room_id) select 'community',unnest($1::uuid[])",[ownedRooms]);
+  const joins:string[]=[];
+  for(let i=0;i<10;i++)joins.push((await joinRoom(visitor,{roomId:ownedRooms[i%2]})).visitId);
+  assert.equal(new Set(joins).size,10,'Ten real room transitions receive ten distinct visit IDs');
+  const snapshot=async()=>{
+   const member=(await privileged.query('select room_id,visit_id,joined_at from room_memberships where user_id=$1',[visitor.id])).rows[0];
+   const visits=(await privileged.query('select id,room_id,created_at from private.room_visits where user_id=$1 order by created_at,id',[visitor.id])).rows;
+   const events=(await privileged.query("select id,event_id,actor_id,sender_id,client_message_id,room_id,channel_id,seq,kind from chat_messages where actor_id=$1 order by created_at,id",[visitor.id])).rows;
+   const cursors=(await privileged.query('select id,cursor from channels where room_id=any($1::uuid[]) order by id',[ownedRooms])).rows;
+   return {member,visits,events,cursors};
+  };
+  const atLimit=await snapshot();assert.equal(atLimit.visits.length,10);assert.equal(atLimit.events.length,10);
+  assert.deepEqual(new Set(atLimit.visits.map(v=>v.id)),new Set(joins));assert.deepEqual(new Set(atLimit.events.map(e=>e.event_id)),new Set(joins));
+  assert.ok(new Date(atLimit.visits.at(-1)!.created_at).getTime()-new Date(atLimit.visits[0].created_at).getTime()<60000,'The boundary uses ten genuine visits within one minute');
+  for(const event of atLimit.events){assert.equal(event.kind,'room.member_joined');assert.equal(event.actor_id,visitor.id);assert.equal(event.sender_id,null);assert.equal(event.client_message_id,null);assert.equal(atLimit.visits.find(v=>v.id===event.event_id)!.room_id,event.room_id);}
+  checks.roomJoinBudget10=true;
+  assert.equal((await heartbeat(visitor)).ok,true);assert.equal((await joinRoom(visitor,{roomId:ownedRooms[1]})).visitId,joins[9]);assert.equal((await heartbeat(visitor)).ok,true);
+  assert.deepEqual(await snapshot(),atLimit,'Heartbeats and renewing the same room do not consume a visit or emit another typed event at the limit');checks.renewalsAtJoinLimitDoNotConsume=true;
+  const membershipBeforeDenial=(await privileged.query('select * from room_memberships where user_id=$1',[visitor.id])).rows[0];
+  await assert.rejects(joinRoom(visitor,{roomId:ownedRooms[0]}),(error:any)=>{assert.equal(error.code,'room_join_rate');assert.equal(error.status,429);assert.ok(Number.isInteger(error.retryAfter)&&error.retryAfter>=1&&error.retryAfter<=60);return true;});
+  assert.deepEqual(await snapshot(),atLimit,'The eleventh transition changes no membership, visit, event or channel cursor');
+  assert.deepEqual((await privileged.query('select * from room_memberships where user_id=$1',[visitor.id])).rows[0],membershipBeforeDenial,'A denied join does not renew or move the current lease');checks.denied11thJoinUnchanged=true;
+
+  for(const actor of [left,right,receiver])await joinRoom(actor,{roomId:ownedRooms[0]});
+  const rules={startScore:501 as const,bestOf:1,format:'legs' as const,bestOfSets:1,doubleIn:false};
+  const first=await invite(left,{targetId:receiver.id,roomId:ownedRooms[0],rules,ranked:false}),second=await invite(right,{targetId:receiver.id,roomId:ownedRooms[0],rules,ranked:false}),inviteIds=[first.id,second.id];
+  assert.equal((await privileged.query("select count(*)::int n from game_invites where id=any($1::uuid[]) and state='pending'",[inviteIds])).rows[0].n,2,'Both invitations are valid while all three players are free');
+  // Hold a real admission row, observe the actual connections of both domain
+  // calls, and release only once both acceptances demonstrably wait together.
+  const gate=await privileged.connect(),application=db(),pids=new Set<number>();let outcomes:Promise<PromiseSettledResult<any>[]>|undefined,settled=0,gateOpen=false,notificationsBefore:any[]=[];
+  const acquired=(client:PoolClient)=>{if(pids.size<2)pids.add((client as PoolClient&{processID:number}).processID);};
+  try{
+   await gate.query('begin');gateOpen=true;await gate.query('select id from private.admission_lock where id=1 for update');const gatePid=Number((await gate.query('select pg_backend_pid() pid')).rows[0].pid);
+   application.on('acquire',acquired);
+   outcomes=Promise.allSettled(inviteIds.map(inviteId=>respondInvite(receiver,{inviteId,action:'accept'}).finally(()=>{settled++;})));
+   const deadline=Date.now()+5000;let bothBlocked=false;
+   while(Date.now()<deadline){
+    if(pids.size===2){
+     const waiting=(await privileged.query("select pid,wait_event_type,pg_blocking_pids(pid) blockers from pg_stat_activity where pid=any($1::int[]) or wait_event_type='Lock'",[Array.from(pids)])).rows;
+     const reachesGate=(pid:number,seen=new Set<number>()):boolean=>{if(pid===gatePid)return true;if(seen.has(pid))return false;seen.add(pid);return (waiting.find(r=>Number(r.pid)===pid)?.blockers??[]).some((blocker:number)=>reachesGate(Number(blocker),seen));};
+     bothBlocked=Array.from(pids).every(pid=>waiting.find(row=>Number(row.pid)===pid)?.wait_event_type==='Lock'&&reachesGate(pid));
+     if(bothBlocked)break;
+    }
+    await new Promise(resolve=>setTimeout(resolve,20));
+   }
+   assert.ok(bothBlocked,'Both overlapping accept calls are genuinely blocked concurrently on the same admission transaction');assert.equal(settled,0,'Neither acceptance resolves before the gate is released');
+   await gate.query('commit');gateOpen=false;
+  }finally{application.off('acquire',acquired);if(gateOpen)await gate.query('rollback');gate.release();if(outcomes)await outcomes;}
+  assert.ok(outcomes);const accepted=await outcomes,winners=accepted.filter((r):r is PromiseFulfilledResult<any>=>r.status==='fulfilled'),losers=accepted.filter((r):r is PromiseRejectedResult=>r.status==='rejected');
+  assert.equal(winners.length,1);assert.equal(losers.length,1);assert.equal(losers[0].reason.code,'sender_already_playing');
+  const matchId=winners[0].value.matchId;assert.ok(matchId);
+  const storedInvites=(await privileged.query('select id,state,match_id from game_invites where id=any($1::uuid[]) order by id',[inviteIds])).rows;
+  assert.equal(storedInvites.filter(i=>i.state==='accepted'&&i.match_id===matchId).length,1);assert.equal(storedInvites.filter(i=>i.state==='cancelled'&&i.match_id===null).length,1);assert.equal(storedInvites.some(i=>i.state==='pending'),false);
+  const matches=(await privileged.query('select id from matches where room_id=any($1::uuid[])',[ownedRooms])).rows;assert.deepEqual(matches.map(m=>m.id),[matchId]);
+  const reservations=(await privileged.query('select user_id,match_id from active_player_reservations where user_id=any($1::uuid[]) order by user_id',[ownedUsers])).rows;
+  assert.equal(reservations.length,2);assert.ok(reservations.some(r=>r.user_id===receiver.id));assert.ok(reservations.every(r=>r.match_id===matchId));
+  const winnerInvite=storedInvites.find(i=>i.state==='accepted')!,winnerSender=winnerInvite.id===first.id?left.id:right.id;assert.deepEqual(new Set(reservations.map(r=>r.user_id)),new Set([receiver.id,winnerSender]));checks.concurrentInviteAcceptExactlyOne=true;
+  notificationsBefore=(await privileged.query('select id from notifications where user_id=$1 order by id',[receiver.id])).rows;
+  const events=(await privileged.query("select * from private.outbox_events where kind='game-invite' and payload->>'inviteId'=any($1::text[])",[inviteIds])).rows;assert.equal(events.length,2);
+  for(const event of events)assert.equal(await deliverGameInviteNotification(event),false,'A resolved accepted or cancelled invitation cannot deliver a stale pending invite notification');
+  assert.deepEqual((await privileged.query('select id from notifications where user_id=$1 order by id',[receiver.id])).rows,notificationsBefore,'Concurrent acceptance and delayed delivery emit no extra receiver notification');checks.concurrentInviteCancelledNoNotification=true;
+ }finally{
+  const client=await privileged.connect();try{
+   await client.query('begin');
+   // A worker may be delivering an owned welcome/invite concurrently. Lock
+   // only our parent profiles first, in a fixed order, before child deletes.
+   await client.query('select id from profiles where id=any($1::uuid[]) order by id for update',[ownedUsers]);
+   const matchIds=(await client.query('select id from matches where room_id=any($1::uuid[])',[ownedRooms])).rows.map(r=>r.id);
+   const channels=(await client.query('select id from channels where room_id=any($1::uuid[]) or match_id=any($2::uuid[])',[ownedRooms,matchIds])).rows.map(r=>r.id);
+   await client.query('delete from notifications where user_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from private.email_deliveries where event_id in(select id from private.outbox_events where user_id=any($1::uuid[]))',[ownedUsers]);await client.query('delete from private.outbox_events where user_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from private.audit_events where actor_id=any($1::uuid[])',[ownedUsers]);
+   await client.query('delete from chat_messages where channel_id=any($1::uuid[])',[channels]);await client.query('delete from chat_preferences where channel_id=any($1::uuid[])',[channels]);await client.query('delete from channel_memberships where channel_id=any($1::uuid[])',[channels]);await client.query('delete from channels where id=any($1::uuid[])',[channels]);
+   await client.query('delete from game_invites where inviter_id=any($1::uuid[]) or invitee_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from active_player_reservations where match_id=any($1::uuid[])',[matchIds]);await client.query('delete from match_players where match_id=any($1::uuid[])',[matchIds]);await client.query('delete from matches where id=any($1::uuid[])',[matchIds]);
+   await client.query('delete from private.room_visits where user_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from room_memberships where user_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from community_rooms where id=any($1::uuid[])',[ownedRooms]);await client.query('delete from preferences where user_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from player_ratings where user_id=any($1::uuid[])',[ownedUsers]);await client.query('delete from profiles where id=any($1::uuid[])',[ownedUsers]);await client.query('delete from auth.users where id=any($1::uuid[])',[ownedUsers]);await client.query('commit');
+   assert.equal((await client.query('select count(*)::int n from profiles where id=any($1::uuid[])',[ownedUsers])).rows[0].n,0);assert.equal((await client.query('select count(*)::int n from community_rooms where id=any($1::uuid[])',[ownedRooms])).rows[0].n,0);checks.ownedBoundaryFixturesRemoved=true;
+  }catch(error){await client.query('rollback');throw error;}finally{client.release();await privileged.end();}
+ }
+ return checks;
+}
 async function user(i:number){const {data,error}=await auth.auth.admin.createUser({email:`${prefix}-${i}@dartspoint.local`,email_confirm:true});assert.equal(error,null);const actor=await actorById(data.user!.id,Date.now()+3600000,false);await onboard(actor,{username:prefix+i});return actorById(actor.id,actor.expiresAt);}
 const [a,b,c,d,owner,quota,burst]=await Promise.all([0,1,2,3,4,5,6].map(user));
 const rooms=(await db().query("insert into community_rooms(name,slug,capacity) values($1,$1,50),($2,$2,50) returning id",[prefix,prefix+'two'])).rows.map(r=>r.id);
@@ -22,6 +114,7 @@ await db().query("insert into channels(kind,room_id) values('community',$1),('co
 const room=rooms[0],other=rooms[1],channel=(await db().query('select id from channels where room_id=$1',[room])).rows[0].id;
 const send=(actor:Actor,body:string,id=randomUUID(),ch=channel)=>sendMessage(actor,{channelId:ch,body,clientMessageId:id});
 try{
+ const boundaryChecks=await joinBoundaryAndConcurrentInvites();
  await db().query("insert into user_roles(user_id,role,granted_by) values($1,'owner',$1)",[owner.id]);const own=await actorById(owner.id,owner.expiresAt);
  for(const actor of [a,b,c,d,own,quota,burst])await joinRoom(actor,{roomId:room});
  const first=(await db().query('select visit_id from room_memberships where user_id=$1',[a.id])).rows[0].visit_id;
@@ -100,5 +193,5 @@ try{
   await filterAction(own,{action:'require-rename',targetId:d.id,reason:'Verify completed history name safety'});const historyAlias=(await actorById(d.id,d.expiresAt)).username!;
   for(const name of [historyAlias,prefix+'Final']){if(name!==historyAlias)await renameProfile(await actorById(d.id,d.expiresAt),{username:name});const record=(await matchHistory(c,{})).find(m=>m.id===privacyMatch.matchId)!;assert.equal(record.players.find((p:any)=>p.id===d.id).name,name);assert.equal(record.data.names[1],name);assert.equal(record.data.lastResult,name+' · D20 — 40 punten');assert.equal(record.data.pendingDart.opponentName,name);assert.ok(!JSON.stringify(record).includes(legacyName));assert.deepEqual((await db().query('select data::text data,result_hash from match_results where match_id=$1',[privacyMatch.matchId])).rows[0],originalResult,'History projection preserves the original result JSON and hash');}
  }finally{await db().query("update matches set lifecycle='cancelled' where id=$1 and lifecycle not in('completed','abandoned')",[privacyMatch.matchId]);await db().query('delete from active_player_reservations where match_id=$1',[privacyMatch.matchId]);await db().query('delete from tournaments where id=$1',[tournamentId]);await db().query('delete from seasons where id=$1',[seasonId]);}
- const result={ok:true,typedVisitsUnique:true,renewalsDoNotCount:true,systemUnreadExcluded:true,expiredVisitNewId:true,deniedJoinNoEvent:true,duplicateIntentOnce:true,retriesNoNewQuota:true,burstAtomic:true,duplicateNormalized:true,minuteBudget30:true,historyCursor:true,redactionReconnectTombstone:true,redactionImmutableMessageOrder:true,redactionOnceNoUnread:true,filterReasonAndVersionAudited:true,allChannelFilters:true,onboardRenameFilter:true,exceptionsAllowed:true,ownerRulesImmediate:true,forcedRenameStableIdAlias:true,forcedRenameSafeLegacyJoin:true,forcedRenameSafeMatchViewsAndReceipts:true,forcedRenameSafeCompletedHistory:true,nameProjectionPreservesStoredHistory:true,moderationRoomOnly:true,dmNoModeration:true,revokedRightsEffective:true,revokeAuditOnce:true,forgedModerationMessageRoomRejected:true,moderatorLeavingRoomDenied:true,deniedModerationNoAuditOrSanction:true,bothBusyInvitesRejected:true,pausedReservationBusy:true,staleInviteCancelled:true,spectatorMessageReportContext:true,forgedMatchReportRejected:true};await writeFile('artifacts/chat-moderation-result.json',JSON.stringify(result,null,2));console.log('Chat visits, atomic quotas, editable filters, rename, scopes and reserved invites passed');
+ const result={ok:true,...boundaryChecks,typedVisitsUnique:true,renewalsDoNotCount:true,systemUnreadExcluded:true,expiredVisitNewId:true,deniedJoinNoEvent:true,duplicateIntentOnce:true,retriesNoNewQuota:true,burstAtomic:true,duplicateNormalized:true,minuteBudget30:true,historyCursor:true,redactionReconnectTombstone:true,redactionImmutableMessageOrder:true,redactionOnceNoUnread:true,filterReasonAndVersionAudited:true,allChannelFilters:true,onboardRenameFilter:true,exceptionsAllowed:true,ownerRulesImmediate:true,forcedRenameStableIdAlias:true,forcedRenameSafeLegacyJoin:true,forcedRenameSafeMatchViewsAndReceipts:true,forcedRenameSafeCompletedHistory:true,nameProjectionPreservesStoredHistory:true,moderationRoomOnly:true,dmNoModeration:true,revokedRightsEffective:true,revokeAuditOnce:true,forgedModerationMessageRoomRejected:true,moderatorLeavingRoomDenied:true,deniedModerationNoAuditOrSanction:true,bothBusyInvitesRejected:true,pausedReservationBusy:true,staleInviteCancelled:true,spectatorMessageReportContext:true,forgedMatchReportRejected:true};await writeFile('artifacts/chat-moderation-result.json',JSON.stringify(result,null,2));console.log('Chat visits, atomic quotas, editable filters, rename, scopes and reserved invites passed');
 }finally{await db().end();await(await redis()).quit();}

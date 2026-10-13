@@ -47,6 +47,9 @@ Een echte kamerbezoeksovergang schrijft samen met het lidmaatschap één duurzaa
 tweede tab schrijven niets extra. Access/capacity worden vóór opslag en push
 gecontroleerd. Systeemberichten geven geen unread of geluid. `community.ts` en
 de projecties behandelen menselijke en systeemregels expliciet.
+De serverlimiet is **10 echte kamerbezoeken per account per 60 seconden**.
+Het elfde bezoek geeft 429 `room_join_rate` met `retryAfter`; dezelfde geldige
+join, heartbeat en korte reconnect verbruiken geen nieuw bezoekbudget.
 
 De browser maakt vóór een await één optimistic intent met UUID. Dubbel Enter,
 Enter plus click, keyrepeat en IME maken geen extra verzoek. Retry behoudt de
@@ -363,7 +366,8 @@ De oorspronkelijke pure timingtest reproduceerde -18,182 CSS-px bij warmup en
 browser gaf bij twee horizontale stops eerst -1,663/+7,470 px hersampling en
 uiteindelijk +36,609/-14,078 px bevestigingsverschuiving. Nieuwe geldige stops
 moeten op beide assen en bij impact binnen **1 CSS-pixel** blijven; lokaal
-chat/input p95 blijft maximaal 50 ms, normale chatontvangst p95 maximaal 250 ms.
+chat/input p95 blijft maximaal 50 ms; normale chatontvangst behoudt het
+rapportagedoel van maximaal 250 ms.
 Alle samples en eventuele weigeringen blijven zichtbaar in het meetrapport.
 
 De 12 aanvullende lokale regressies slagen: domain, multiplayer, practice,
@@ -416,3 +420,93 @@ en acceptatie hieronder vastgelegd. Chromiumemulatie,
 geïnjecteerde vertraging en viewport/toetsenbordformaat zijn geen fysieke
 60/120/144 Hz-, iOS-toetsenbord-, touch- of camerametingen; dergelijke hardware
 is niet beschikbaar op deze VPS.
+
+De hosted controles van `ee5db493c21a3013e51f18ee254a24e1fb62edb6` zijn nog
+niet geslaagd. [Main-run 38433432900](https://github.com/dartspoint/platform/actions/runs/38433432900)
+haalde chat-p95 15,8 ms lokaal en 227,8 ms bij de ontvanger, maar faalde daarna
+op een wedstrijdmeter die tijdens de wachttest 5,656 CSS px bewoog. Die run
+bevatte geen originele ingress of stopfoutcode; een te oude sample is daardoor
+nog geen bewezen oorzaak. Een afzonderlijke native diagnoserun accepteerde
+alle zes echte stops met sampleleeftijden 26–33 ms binnen het venster van
+54 ms en reproduceerde de beweging niet. De oorspronkelijke mislukte run
+blijft bewaard.
+
+[Staging-run 38433433720](https://github.com/dartspoint/platform/actions/runs/38433433720)
+faalde op chat-p95 537,5 ms bij de ontvanger; lokale p95 was 14,2 ms. Alle
+vijftien berichten hadden HTTP 200, canonieke SDK-ontvangst en aantoonbare
+focus/zichtbaarheid. Image-publicatie en deployment zijn overgeslagen: de
+actieve stagingrelease is nog `4a23cf6f4f3b1ea4861556702d9b276ee8b00031`.
+Deze twee hosted fouten worden afzonderlijk onderzocht. De lokale geslaagde
+metingen vervangen geen hosted of gedeployde acceptatie, en geheugen- of
+CPU-tekort is zonder gecorreleerde meting niet als oorzaak vastgesteld.
+
+De aanvullende native workspace-run van 17:22 UTC slaagt met **21/21
+functionele controles en alle 15 chatmetingen**: lokale p95 13,9001 ms,
+ontvanger-p95 195,5 ms, met ongewijzigde grenzen van 50/250 ms. Een werkelijk
+geopend uitnodigingsdialoog begint met een vrije ontvanger, wordt automatisch
+uitgeschakeld wanneer die een andere uitnodiging accepteert, weigert ook een
+direct stale verzoek met 409 zonder extra match/uitnodiging/notificatie, en
+wordt na normale opgave weer actief.
+
+Tijdens twee werkelijk overlappende `429 chat_burst_limited`-verzoeken wordt
+de wedstrijdindicator gestopt: horizontaal via pointer en verticaal via Enter.
+De oorspronkelijke database-ingress bevestigt sampleleeftijden van 8/11 ms
+binnen het venster van 54 ms. Beide eerste pogingen worden exact geaccepteerd;
+er is geen herstelpoging gebruikt. Eerste freeze en authoritative bevestiging
+verschuiven beide **0 CSS px**. Handlerduur is maximaal 0,8 ms en de eerste
+frozen frame maximaal 17,9 ms. Indicator- en bordnodes behouden hun identiteit.
+Alle chatmetingen en beide floodpogingen staan in
+`artifacts/local-final-proof/workspace-chat-final-coverage-20261013T172224Z/`.
+De gewone opgave van beide fixturewedstrijden en SDK-cleanup zijn geslaagd.
+
+De opdrachtgever geeft daarna expliciet voorrang aan het gooien. Daarom is
+de ontvangstlatentie van chat vanaf deze aanvulling een gerapporteerd doel
+van 250 ms, geen deploymentblokkade. Alle vijftien echte samples blijven in
+het rapport; een overschrijding wordt zichtbaar gemeld. Functionele chat,
+autorisatie, filters, exacte berichtidentiteit en lokale responsiviteit blijven
+gecontroleerd. Alle werpgates blijven hard: echte foreground-invoer, maximaal
+50 ms, maximaal 1 CSS px, exacte getekende sample binnen de oorspronkelijke
+servergrenzen, onveranderde state bij weigering en geen extra pijl bij reconnect.
+De tijdelijke uitgebreide chatprobe wordt privé behouden en niet in de
+normale CI- of stagingservices geladen.
+
+Een door de opdrachtgever uitgevoerde momentopname op `dartspoint-vps1` toont
+7,6 GiB RAM waarvan 6,2 GiB beschikbaar, nul swap en 86–99% idle CPU in vijf
+korte samples. Dit toont geen actueel RAM-tekort op staging; het bewijst geen
+maximale belasting en zegt niets over resources van de aparte hosted runners.
+
+De echte lokale joingrens- en concurrentie-integratie slaagt: tien verschillende
+visits binnen één minuut, geen verbruik door dezelfde kamer/heartbeat, en de
+elfde wissel geeft 429 zonder membership-, visit-, event- of cursorwijziging.
+Twee acceptaties wachten aantoonbaar tegelijk op dezelfde admission-lock;
+na vrijgave ontstaan exact één match en twee reserveringen. De andere invite
+is cancelled, en uitgestelde notificatie-aflevering voegt niets toe. Eigen
+fixtures worden volledig verwijderd. Een eerdere cleanup kreeg een deadlock
+met de actieve worker; de test vergrendelt nu eerst de vier eigen profielen in
+vaste volgorde vóór verwijdering van FK-childrows. Het herstel van alleen de
+eigen vier achterblijvers is afzonderlijk met nulmetingen bevestigd. De
+gewijzigde volledige integratie is éénmaal geslaagd; businesscode is hiervoor
+niet aangepast. Bewijs: `chat-moderation-boundary-fixture-recovery.json`,
+`chat-moderation-boundary-concurrent-lockorder-result.json` en bijbehorende log
+onder `artifacts/local-final-proof/`; de oorspronkelijke failure blijft behouden.
+
+De uitgebreidere native wedstrijdfixture slaagt daarna met **acht echte
+stoppogingen**, alle acht geaccepteerd en nul uitgesloten. Beide assen bevatten
+een exacte acceptatie bij ieder vertraagd inkomend cohort van 100/300/1000 ms;
+de verticale bevestiging wordt nu ook werkelijk vertraagd. Handlermaximum is
+0,5 ms; eerste frozen frame p95 en maximum zijn 26,2 ms. Eerste freeze en ACK
+geven 0 CSS px verschuiving. Iedere acceptatie behoudt de oorspronkelijke
+sample/connection en het admission-venster, verhoogt de stateversion precies
+éénmaal, en wijzigt geen score of dart vóór impact. Alle vier werkelijke pijlen,
+inclusief die na reconnect, behouden de exacte eerste grounded tip en drie
+volgende native SVG-transforms bij een werkelijk gedupliceerd flight-snapshot.
+Maximale tipafwijking is 0,00001199 CSS px. De verloren originele command-UUID
+wordt hersteld zonder extra pijl en de fixture eindigt via normale opgave.
+Bewijs: `artifacts/local-final-proof/outcome-aware-game-timing-{result,progress,private.log}`.
+De test laat een onafhankelijke classificatie van de oorspronkelijke ingress
+alleen een aantoonbaar ongeldige sample afwijzen: exacte foutcode, zichtbare
+fout, volledige state/version/lifecycle intact en hervatte meter zijn vereist.
+Iedere poging blijft in de meetreeks, iedere vertraging/axis moet minstens één
+werkelijk geaccepteerde stop bevatten en alle werpgrenzen blijven hard. Een
+stagingweigering zonder betrouwbare oorspronkelijke ingress wordt niet als
+geslaagde boundarycontrole aangemerkt.
