@@ -18,14 +18,16 @@ try{
  const channels=(await db().query('select id,room_id from channels where room_id=any($1::uuid[])',[rooms])).rows,channel=channels.find(ch=>ch.room_id===room)!.id,privateChat=channels.find(ch=>ch.room_id===privateRoom)!.id;
  await joinRoom(a,{roomId:room});await joinRoom(b,{roomId:room});
  subscriber=(await redis()).duplicate();await subscriber.connect();await subscriber.subscribe('dartspoint:chat-events',(raw:string)=>{idsOnly.push(JSON.parse(raw));});
- let sdkEvent:any;const sdkEnabled=!process.argv.includes('--projection-only');
- if(sdkEnabled){personal=await new Client(process.env.NEXT_PUBLIC_REALTIME_URL!).joinOrCreate('personal',{userId:a.id,token:fa.token});personal.onMessage('chat.changed',(event:any)=>{if(event.messageId)sdkEvent=event;});}
+ const sdkEvents=new Map<string,any>();const sdkEnabled=!process.argv.includes('--projection-only');
+ // Joins and human messages share this inbox. Select the saved human UUID,
+ // rather than whichever legitimate queued event happens to arrive last.
+ if(sdkEnabled){personal=await new Client(process.env.NEXT_PUBLIC_REALTIME_URL!).joinOrCreate('personal',{userId:a.id,token:fa.token});personal.onMessage('chat.changed',(event:any)=>{if(event.messageId&&event.message?.kind==='human'&&event.message?.sender_id===b.id)sdkEvents.set(event.messageId,event);});}
  const message=await sendMessage(b,{channelId:channel,clientMessageId:randomUUID(),body:'Een echte afgeschermde projectie'});
  const projected=await personalChatChange(message.id,[a,b,c,a]);assert.equal(projected.size,2);assert.equal(projected.get(a.id+':'+a.sessionId).body,message.body);assert.equal(projected.get(a.id+':'+a.sessionId).client_message_id,message.client_message_id);
  const visible=async(actor:Actor,msg=message)=>(await personalChatChange(msg.id,[actor])).has(actor.id+':'+actor.sessionId);
  assert.equal(await visible(c),false,'A verified identity without room membership receives no body');await joinRoom(c,{roomId:room});assert.equal(await visible(c),true);
  assert.equal((await personalChatChange(message.id,[{...a,sessionId:undefined}])).size,0,'Unverified internal identities receive no projected body');assert.equal(await visible({...a,expiresAt:Date.now()-1}),false);assert.equal(await visible({...a,sessionVersion:a.sessionVersion+1}),false);
- if(sdkEnabled){for(let i=0;i<100&&!sdkEvent;i++)await new Promise(r=>setTimeout(r,10));assert.ok(sdkEvent?.message,'Actual authenticated SDK receives the projected canonical row');assert.equal(sdkEvent.message.body,message.body);assert.equal(sdkEvent.message.client_message_id,message.client_message_id);assert.equal(sdkEvent.message.sender_id,b.id);}
+ if(sdkEnabled){for(let i=0;i<100&&!sdkEvents.has(message.id);i++)await new Promise(r=>setTimeout(r,10));const sdkEvent=sdkEvents.get(message.id);assert.ok(sdkEvent?.message,'Actual authenticated SDK receives the saved human message');assert.equal(sdkEvent.message.id,message.id);assert.equal(sdkEvent.message.kind,'human');assert.equal(sdkEvent.message.channel_id,channel);assert.equal(sdkEvent.message.body,message.body);assert.equal(sdkEvent.message.client_message_id,message.client_message_id);assert.equal(sdkEvent.message.sender_id,b.id);}
  assert.ok(idsOnly.some(event=>event.messageId===message.id));assert.ok(idsOnly.every(event=>!('body' in event)&&!('message' in event)),'Redis never broadcasts message bodies');
  await db().query("update profiles set status='suspended' where id=$1",[b.id]);assert.equal(await visible(b),false);await db().query("update profiles set status='active' where id=$1",[b.id]);
  const suspension=(await db().query("insert into sanctions(target_id,actor_id,kind,reason,ends_at) values($1,$2,'suspend','Isolated recipient protection',now()+interval '1 minute') returning id",[b.id,a.id])).rows[0].id;assert.equal(await visible(b),false);await db().query('update sanctions set revoked_at=now() where id=$1',[suspension]);
