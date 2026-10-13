@@ -121,11 +121,11 @@ verschillen door CSS-subpixelafronding blijven zichtbaar in de resultaten.
 
 De uiteindelijke lokale native build doorstond beide browsertests. Oefenen
 mat 16 stops op desktop en mobiel: maximale verschuiving bij freeze en receipt
-was `0 CSS px`, de lokale input-p95 was `1,4 ms` en het maximale verschil van
-de gelande pijlpunt met het serverraakpunt was `0,000014 CSS px`. De echte
+was `0 CSS px`, de lokale input-p95 was `0,5 ms` en het maximale verschil van
+de gelande pijlpunt met het serverraakpunt was `0,000012 CSS px`. De echte
 wedstrijd mat zes stops: freeze en receipt versprongen maximaal `0 CSS px`,
-de handler nam maximaal `0,5 ms` en de eerstvolgende frozen frame kwam binnen
-`18,0 ms`, op beide assen. De pijlpunt week maximaal `0,000010 CSS px` af. Bevestigingen werden
+de handler nam maximaal `0,7 ms` en de eerstvolgende frozen frame kwam binnen
+`21,5 ms`, op beide assen. De pijlpunt week maximaal `0,000009 CSS px` af. Bevestigingen werden
 100/325/1050 ms vertraagd met 0/10/20 ms uitgaande stopvertraging. Gelijktijdige
 kamerchat, replay van een oude receipt en verlies/herstel van een echte
 bevestiging slaagden; de oorspronkelijke UUID werd hersteld zonder extra pijl.

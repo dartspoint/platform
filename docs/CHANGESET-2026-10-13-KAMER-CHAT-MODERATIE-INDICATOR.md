@@ -181,10 +181,10 @@ van de daadwerkelijk gedeployde stagingrelease is nog open;
 hun resultaten en release-SHA worden afzonderlijk toegevoegd.
 
 De lokale timingbrowser meet bij oefenen en wedstrijden maximaal **0 CSS px**
-verschuiving bij stoppen en bevestigen. Oefeninvoer heeft p95 **1,4 ms**;
-wedstrijdhandlers duren maximaal **0,5 ms** en de eerste frozen frame verschijnt
-binnen **18,0 ms** op beide assen. De maximale afwijking van de gelande SVG-pijlpunt
-van het serverraakpunt is **0,000014 CSS px**. Vertraagde bevestigingen,
+verschuiving bij stoppen en bevestigen. Oefeninvoer heeft p95 **0,5 ms**;
+wedstrijdhandlers duren maximaal **0,7 ms** en de eerste frozen frame verschijnt
+binnen **21,5 ms** op beide assen. De maximale afwijking van de gelande SVG-pijlpunt
+van het serverraakpunt is **0,000012 CSS px**. Vertraagde bevestigingen,
 gelijktijdige chat, oude receipts en reconnect zonder extra pijl zijn geslaagd.
 De oude volledige wedstrijdfixture is naar echte v3-klokkalibratie bijgewerkt:
 27 echte pijlen, dubbel in/uit, spectator, typing guard, impact-only score,
@@ -205,13 +205,22 @@ en load. De gerichte en brede backendintegraties slagen eveneens, inclusief
 filter/rechten/naamprojecties, realtimeprivacy, timing, services, competities,
 herstel, owner en mail. De productiebuild, typechecks, 32 units, oorspronkelijke
 spelregels, 39 operationele checks en source parity zijn geslaagd. De
-updatebrowser behield alle 30 foreground-stops: eerste-frame p95 14,4 ms,
-maximum 16,7 ms en freeze/bevestiging 0 px; alle vier Chromiumvertragingen
+updatebrowser behield alle 30 foreground-stops: eerste-frame p95 10,6 ms,
+maximum 11,4 ms en freeze/bevestiging 0 px; alle vier Chromiumvertragingen
 20/80/180/350 ms accepteerden de exacte sample. CSS-zoom 200% en echte offline
 oefening slagen. Grote beheerpagina's worden als echte boven-/midden-/onder-
 viewports vastgelegd; de lokale QA-spelerslijst van circa 66.000 px overschrijdt
 het praktische volledige screenshotformaat. Alle oorspronkelijke
 beheerpagina's behouden navigation/title/overflow- en runtimefoutcontroles.
+
+De vertraagde bevestigingstest houdt via Chromium uitsluitend een reeds
+ontvangen response vast. Alle 30 echte responses zijn 100/300/1000 ms
+vastgehouden; invoer en klokkalibratie blijven op de native browserverbinding.
+Een eerdere testforwarder voegde een ongemeten heenweg toe: de server wees
+een 59 ms oude sample terecht af bij een gemeten venster van 54 ms. De
+gecorrigeerde test mat maximaal 33 ms leeftijd bij originele serveringress,
+zonder verruiming van de spelgrenzen. De touchfixture wacht op drie echte
+ping/echo-paren en reset daarna via de gewone bediening.
 
 Implementatie-SHA, CI-runs en actieve staging-SHA worden na deployment
 en acceptatie hieronder vastgelegd. Chromiumemulatie,
