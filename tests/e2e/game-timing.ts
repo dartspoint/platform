@@ -3,8 +3,17 @@ import {forfeitGame} from './game-command';
 import {Room} from '@colyseus/sdk';
 import type {Pool} from 'pg';
 import {meterPosition} from '../../packages/game-core/src/timing';
-const browser=await chromium.launch(),pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));let delay=0,jitter=0,dropReceipt=false;let debugPage:any,cleanupMatch:string|undefined,testFailed=false;const cleanupParticipants:Page[]=[];const result:any={physicalDevices:false,transport:'real Colyseus; deterministic outgoing stop and incoming receipt/snapshot delay, old receipt replay and one socket loss',samples:[]};
+import {startThrowPerformanceProfile,type ThrowPerformanceProfile} from './throw-performance-profile';
+import {startThrowPresentationProfile} from './throw-presentation-profile';
+const browser=await chromium.launch({headless:true}),pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
+const browserEnvironment={engine:'chromium-headless-shell',channel:'default',headless:true,version:browser.version(),executablePathReportedByPlaywright:chromium.executablePath(),executablePathIsLaunchedBinary:false,physicalHardwareTested:false};
+let delay=0,jitter=0,dropReceipt=false;let debugPage:any,cleanupMatch:string|undefined,testFailed=false;const cleanupParticipants:Page[]=[];const result:any={physicalDevices:false,browserEnvironment,transport:'real Colyseus; deterministic outgoing stop and incoming receipt/snapshot delay, old receipt replay and one socket loss',samples:[]};
 let ingressPool:Pool|undefined;
+let chromeProfile:ThrowPerformanceProfile|undefined;
+function retainProfileCleanupFailure(scope:string,error:unknown){
+ const category=error instanceof Error&&/^[a-z_]+$/.test(error.message)?error.message:'profile_cleanup_failed';
+ (result.profileCleanupFailures??=[]).push({scope,category});
+}
 const wireCommands=new Map<string,any>(),wireOutcomes=new Map<string,any>();
 function trackGameWire(page:Page,actorId:string){
  page.on('websocket',socket=>{
@@ -39,24 +48,33 @@ async function installInputCapture(page:Page){
   const capture=(event:Event)=>{
    const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;
    if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;
+   if(event instanceof PointerEvent&&(!event.isPrimary||event.button!==0))return;
+   const captureStartedAt=performance.now(),w=window as any;w.__dpInput=event.timeStamp;w.__dpNativeInput={eventTimeStamp:event.timeStamp,captureStartedAt,isTrusted:event.isTrusted,type:event.type};
    const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),meter=document.querySelector(horizontal?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator')!;
-   const rect=meter.getBoundingClientRect(),w=window as any;w.__dpBefore=horizontal?rect.left+rect.width/2:rect.top+rect.height/2;w.__dpInput=performance.now();w.__dpFrame=undefined;w.__dpFirstFrozen=undefined;
-   requestAnimationFrame(()=>{w.__dpFrame=performance.now()-w.__dpInput;const first=meter.getBoundingClientRect();w.__dpFirstFrozen=horizontal?first.left+first.width/2:first.top+first.height/2;});
+   const rect=meter.getBoundingClientRect();w.__dpBefore=horizontal?rect.left+rect.width/2:rect.top+rect.height/2;w.__dpFrame=undefined;w.__dpFirstFrozen=undefined;
+   requestAnimationFrame(()=>{const first=meter.getBoundingClientRect();w.__dpFirstFrozen=horizontal?first.left+first.width/2:first.top+first.height/2;w.__dpFrame=performance.now()-w.__dpInput;});
   };window.addEventListener('pointerdown',capture,true);window.addEventListener('keydown',capture,true);
  });
 }
 async function captureStop(page:Page,axis:Axis,options:any,afterInput?:()=>Promise<unknown>){
  const button=await readyGameStop(page,axis),baseline=await get(page,'match/'+cleanupMatch);assert.equal(baseline.lifecycle,'playing');assert.equal(baseline.state.phase,axis);assert.equal(baseline.seat,baseline.state.turn);
- await page.evaluate(()=>performance.clearMarks('dp-local-stop'));if(options.input==='keyboard'){await button.focus();await button.press('Enter');}else await button.click();
+ const cohort=options.cohort==='delayed-receipt'?0:options.cohort==='lost-receipt'?1:2;
+ const presentation=await startThrowPresentationProfile(page,`artifacts/game-timing-profile/presentation-${result.samples.length}-${axis==='horizontal'?0:1}-${cohort}`);
+ let captureFailed=false;
+ try{
+ await page.evaluate(()=>performance.clearMarks('dp-local-stop'));if(options.input==='keyboard'){await button.focus();await button.press('Enter');}else if(page.viewportSize()!.width<1024)await button.tap();else await button.click();
  const concurrent=afterInput?.();await pause(20);const first=await page.locator(selector(axis)).evaluate(element=>{const rect=element.getBoundingClientRect();return {style:(element as HTMLElement).style.cssText,indicator:rect.left+rect.width/2,vertical:rect.top+rect.height/2};});
  await pause(25);const during=await page.locator(selector(axis)).evaluate(element=>{const rect=element.getBoundingClientRect();return {style:(element as HTMLElement).style.cssText,indicator:rect.left+rect.width/2,vertical:rect.top+rect.height/2};});
  await page.waitForFunction(()=>Number.isFinite((window as any).__dpFrame),{},{timeout:1500});
- const observed=await page.evaluate(()=>{const w=window as any,mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark;return {handlerMs:mark?.startTime-w.__dpInput,frameMs:w.__dpFrame,before:w.__dpBefore,first:w.__dpFirstFrozen,local:mark?.detail};});
- const sample:any={...options,axis,viewport:page.viewportSize(),handlerMs:observed.handlerMs,frameMs:observed.frameMs,trace:observed.local,freezeJumpPx:Math.abs(observed.first-observed.before),freezeJumpFraction:Math.abs(observed.first-observed.before)/(observed.local?.geometry.trackSize??NaN),pendingFirst:axis==='horizontal'?first.indicator:first.vertical,pendingDuring:axis==='horizontal'?during.indicator:during.vertical,pendingStable:first.style===during.style,baselineVersion:baseline.stateVersion};
+ const observed=await page.evaluate(()=>{const w=window as any,mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark;return {input:w.__dpNativeInput,handlerMs:mark?.detail?.handlerCompletedAt-w.__dpInput,stopMs:mark?.detail?.stopAppliedAt-w.__dpInput,frameMs:w.__dpFrame,before:w.__dpBefore,first:w.__dpFirstFrozen,local:mark?.detail};});
+ const sample:any={...options,axis,viewport:page.viewportSize(),input:observed.input,preInputIndicator:observed.before,handlerMs:observed.handlerMs,stopMs:observed.stopMs,frameMs:observed.frameMs,trace:observed.local,freezeJumpPx:Math.abs(observed.first-observed.before),freezeJumpFraction:Math.abs(observed.first-observed.before)/(observed.local?.geometry.trackSize??NaN),pendingFirst:axis==='horizontal'?first.indicator:first.vertical,pendingDuring:axis==='horizontal'?during.indicator:during.vertical,pendingStable:first.style===during.style,baselineVersion:baseline.stateVersion};
  // Every input stays in the result and percentile, including explicit errors.
  result.samples.push(sample);assert.ok(observed.local,'A genuine input captured its actual rendered sample');assert.equal(observed.local.phase,axis);
- assert.ok(sample.handlerMs>=0&&sample.handlerMs<=50,'Every live-game handler freeze <=50ms');assert.ok(Number.isFinite(sample.frameMs));
+ assert.equal(observed.input?.isTrusted,true,'Game stops use genuine native browser input');assert.ok(Number.isFinite(observed.input.eventTimeStamp)&&observed.input.eventTimeStamp>=0&&observed.input.eventTimeStamp<=observed.input.captureStartedAt,'Native event time precedes capture on the same monotone clock');
+ assert.ok(observed.local.stopAppliedAt<=observed.local.sendAt&&observed.local.sendAt<=observed.local.sendReturnedAt&&observed.local.sendReturnedAt<=observed.local.handlerCompletedAt,'Freeze precedes dispatch and handler completion');
+ assert.ok(sample.handlerMs>=0&&sample.handlerMs<=50,'Every live-game handler freeze <=50ms');assert.ok(Number.isFinite(sample.frameMs)&&sample.frameMs>=0&&sample.frameMs<=50,'Every native attempt first frozen geometry <=50ms, including rejected claims');
  await concurrent;return {sample,baseline};
+ }catch(error){captureFailed=true;throw error;}finally{try{await presentation.stop();}catch(error){retainProfileCleanupFailure('presentation',error);if(!captureFailed)throw error;}}
 }
 async function classifyStop(local:any,baseline:any,actorId:string,outcome:any){
  const observed=wireCommands.get(local.commandId);assert.ok(observed,'Actual stop bytes contain the measured command UUID');assert.equal(observed.actorId,actorId);
@@ -78,16 +96,16 @@ async function classifyStop(local:any,baseline:any,actorId:string,outcome:any){
 }
 async function finishStop(page:Page,actorId:string,captured:any){
  const {sample,baseline}=captured,local=sample.trace;await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.commandId);
- const ui=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.commandId),outcome=wireOutcomes.get(local.commandId);assert.ok(outcome,'An actual WS outcome was observed');sample.actualOutcome={type:outcome.type,code:outcome.payload.code};sample.ingress=await classifyStop(local,baseline,actorId,outcome);
+ const ui=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.commandId),outcome=wireOutcomes.get(local.commandId);assert.ok(outcome,'An actual WS outcome was observed');assert.ok(Number.isFinite(ui.monotonicAt)&&ui.monotonicAt>=local.sendReturnedAt,'Actual outcome callback has its browser-local timestamp');sample.actualOutcome={type:outcome.type,code:outcome.payload.code};sample.ingress=await classifyStop(local,baseline,actorId,outcome);
  if(!sample.ingress.admissible){
   assert.equal(outcome.type,'error');assert.equal(outcome.payload.code,'invalid_render_sample');assert.equal(ui.event,'rejected');assert.equal(ui.code,'invalid_render_sample');await expect(page.locator('.dp-connection-note').filter({hasText:'timingmeting'})).toBeVisible();
   const unchanged=await get(page,'match/'+baseline.matchId);assert.equal(unchanged.stateVersion,baseline.stateVersion);assert.equal(unchanged.lifecycle,baseline.lifecycle);assert.deepEqual(unchanged.state,baseline.state,'Invalid sample preserves every authoritative phase, lock, score, result and dart');
   await readyGameStop(page,sample.axis);Object.assign(sample,{outcome:'explicit-invalid-render-sample',authoritativeStateUnchanged:true,visibleError:true,controlledRestore:true});console.log(JSON.stringify({event:'game_sample_rejected',commandId:local.commandId,axis:sample.axis,...sample.ingress,authoritativeStateUnchanged:true,visibleError:true,controlledRestore:true}));return null;
  }
  assert.equal(outcome.type,'receipt','A claim inside every original boundary must be accepted');assert.equal(ui.event,'receipt');const receipt=outcome.payload;assert.equal(receipt.commandId,local.commandId);assert.equal(receipt.matchId,baseline.matchId);assert.equal(receipt.stateVersion,baseline.stateVersion+1);assert.equal(receipt.state.phase,sample.axis==='horizontal'?'vertical':'flight');assert.notEqual(receipt.state.phaseToken,baseline.state.phaseToken);assert.deepEqual(receipt.state.dartCount,baseline.state.dartCount,'A stop cannot score before its authoritative impact');assert.deepEqual(receipt.state.events,baseline.state.events,'A stop cannot add a landed dart before its authoritative impact');assert.equal(receipt.timing.receivedAt,sample.ingress.receivedAt);assert.equal(receipt.timing.admissionWindowMs,sample.ingress.windowMs);assert.equal(receipt.timing.admittedAt,local.rendered.sampleAt,'Accepted WS stop preserves its exact last drawn sample');
- assert.equal(sample.pendingStable,true,'An accepted stop stays fixed while its receipt waits');assert.ok(Math.abs(sample.pendingDuring-sample.pendingFirst)<=1,'Accepted pending game geometry <=1CSSpx');assert.ok(sample.freezeJumpPx<=1,'Accepted first frozen game frame <=1CSSpx');assert.ok(sample.frameMs>=0&&sample.frameMs<=50,'Accepted first frozen RAF <=50ms');
+ assert.equal(sample.pendingStable,true,'An accepted stop stays fixed while its receipt waits');assert.ok(Math.abs(sample.pendingDuring-sample.pendingFirst)<=1,'Accepted pending game geometry <=1CSSpx');assert.ok(Math.abs(sample.pendingFirst-sample.preInputIndicator)<=1,'Accepted pending frame preserves the pre-stop geometry');assert.ok(sample.freezeJumpPx<=1,'Accepted first frozen game frame <=1CSSpx');assert.ok(sample.frameMs>=0&&sample.frameMs<=50,'Accepted first frozen RAF <=50ms');
  const position=await page.locator(selector(sample.axis)).evaluate((element,axis)=>{const rect=element.getBoundingClientRect();return axis==='horizontal'?rect.left+rect.width/2:rect.top+rect.height/2;},sample.axis),expected=meterPosition(local.rendered.sampleAt,local.phaseStartedAt,sample.axis),locked=sample.axis==='horizontal'?receipt.state.lockedX:receipt.state.lockedY;
- sample.ackJumpPx=Math.abs(position-local.geometry.indicator);sample.ackJumpFraction=sample.ackJumpPx/local.geometry.trackSize;sample.correctionNormalized=Math.abs(locked-expected);sample.receipt=ui;sample.outcome='accepted-exact-sample';assert.ok(sample.ackJumpPx<=1,'Accepted authoritative game geometry <=1CSSpx');assert.ok(sample.correctionNormalized*local.geometry.trackSize/2.28<=1,'Accepted authoritative lock <=1CSSpx');assert.equal(locked,expected);
+ sample.ackJumpPx=Math.abs(position-sample.preInputIndicator);sample.ackJumpFraction=sample.ackJumpPx/local.geometry.trackSize;sample.correctionNormalized=Math.abs(locked-expected);sample.receipt=ui;sample.outcome='accepted-exact-sample';assert.ok(sample.ackJumpPx<=1,'Accepted authoritative game geometry <=1CSSpx');assert.ok(sample.correctionNormalized*local.geometry.trackSize/2.28<=1,'Accepted authoritative lock <=1CSSpx');assert.equal(locked,expected);
  console.log('Foreground live-game stop: '+JSON.stringify({axis:sample.axis,receiptDelay:sample.receiptDelay,jitter:sample.jitter,handlerMs:sample.handlerMs,frameMs:sample.frameMs,outcome:sample.outcome,ingress:sample.ingress}));return receipt;
 }
 async function proveGroundedImpact(page:Page,receipt:any,sample:any){
@@ -112,7 +130,7 @@ async function captureFirstGroundedTip(page:Page){
  `);
 }
 try{
- const a=await login(browser,'TimingA'),b=await login(browser,'TimingB');const page=a.page;debugPage=page;for(const actor of [a,b])trackGameWire(actor.page,actor.id);page.on('pageerror',e=>console.log(e.message));page.setDefaultTimeout(20000);const room=(await get(page,'bootstrap')).rooms.find((r:any)=>r.name==='Nederland 1');for(const actor of [a,b])await post(actor.page,'room',{roomId:room.id});const chatChannel=(await get(page,'bootstrap')).chatChannels.find((channel:any)=>channel.kind==='community'&&channel.roomId===room.id);
+ const a=await login(browser,'TimingA',{hasTouch:true}),b=await login(browser,'TimingB',{hasTouch:true});const page=a.page;debugPage=page;for(const actor of [a,b])trackGameWire(actor.page,actor.id);page.on('pageerror',e=>console.log(e.message));page.setDefaultTimeout(20000);const room=(await get(page,'bootstrap')).rooms.find((r:any)=>r.name==='Nederland 1');for(const actor of [a,b])await post(actor.page,'room',{roomId:room.id});const chatChannel=(await get(page,'bootstrap')).chatChannels.find((channel:any)=>channel.kind==='community'&&channel.roomId===room.id);
  const invitation=await post(page,'invite',{targetId:b.id,roomId:room.id,rules:{startScore:301,doubleIn:true,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},ranked:false});const id=(await post(b.page,'invite/respond',{inviteId:invitation.id,action:'accept'})).matchId;cleanupMatch=id;cleanupParticipants.push(page,b.page);
  for(const actor of [a,b])await actor.page.addInitScript(`
  const descriptor=Object.getOwnPropertyDescriptor(WebSocket.prototype,'onmessage');
@@ -122,6 +140,7 @@ try{
  await page.setViewportSize({width:390,height:844});await page.goto(origin+'/spelen?match='+id);await b.page.goto(origin+'/spelen?match='+id);await page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await page.getByRole('button',{name:'Stop horizontale indicator',exact:true}).waitFor();await page.bringToFront();
  for(const actor of [a,b])await installInputCapture(actor.page);
  result.cohorts=[];
+ chromeProfile=await startThrowPerformanceProfile(browser,'artifacts/game-timing-profile');
  for(const [i,receiptDelay] of [100,300,1000].entries()){
   delay=receiptDelay;jitter=i*25;await page.setViewportSize(i===0?{width:1366,height:768}:{width:390,height:844});
   await page.evaluate(({down,up,replay})=>{(window as any).__qaDelay=down;(window as any).__qaUplink=up;(window as any).__qaReplayReceipt=replay;},{down:receiptDelay+jitter,up:i*10,replay:i===1});
@@ -159,4 +178,10 @@ try{
  assert.ok(recoveredVertical,'The recovered match completes one actual vertical stop');await proveGroundedImpact(b.page,recoveredVertical,recoveredVerticalSample);assert.equal((await get(page,'match/'+id)).state.events.length,before+1);result.reconnectNoExtraDart=true;result.originalStopRecovered=true;
  const frames=result.samples.map((sample:any)=>sample.frameMs).sort((a:number,b:number)=>a-b);result.frameOpportunity={attempts:frames.length,p95Ms:frames[Math.ceil(frames.length*.95)-1],maxMs:frames.at(-1),foreground:true,excludedAttempts:0};assert.ok(result.frameOpportunity.p95Ms<=50,'First frozen frame p95 <=50ms over every actual native attempt');console.log('All-attempt live-game timing '+JSON.stringify({frameOpportunity:result.frameOpportunity,cohorts:result.cohorts}));
  await forfeitGame(b.page,id,cleanupParticipants);result.fixtureMatchEnded=true;await writeFile('artifacts/game-timing-result.json',JSON.stringify(result,null,2));console.log('Real game pointer/keyboard freeze, delayed receipts, jitter, fixed flight and reconnect passed');
-}catch(error){testFailed=true;if(debugPage){const local=await debugPage.evaluate(()=>(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail);if(local){result.failureDiagnostic=await ingressDiagnostic(local);console.log(JSON.stringify({event:'game_timing_failed_stop',...result.failureDiagnostic}));}await debugPage.screenshot({path:'artifacts/game-timing-debug.png'});await writeFile('artifacts/game-timing-debug-private.txt',await debugPage.locator('body').innerText());}throw error;}finally{await writeFile('artifacts/game-timing-progress.json',JSON.stringify(result,null,2));try{if(cleanupMatch)await forfeitGame(cleanupParticipants[0],cleanupMatch,cleanupParticipants);}catch(error){if(!testFailed)throw error;console.error('Fixture cleanup requires operator review after failed test');}finally{await browser.close();await ingressPool?.end();}}
+}catch(error){testFailed=true;if(debugPage){const local=await debugPage.evaluate(()=>(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail);if(local){result.failureDiagnostic=await ingressDiagnostic(local);console.log(JSON.stringify({event:'game_timing_failed_stop',...result.failureDiagnostic}));}await debugPage.screenshot({path:'artifacts/game-timing-debug.png'});await writeFile('artifacts/game-timing-debug-private.txt',await debugPage.locator('body').innerText());}throw error;}finally{
+ let profileStopError:unknown;
+ try{await chromeProfile?.stop();}catch(error){retainProfileCleanupFailure('chrome-trace',error);profileStopError=error;}
+ await writeFile('artifacts/game-timing-progress.json',JSON.stringify(result,null,2));
+ try{try{if(cleanupMatch)await forfeitGame(cleanupParticipants[0],cleanupMatch,cleanupParticipants);}catch(error){if(!testFailed)throw error;console.error('Fixture cleanup requires operator review after failed test');}if(profileStopError&&!testFailed)throw profileStopError;}
+ finally{await browser.close();await ingressPool?.end();}
+}

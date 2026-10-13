@@ -6,12 +6,15 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {login,get,post,origin} from './helpers';
 import {forfeitGame} from './game-command';
 import {meterPosition} from '../../packages/game-core/src/timing';
-const browser=await chromium.launch(),pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
+import {startThrowPerformanceProfile} from './throw-performance-profile';
+import {startThrowPresentationProfile} from './throw-presentation-profile';
+const browser=await chromium.launch({headless:true}),pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
+const browserEnvironment={engine:'chromium-headless-shell',channel:'default',headless:true,version:browser.version(),executablePathReportedByPlaywright:chromium.executablePath(),executablePathIsLaunchedBinary:false,physicalHardwareTested:false};
 const runId=randomUUID().slice(0,6),oldFetchBody='Nieuwe regel tijdens oude fetch '+runId;
 const dir='artifacts/workspace-chat';await mkdir(dir,{recursive:true});
 let cleanupMatch:string|undefined,cleanupPage:Page|undefined,cleanupPages:Page[]=[],cleanupPersonal:{leave:()=>Promise<unknown>}|undefined;
 let ingressPool:import('pg').Pool|undefined;
-const report:any={physicalDevices:false,desktop:[],mobile:[],chat:[],checks:{}};
+const report:any={physicalDevices:false,browserEnvironment,desktop:[],mobile:[],chat:[],checks:{}};
 function p95(values:number[]){return values.slice().sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1];}
 const epochNow=()=>performance.timeOrigin+performance.now();
 const pageState=(page:Page)=>page.evaluate(()=>({focused:document.hasFocus(),visibility:document.visibilityState}));
@@ -19,7 +22,7 @@ async function writeLatencyProof(){
  if(!report.chat.length)return;
  const locals=report.chat.map((r:any)=>r.localMs),recipients=report.chat.map((r:any)=>r.recipientMs),allLocal=locals.every(Number.isFinite),allRecipient=recipients.every(Number.isFinite);
  report.latency={samples:report.chat.length,completedSamples:recipients.reduce((count:number,value:unknown)=>count+(typeof value==='number'&&Number.isFinite(value)?1:0),0),localP95Ms:locals.length&&allLocal?p95(locals):null,recipientP95Ms:recipients.length&&allRecipient?p95(recipients):null,targets:{localMs:50,recipientMs:250},localGate:'reported-only-user-priority-2026-10-13',recipientGate:'reported-only-user-priority-2026-10-13',localTargetMet:locals.length===15&&allLocal?p95(locals)<=50:null,recipientTargetMet:recipients.length===15&&allRecipient?p95(recipients)<=250:null,environment:'Native built web, local PostgreSQL/Redis/Colyseus, Chromium two authenticated users, no added network delay; actual page focus and visibility recorded per sample'};
- const proof={measurement:report.measurement,latency:report.latency,samples:report.chat};
+ const proof={browserEnvironment,measurement:report.measurement,latency:report.latency,samples:report.chat};
  await writeFile(dir+'/latency.json',JSON.stringify(proof,null,2));await writeFile(dir+'/results.json',JSON.stringify(report,null,2));
  console.log('Workspace/chat raw latency proof '+JSON.stringify(proof));
 }
@@ -41,18 +44,26 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  await pause(2100);await Promise.all([0,1,2].map(async i=>{const clientMessageId=randomUUID(),body='Game chat '+runId+' '+(attemptIndex?attemptIndex+' ':'')+i;await post(page,'chat/send',{channelId,clientMessageId,body});attempt.seeds.push({clientMessageId,completedAt:epochNow()});}));
  await readyFloodStop(page,axis);
  await page.evaluate(input=>{const w=window as any;performance.clearMarks('dp-local-stop');w.__floodFirst=undefined;w.__floodInput=undefined;w.__floodRequest=undefined;w.__floodRequestPromise=undefined;w.__floodPrepared={clientMessageId:input.clientMessageId,body:JSON.stringify(input)};},{channelId,clientMessageId,body:'Flood during '+axis+' '+runId});
- // Native pointer/keyboard dispatch captures the drawn geometry before the
- // handler and one real RAF opportunity. No screenshot or tracing runs here.
+ // Both profilers are inert in normal acceptance. Separate opt-in recording
+ // preserves this exact workload, native input and every hard assertion.
+ const presentation=await startThrowPresentationProfile(page,dir+'/throw-performance-profile/presentation-'+attemptIndex+'-'+axis);
+ let inputFailed=false;
+ try{
+ // Native dispatch captures geometry before the normal stop handler.
  if(axis==='horizontal')await button.click();else await button.press('Enter');
  await page.waitForFunction(()=>!!(window as any).__floodFirst);
  const local=await page.evaluate(()=>({timeOrigin:performance.timeOrigin,input:(window as any).__floodInput,first:(window as any).__floodFirst,flood:(window as any).__floodRequest,mark:performance.getEntriesByName('dp-local-stop').at(-1)?.toJSON(),trace:(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark)?.detail}));
  Object.assign(attempt,{browserTimeOrigin:local.timeOrigin,captureEpoch:local.input?.epoch,inputEpoch:local.trace?local.timeOrigin+local.trace.inputAt:undefined,floodStartedAt:local.flood?.floodStartedAt,captureState:local.input?.state,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
+ attempt.nativeInput=local.input;
  assert.ok(local.trace,'A genuine flood stop captures its rendered v3 sample');
- Object.assign(attempt,{handlerMs:local.mark!.startTime-local.input.at,firstFrameMs:local.first.at-local.input.at,rafEntryMs:local.first.rafEntryAt-local.input.at,rafGeometryMs:local.first.geometryCompletedAt-local.first.geometryStartedAt,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
+ assert.equal(local.input.isTrusted,true,'Flood stop uses genuine native browser input');assert.ok(Number.isFinite(local.input.eventTimeStamp)&&local.input.eventTimeStamp>=0&&local.input.eventTimeStamp<=local.input.captureStartedAt,'Native event time precedes capture on the same monotone clock');
+ assert.ok(local.trace.stopAppliedAt<=local.trace.sendAt&&local.trace.sendAt<=local.trace.sendReturnedAt&&local.trace.sendReturnedAt<=local.trace.handlerCompletedAt,'Freeze precedes dispatch and handler completion');
+ Object.assign(attempt,{handlerMs:local.trace.handlerCompletedAt-local.input.at,stopMs:local.trace.stopAppliedAt-local.input.at,firstFrameMs:local.first.at-local.input.at,rafEntryMs:local.first.rafEntryAt-local.input.at,rafGeometryMs:local.first.geometryCompletedAt-local.first.geometryStartedAt,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
  console.log(JSON.stringify({event:'workspace_flood_stop_attempt',axis,clientMessageId,commandId:local.trace.commandId,captureEpoch:attempt.captureEpoch,inputEpoch:attempt.inputEpoch,floodStartedAt:attempt.floodStartedAt,handlerMs:attempt.handlerMs,firstFrameMs:attempt.firstFrameMs}));
  await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
  const observed=await page.evaluate(commandId=>({receipt:((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),at:performance.now(),state:{focused:document.hasFocus(),visibility:document.visibilityState}}),local.trace.commandId),receipt=observed.receipt;
  Object.assign(attempt,{receipt,receiptObservedAt:observed.at,receiptObservedState:observed.state});
+ assert.ok(Number.isFinite(receipt.monotonicAt)&&receipt.monotonicAt>=local.trace.sendReturnedAt,'Actual outcome callback has its browser-local timestamp');
  const acknowledged=await page.evaluate(axis=>{const w=window as any,element=document.querySelector(axis==='horizontal'?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator')!,r=element.getBoundingClientRect();return {indicator:axis==='horizontal'?r.left+r.width/2:r.top+r.height/2,sameNode:element===w.__floodMeters[axis],sameBoard:document.querySelector('.dp-board-stage')===w.__boardBefore,state:{focused:document.hasFocus(),visibility:document.visibilityState}};},axis);
  Object.assign(attempt,{acknowledged,ackJumpPx:Math.abs(acknowledged.indicator-local.input.geometry.indicator),ackJumpFraction:Math.abs(acknowledged.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
  const flood=await page.evaluate(async()=>{const w=window as any;await w.__floodRequestPromise;return w.__floodRequest;});assert.ok(flood,'The native input started its genuine browser request');Object.assign(attempt,flood);assert.equal(attempt.floodError,undefined,'The real concurrent browser request completes');
@@ -72,7 +83,7 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  attempt.performance=await page.evaluate(inputAt=>{
   const w=window as any;w.__floodDrainPerformance?.();const data=w.__floodDiagnostics,observedAt=performance.now();
   const overlaps=(entry:any)=>entry.startTime+entry.duration>=inputAt-1000&&entry.startTime<=observedAt;
-  return {startedAt:data.startedAt,observedAt,capacityPerType:data.capacityPerType,supported:data.supported,dropped:data.dropped,longTasks:data.longTasks.filter(overlaps),longAnimationFrames:data.longAnimationFrames.filter(overlaps),stateEvents:data.stateEvents.filter((entry:any)=>entry.at>=inputAt-1000&&entry.at<=observedAt)};
+  return {startedAt:data.startedAt,observedAt,capacityPerType:data.capacityPerType,supported:data.supported,dropped:data.dropped,longTasks:data.longTasks.filter(overlaps),longAnimationFrames:data.longAnimationFrames.filter(overlaps),events:data.events.filter((entry:any)=>entry.startTime>=inputAt-1000&&entry.startTime<=inputAt+1000),stateEvents:data.stateEvents.filter((entry:any)=>entry.at>=inputAt-1000&&entry.at<=observedAt),timerHeartbeatIntervalMs:data.timerHeartbeatIntervalMs,timerHeartbeats:data.timerHeartbeats.filter((at:number)=>at>=inputAt-1000&&at<=observedAt),rafHeartbeats:data.rafHeartbeats.filter((entry:any)=>entry.at>=inputAt-1000&&entry.at<=observedAt)};
  },local.input.at);
  // Keep the complete metadata-only attempt in hosted stdout before a hard
  // gate can fail. The runner's private report may not otherwise survive.
@@ -87,6 +98,7 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  assert.equal(receipt.event,'receipt','An admissible sample must be accepted exactly');assert.equal(receipt.timing.receivedAt,receivedAt);assert.equal(receipt.timing.admissionWindowMs,windowMs);assert.equal(receipt.timing.admittedAt,sampleAt,'Receipt preserves the exact drawn sample');
  assert.equal(axis==='horizontal'?receipt.lockedX:receipt.lockedY,meterPosition(sampleAt,local.trace.phaseStartedAt,axis));assert.ok(attempt.freezeJumpPx<=1,'Flood first freeze <=1CSSpx');assert.ok(attempt.ackJumpPx<=1,'Flood authoritative ACK <=1CSSpx');attempt.outcome='accepted-exact-sample';
  return receipt;
+ }catch(error){inputFailed=true;throw error;}finally{try{await presentation.stop();}catch(error){if(!inputFailed)throw error;attempt.profileCleanupFailed=true;}}
 }
 try{
  const a=await login(browser,'LayoutA'),b=await login(browser,'LayoutB');cleanupPage=a.page;cleanupPages=[a.page,b.page];await a.context.addInitScript('globalThis.__name = (fn) => fn;');await b.context.addInitScript('globalThis.__name = (fn) => fn;');for(const page of cleanupPages)await page.addInitScript(()=>{const nativeSend=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))(window as any).__qaGameSocket=this;return nativeSend.call(this,data);};});a.page.setDefaultTimeout(15000);b.page.setDefaultTimeout(15000);
@@ -186,35 +198,44 @@ try{
   const w=window as any;w.__boardBefore=document.querySelector('.dp-board-stage');w.__floodMeters={horizontal:document.querySelector('.dp-meter-row .dp-meter-indicator'),vertical:document.querySelector('.dp-meter-track-vertical .dp-meter-indicator')};
   // Observe only bounded numeric scheduling metadata. Attribution, scripts,
   // URLs, request payloads and credentials are never read or retained.
-  const capacity=64,diagnostics={startedAt:performance.now(),capacityPerType:capacity,supported:{longtask:false,'long-animation-frame':false},dropped:{longtask:0,'long-animation-frame':0,state:0},longTasks:[] as any[],longAnimationFrames:[] as any[],stateEvents:[] as any[]};w.__floodDiagnostics=diagnostics;
+  const capacity=64,diagnostics={startedAt:performance.now(),capacityPerType:capacity,supported:{longtask:false,'long-animation-frame':false,event:false},dropped:{longtask:0,'long-animation-frame':0,event:0,state:0,timerHeartbeat:0,rafHeartbeat:0},longTasks:[] as any[],longAnimationFrames:[] as any[],events:[] as any[],stateEvents:[] as any[],timerHeartbeatIntervalMs:10,timerHeartbeats:[] as number[],rafHeartbeats:[] as {at:number;timestamp:number}[]};w.__floodDiagnostics=diagnostics;
   const observers=new Map<string,PerformanceObserver>();
-  const append=(type:'longtask'|'long-animation-frame',entries:PerformanceEntry[])=>{
-   const target=type==='longtask'?diagnostics.longTasks:diagnostics.longAnimationFrames;
-   for(const entry of entries){const metadata:Record<string,number>={startTime:entry.startTime,duration:entry.duration};
+  const append=(type:'longtask'|'long-animation-frame'|'event',entries:PerformanceEntry[])=>{
+   const target=type==='longtask'?diagnostics.longTasks:type==='event'?diagnostics.events:diagnostics.longAnimationFrames;
+   for(const entry of entries){const metadata:Record<string,number|string>={startTime:entry.startTime,duration:entry.duration};
     if(type==='long-animation-frame')for(const key of ['renderStart','styleAndLayoutStart','blockingDuration','firstUIEventTimestamp']){const value=(entry as any)[key];if(typeof value==='number'&&Number.isFinite(value))metadata[key]=value;}
+    if(type==='event'){metadata.name=entry.name;for(const key of ['processingStart','processingEnd','interactionId']){const value=(entry as any)[key];if(typeof value==='number'&&Number.isFinite(value))metadata[key]=value;}}
     target.push(metadata);if(target.length>capacity){target.shift();diagnostics.dropped[type]++;}
    }
   };
-  if(typeof PerformanceObserver!=='undefined')for(const type of ['longtask','long-animation-frame'] as const){
+  if(typeof PerformanceObserver!=='undefined')for(const type of ['longtask','long-animation-frame','event'] as const){
    if(!PerformanceObserver.supportedEntryTypes.includes(type))continue;
-   try{const observer=new PerformanceObserver(list=>append(type,list.getEntries()));observer.observe({type});observers.set(type,observer);diagnostics.supported[type]=true;}catch{/* Unsupported metadata is explicitly reported as unavailable. */}
+   try{const observer=new PerformanceObserver(list=>append(type,list.getEntries())),options:PerformanceObserverInit&{durationThreshold?:number}=type==='event'?{type,durationThreshold:16,buffered:false}:{type};observer.observe(options);observers.set(type,observer);diagnostics.supported[type]=true;}catch{/* Unsupported metadata is explicitly reported as unavailable. */}
   }
-  w.__floodDrainPerformance=()=>{for(const [type,observer] of observers)append(type as 'longtask'|'long-animation-frame',observer.takeRecords());};
+  w.__floodDrainPerformance=()=>{for(const [type,observer] of observers)append(type as 'longtask'|'long-animation-frame'|'event',observer.takeRecords());};
   const stateEvent=(event:Event)=>{diagnostics.stateEvents.push({at:performance.now(),event:event.type,focused:document.hasFocus(),visibility:document.visibilityState});if(diagnostics.stateEvents.length>capacity){diagnostics.stateEvents.shift();diagnostics.dropped.state++;}};
   window.addEventListener('focus',stateEvent);window.addEventListener('blur',stateEvent);document.addEventListener('visibilitychange',stateEvent);
-  w.__floodStopPerformance=()=>{w.__floodDrainPerformance();for(const observer of observers.values())observer.disconnect();window.removeEventListener('focus',stateEvent);window.removeEventListener('blur',stateEvent);document.removeEventListener('visibilitychange',stateEvent);};
+  // Distinguish an event-loop stall from a delayed rendering opportunity.
+  // Both rings contain only numeric timestamps, with a fixed storage bound.
+  const timerHeartbeat=setInterval(()=>{diagnostics.timerHeartbeats.push(performance.now());if(diagnostics.timerHeartbeats.length>capacity){diagnostics.timerHeartbeats.shift();diagnostics.dropped.timerHeartbeat++;}},diagnostics.timerHeartbeatIntervalMs);
+  let heartbeatFrame:number;
+  const heartbeat=(timestamp:number)=>{diagnostics.rafHeartbeats.push({at:performance.now(),timestamp});if(diagnostics.rafHeartbeats.length>capacity){diagnostics.rafHeartbeats.shift();diagnostics.dropped.rafHeartbeat++;}heartbeatFrame=requestAnimationFrame(heartbeat);};
+  heartbeatFrame=requestAnimationFrame(heartbeat);
+  w.__floodStopPerformance=()=>{clearInterval(timerHeartbeat);cancelAnimationFrame(heartbeatFrame);w.__floodDrainPerformance();for(const observer of observers.values())observer.disconnect();window.removeEventListener('focus',stateEvent);window.removeEventListener('blur',stateEvent);document.removeEventListener('visibilitychange',stateEvent);};
   const capture=(event:Event)=>{
    const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;
-   const at=performance.now(),prepared=w.__floodPrepared;if(!prepared)return;w.__floodPrepared=undefined;const state={focused:document.hasFocus(),visibility:document.visibilityState};
+   if(event instanceof PointerEvent&&(!event.isPrimary||event.button!==0))return;
+   const captureStartedAt=performance.now(),at=event.timeStamp,prepared=w.__floodPrepared;if(!prepared)return;w.__floodPrepared=undefined;const state={focused:document.hasFocus(),visibility:document.visibilityState};
    // Start real fetch in this input's capture phase, before the actual React
    // stop handler. No route hold, delayed response or cross-process clock.
    const request={clientMessageId:prepared.clientMessageId,floodStartedAt:performance.timeOrigin+performance.now(),httpStatus:null,httpCode:null} as any;w.__floodRequest=request;
    w.__floodRequestPromise=fetch('/api/platform/chat/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:prepared.body}).then(async response=>{const data=await response.json();Object.assign(request,{floodCompletedAt:performance.timeOrigin+performance.now(),httpStatus:response.status,httpCode:data.code});},error=>{Object.assign(request,{floodCompletedAt:performance.timeOrigin+performance.now(),floodError:error instanceof Error?error.name:'request-error'});});
-   const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at,epoch:performance.timeOrigin+at,state,geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};
+   const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at,eventTimeStamp:event.timeStamp,captureStartedAt,isTrusted:event.isTrusted,type:event.type,epoch:performance.timeOrigin+at,state,geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};
    requestAnimationFrame(rafTimestamp=>{const rafEntryAt=performance.now(),state={focused:document.hasFocus(),visibility:document.visibilityState},geometryStartedAt=performance.now(),r=element.getBoundingClientRect(),geometryCompletedAt=performance.now();w.__floodFirst={at:geometryCompletedAt,rafEntryAt,rafTimestamp,geometryStartedAt,geometryCompletedAt,state,indicator:horizontal?r.left+r.width/2:r.top+r.height/2};});
   };w.__floodCapture=capture;window.addEventListener('pointerdown',capture,true);window.addEventListener('keydown',capture,true);
  });
- const floodReceipts=[];
+ const floodReceipts=[],profile=await startThrowPerformanceProfile(browser,dir+'/throw-performance-profile');
+ let floodFailed=false;
  try{
   for(const axis of ['horizontal','vertical'] as const){let receipt:any;
    // One explicitly rejected, unchanged stop may be followed by one new
@@ -225,7 +246,7 @@ try{
    assert.ok(receipt,'Each flood axis requires an actual accepted exact-sample stop');floodReceipts.push(receipt);
   }
   assert.equal(floodReceipts[1].hit.x,floodReceipts[0].lockedX);assert.equal(floodReceipts[1].hit.y,floodReceipts[1].lockedY);
- }finally{await a.page.evaluate(()=>{const w=window as any;window.removeEventListener('pointerdown',w.__floodCapture,true);window.removeEventListener('keydown',w.__floodCapture,true);w.__floodStopPerformance?.();});}
+ }catch(error){floodFailed=true;throw error;}finally{try{await a.page.evaluate(()=>{const w=window as any;window.removeEventListener('pointerdown',w.__floodCapture,true);window.removeEventListener('keydown',w.__floodCapture,true);w.__floodStopPerformance?.();});}catch(error){if(!floodFailed)throw error;report.floodObserverCleanupFailed=true;}finally{try{await profile.stop();}catch(error){if(!floodFailed)throw error;report.performanceProfileCleanupFailed=true;}}}
  await a.page.getByText('Game chat '+runId+' 2',{exact:true}).waitFor();assert.equal(await a.page.evaluate(()=>(window as any).__boardBefore===document.querySelector('.dp-board-stage')),true);report.checks.chatFloodNoBoardRemount=true;report.checks.chatFloodExactStopAndInput=true;
  // A practice menu hands off the selected user's UUID to the actual spectator view.
  try{await viewer.page.goto(origin+'/oefenen');await viewer.page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();const watched=viewer.page.waitForResponse(response=>response.url().endsWith('/match/'+match)&&response.ok());await viewer.page.getByRole('button',{name:'Kijk mee bij '+newName,exact:true}).click();await viewer.page.waitForURL(origin+'/spelen');await viewer.page.getByRole('heading',{name:'Langs de oche',exact:true}).waitFor();await viewer.page.locator('.spectator-scores').getByText(newName,{exact:true}).waitFor();const watchedState=await(await watched).json();assert.equal(watchedState.matchId,match);assert.equal(watchedState.seat,null);report.checks.practiceSpectatorStableTarget=true;}finally{await viewer.context.close();}

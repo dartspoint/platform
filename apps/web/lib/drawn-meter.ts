@@ -13,5 +13,8 @@ export function drawMeter(element:HTMLElement|null,axis:'horizontal'|'vertical',
 }
 export function lockMeter(element:HTMLElement|null,axis:'horizontal'|'vertical',fraction:number){if(element)element.style[axis==='horizontal'?'left':'top']=`${fraction*100}%`;}
 export function timingTrace(value:Record<string,unknown>){
- const scope=window as typeof window&{__dpTimingTraces?:Record<string,unknown>[]};scope.__dpTimingTraces=[...(scope.__dpTimingTraces??[]),value].slice(-80);
+ const scope=window as typeof window&{__dpTimingTraces?:Record<string,unknown>[]};
+ // One browser-local monotone clock, including the actual receipt callback.
+ // These bounded diagnostics never participate in admission or score timing.
+ scope.__dpTimingTraces=[...(scope.__dpTimingTraces??[]),{monotonicAt:performance.now(),...value}].slice(-80);
 }

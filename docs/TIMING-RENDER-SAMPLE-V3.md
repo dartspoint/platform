@@ -277,8 +277,8 @@ blijven verplicht. Playwright emuleert documentfocus; fysieke OS-focus is niet
 bewezen. Er worden geen samples verwijderd of opnieuw gemeten. Alle werphandler- en
 eerste-framegrenzen van **50 ms**, getekende freeze/pending/ACK/impactgrenzen
 van **1 CSS px**, oorspronkelijke **90 + 34 ms** admissiongrenzen en volledige
-state-/versiebehoudcontroles blijven hard. De applicatiebronnen in apps,
-packages, Supabase en ops zijn gelijk aan actieve a74; CI-uitvoering,
+state-/versiebehoudcontroles blijven hard. Op dit historische meetmoment waren de applicatiebronnen in apps,
+packages, Supabase en ops gelijk aan actieve a74; CI-uitvoering,
 fixtures, rapportage en documentatie zijn gewijzigd.
 
 De aanvullende flooddiagnostiek onderscheidt RAF-entry van afgeronde
@@ -304,3 +304,143 @@ Private bewijsbestanden en het bronhashmanifest met
 `measuredFixtureUnchanged: true` staan in
 `artifacts/local-final-proof/workspace-flood-diagnostics-20261013T185535Z/`.
 Dit is lokaal headless bewijs; staging en fysieke apparaten blijven apart.
+
+De staging-CI van `04eb3f3003a99d54546f37bb3dbe99ca5ec0fdb7`, run
+38451467991, bewaart beide geslaagde werpsuites vóór een afzonderlijke
+`HTTPS SDK fixture timed out` bij 90 seconden. Wedstrijd bewaart alle negen
+pogingen: acht exact geldig, één correcte old-afwijzing (**99 ms > 54 ms**)
+met volledige state ongewijzigd, zichtbare fout en herstel; nul uitgesloten.
+Alle zes as/delaycohorts bevatten een geldige stop. Handlermaximum **2 ms**,
+frame-p95/maximum **32 ms**, freeze/ACK **0 CSS px**; vier stabiele grounded
+impacts maximaal **0,000005172 CSS px**. Oefenen bewaart **16/16 geldige**
+stops, nul uitgesloten; handler-p95/maximum **0,4 ms**, frame-p95/maximum
+**13,6 ms**, freeze/pending/ACK **0 CSS px** en acht grounded impacts maximaal
+**0,000013579 CSS px**. Coldguard en aparte old-afwijzingscontrole slagen.
+Private CI-log, veilige artifactrapporten en samenvatting staan onder
+`artifacts/staging-final-proof/04eb-staging-ci-*`. De HTTPS-timeout heeft nog
+geen vastgestelde oorzaak; workspace/flood is niet bereikt en de eerdere
+**479,8 ms** blijft onverklaard. Images zijn niet gepubliceerd en deze commit
+is niet deployed; actieve staging blijft exact
+`a74fbf556b9428841bf7e381593d2719bd27e4fb`. Hosted CI is apart van nieuwe live
+stagingacceptatie en fysieke-apparaatmetingen.
+
+### Aanvullend latencyonderzoek, vóór nieuwe release
+
+De huidige, nog niet gepushte wijziging in `use-server-game.ts`,
+`darts-practice.tsx` en `drawn-meter.ts` zet pending/busy en de exacte DOM-lock
+eerst en roept daarna direct `socket.send` of de native API-fetch aan, vóór
+geometrielezingen, logging en React-updates. Geselecteerd stop/send-werk is
+circa **0,3 ms**; de mislukte mobiele wedstrijd- en oefenpoging meten beide
+**0,2 ms** vanaf de commandhandler tot diens voltooiing. Dat is geen bewijs
+voor de volledige inputreactie. Nieuwe instrumentatie begint bij de
+oorspronkelijke native `event.timeStamp`, bewaart capture, stop/send,
+handlercompletion en afgeronde eerste frozen geometrie afzonderlijk en
+toetst **iedere poging** hard aan **50 ms**. Originele samples, UUID's,
+ingressvensters en retries blijven behouden; failures worden niet gefilterd.
+
+De volgende lokale proeven gebruikten tijdelijk **full Chromium 145.0.7632.6**
+in new-headlessmodus. Die keuze was geen opdrachtvereiste en reproduceert
+niet de oorspronkelijke vaste Playwright-default headless-shellpolicy. De
+oorspronkelijke policy is daarna hersteld voor nieuwe acceptatie. Trace-/PNG-runs
+blijven afzonderlijke diagnostiek; de shellresultaten staan hieronder; CI en staging volgen afzonderlijk.
+
+| Bewaarde full-Chromiumpoging | Native tot capture | Commandhandlerwerk | Native tot eerste frozen geometrie | Uitkomst |
+| --- | ---: | ---: | ---: | --- |
+| Ongetraceerde wedstrijd, mobiele poging 5 | 54,8 ms | 0,2 ms | 66,8 ms | Harde werpgate faalt; alle 5 behouden |
+| Aparte wedstrijdtrace, mobiele poging 5 | 36,9 ms | 0,2 ms | 58,5 ms | Diagnostische werpgate faalt; alle 5 behouden |
+| Ongetraceerd oefenen, mobiele poging 13 | 41,5 ms | 0,2 ms | 54,7 ms | Harde werpgate faalt; alle 13 behouden |
+| Aparte workspace/floodtrace, horizontaal/verticaal | 3,5/0,5 ms | Andere maat dan totale inputreactie | 31,7/32,7 ms | Profielrun slaagt; geen vervangende acceptatie |
+
+Oefenen bewaart dertien echte HTTP 200/exacte receipts met **0 CSS px**
+freeze/pending/ACK; eerste twaalf geometrie-maximum **31,1 ms**. De dertiende
+sample is bij ingress **51 ms** oud binnen **106 ms** bij latency 24. De
+overige drie samples en aparte oude-samplecontrole zijn niet bereikt. De
+mislukte wedstrijdtrace krijgt een echte receipt: **29 ms binnen 54 ms**,
+freeze 0 CSS px. Deze framefailures zijn aparte feiten naast correcte
+timingafwijzingen.
+
+De wedstrijdtrace koppelt die UUID via `blink.user_timing` aan de renderer.
+Traceklok `LINUX_CLOCK_MONOTONIC`, het performance-mark en hostmonitor
+`time.monotonic_ns()` geven een expliciete klokrelatie; Node-/server-epoch-
+klokken worden niet onderling afgetrokken. Binnen 58,5 ms omvat opgenomen
+rendereractiviteit **12,761 ms**; **45,739 ms** heeft geen opgenomen
+main-thread-X-activiteit en is geen bewezen CPU-idle. Layout **0,317 ms**,
+style **0,813 ms**, GC nul; Viz draait vrijwel continu software-renderertaken.
+Twee indicator-/documentrastertaken duren 0,326/0,460 ms. Zes SVG-boardrepaints
+staan in de voorafgaande 250 ms, de laatste 149 ms vóór input; layer-/filter-
+attributie ontbreekt. Een SVG-/transformherschrijving is daarmee niet
+onderbouwd. De aparte PNG-screencast gebruikt **17,84 ms browser-main CPU**
+binnen hetzelfde interval. Het overlappende hostinterval van circa 250 ms
+meet **95,96% CPU-bezetting**, **48,97% CPU-pressure some** en load **15,82**
+op twaalf logische cores. Zonder kernel sched/wake-data is individuele
+wachttijd niet causaal toe te schrijven. Profielverstoring en hostdruk
+verklaren niet bewezen de eerdere ongetraceerde of hosted failures.
+
+Later stabiele PNG-centra liggen binnen 1 CSS px van de DOM-lock. Gecorrigeerde
+CDP-metadatatijd betreft metadata-aanmaak, geen geverifieerde swap-/
+presentatietijd; coalescing/ontvangstvolgorde bewijzen niet iedere frame.
+RAF, stylemutatie, geometry en EventTiming bewijzen geen gepresenteerde of
+fysieke reactie binnen 50 ms. Hosted-main **349,9 ms** (handler 3 ms,
+layoutread 0,1 ms, geen overlappende long task) blijft apart van **479,8 ms**.
+Main en staging gebruikten afzonderlijke hosted VM's; geen gemeten runtime-
+overlap verklaart deze uitschieters. Beschikbare browser-/OS-/hypervisor-
+capaciteit moet onafhankelijk worden geverifieerd.
+
+`latencyMs` is de begrensde helft van de onderste server-gemeten
+RTT-kwartielwaarde, geen input-tot-receiptduur of zuivere draadlatency. HTTP
+challengewerk kan Redis-/eventqueuewerk omvatten; clientclockmapping trekt
+gemeten server-requestprocessing af en blijft vast per fase. Latency 45 geeft
+`min(90,max(20,3*45))+34 = 124 ms`; **138 ms** is terecht 14 ms te oud.
+Originele ingress begint in de apphandler na framework/Colyseusdelivery,
+vóór async auth; dit is geen kernelreceive. Daarna volgen bounded capture,
+auth, databasepool/rowlock, validatie en transactionele writes. `processedAt`
+is geen commitcompletion; receipt-`dbMs` omvat niet alle receiptwrites/COMMIT,
+`queueMs` is een wall-/monotone schatting en lokale send-calltijd bewijst geen
+wireflush. De receipt volgt na de transactie. Clockdrift/wallclocksprongen
+zijn niet afzonderlijk begrensd. Latere databasewachten kunnen de reeds
+vastgelegde sampleleeftijd bij ingress niet verlengen.
+
+Private failures en afgeleide analyses blijven onder
+`artifacts/local-final-proof/game-touch-performance-profile-20261013T195052Z/`,
+`workspace-throw-performance-profile-20261013T195349Z/` en
+`native-remaining-acceptance-20261013T200351Z/`. Git blijft `04eb3f3`, live
+staging `a74fbf5`; de drie appwijzigingen hebben nog geen nieuwe CI-,
+deployment- of liveacceptatieclaim.
+
+
+### Normale acceptatie met de bestaande browserpolicy
+
+De oorspronkelijke Playwright-policy is hersteld: Chromium Headless Shell
+145.0.7632.6 uit de vastgepinde Playwright 1.58.2, één serieel uitgevoerde
+fixture tegelijk, zonder tracing/screencast. De stopwatch blijft op native
+`event.timeStamp`; mobiele stops gebruiken echte touch-input. De appbronnen
+zijn dezelfde drie hashes als in de afzonderlijke full-Chromiumproeven. Alle
+mislukte full-Chromiumpogingen blijven behouden; deze browservergelijking
+bewijst niet dat hun oorzaak of de eerdere hosted framepauze is opgelost.
+
+| Lokale policycontrole | Aantal | Native tot commanddiagnostiek, maximum | Native tot eerste frozen geometrie, p95 / maximum | Freeze / ACK |
+| --- | ---: | ---: | ---: | ---: |
+| Wedstrijd, 100/300/1000-ms ACK, reconnect | 8/8 exact geldig | 35,8 ms | 45,7 / 45,7 ms | 0 / 0 CSS px |
+| Oefenen, desktop/mobiel, beide assen | 16/16 HTTP 200 exact | 14,5 ms | 30,7 / 30,7 ms | 0 / 0 CSS px |
+| Bestaande flood, horizontaal | 1/1 exact geldig | 3,0 ms | 21,5 / 21,5 ms | 0 / 0 CSS px |
+| Bestaande flood, verticaal | 1/1 exact geldig | 2,0 ms | 20,3 / 20,3 ms | 0 / 0 CSS px |
+
+Geen poging uitgesloten; alle zes wedstrijd-as/delaycohorts, verloren ACK,
+hergebruik van dezelfde UUID, reconnect en stabiele impacts slagen. Vier
+wedstrijd- en acht oefenimpacts hebben maximaal 0,000014574 / 0,000015889
+CSS px tipafwijking. De aparte 160-ms oude-samplecontrole geeft HTTP 409,
+ongewijzigde volledige state, zichtbare fout en gecontroleerd herstel.
+Flood behoudt de oorspronkelijke drie seeds plus overlappende vierde
+request met echte HTTP 429; ingressleeftijden 10/14 ms passen binnen 54 ms.
+Workspace heeft 21/21 checks en 15/15 canonieke chatregels; chat-p95
+11,7/236 ms blijft informatief. Het game-hostgemiddelde van circa 95,17%
+CPU-bezetting toont dat deze lokale omgeving niet als vrije QA-host geldt.
+
+Bewijs en bronmanifest: `artifacts/local-final-proof/native-policy-shell-acceptance-20261013T200853Z/`.
+Browsermetadata vermeldt dat Playwrights gerapporteerde executablepath geen
+bewijs is voor de werkelijk gestarte shellbinary. Nieuwe hosted CI gebruikt
+`ubuntu-24.04` en een externe, begrensde 1-Hz-capaciteitmonitor; expliciete
+veilige CI-artifacts bevatten CPU/PSI/geheugen/swap/cgrouplimieten en HTTPS-
+fixturefasen. Ruwe traces/beelden, procesargumenten en credentials worden
+niet geüpload. Nieuwe CI en nieuwe live-releaseacceptatie moeten apart
+worden vastgelegd; bovenstaande cijfers zijn uitsluitend lokaal.

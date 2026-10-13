@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -42,7 +42,7 @@ jobs:
       - name: Start isolated infrastructure and run acceptance tests
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
-        run: bash scripts/ci-integration.sh
+        run: python3 scripts/capture-test-capacity.py artifacts/test-host-capacity.json -- bash scripts/ci-integration.sh
       - name: Verify real database TLS and encrypted restore
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
@@ -63,6 +63,8 @@ jobs:
               'artifacts/render-sample-timing-result.json': 'render-sample-timing-result.json',
               'artifacts/render-sample-timing-progress.json': 'render-sample-timing-progress.json',
               'artifacts/render-sample-rejected.json': 'render-sample-rejected.json',
+              'artifacts/https-sdk-progress.json': 'https-sdk-progress.json',
+              'artifacts/https-proxy-result.json': 'https-proxy-result.json',
           }
           omitted = {
               'message', 'body', 'text', 'stack', 'headers', 'authorization',
@@ -88,6 +90,67 @@ jobs:
               if isinstance(value, str) and credential_value.search(value):
                   return None
               return value
+          # Capacity reports have an exact metadata schema, independent of the
+          # broader browser-report redaction. No command, PID, path or free text.
+          def capacity_report(data):
+              def number(value):
+                  if value is None:
+                      return None
+                  if type(value) not in (int, float) or not __import__('math').isfinite(value):
+                      raise ValueError('Invalid capacity number')
+                  return value
+              def numbers(value, keys):
+                  if value is None:
+                      return None
+                  if not isinstance(value, dict):
+                      raise ValueError('Invalid capacity object')
+                  return {key: number(value[key]) for key in keys if key in value}
+              def flag(value):
+                  if type(value) is not bool:
+                      raise ValueError('Invalid capacity flag')
+                  return value
+              def timestamp(value):
+                  if value is None:
+                      return None
+                  if not isinstance(value, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z', value):
+                      raise ValueError('Invalid capacity timestamp')
+                  return value
+              def limit(value):
+                  if value is None:
+                      return None
+                  return {'value': number(value['value']), 'unlimited': flag(value['unlimited'])}
+              def cgroup(value):
+                  if value is None:
+                      return None
+                  cpu, memory = value.get('cpu'), value.get('memory')
+                  return {
+                      'version': number(value['version']), 'supported': flag(value['supported']),
+                      'cpu': None if cpu is None else {**numbers(cpu, ('quota_us', 'period_us')), 'unlimited': flag(cpu['unlimited']), 'stats': numbers(cpu['stats'], ('usage_usec', 'user_usec', 'system_usec', 'nr_periods', 'nr_throttled', 'throttled_usec', 'nr_bursts', 'burst_usec'))},
+                      'memory': None if memory is None else {**numbers(memory, ('current_bytes', 'swap_current_bytes')), 'max_bytes': limit(memory['max_bytes']), 'swap_max_bytes': limit(memory['swap_max_bytes']), 'events': numbers(memory['events'], ('low', 'high', 'max', 'oom', 'oom_kill', 'oom_group_kill'))},
+                  }
+              if data['schema_version'] != 1 or data['clock_relationship'] != 'same_host_sequential_monotonic_and_utc_only' or len(data['samples']) > 4096:
+                  raise ValueError('Invalid capacity schema')
+              host, measurement = data['host'], data['measurement']
+              if host['os'] not in ('linux', 'other') or host['architecture'] not in ('x86_64', 'aarch64', 'other'):
+                  raise ValueError('Invalid capacity host')
+              result = {
+                  'schema_version': 1, 'clock_relationship': 'same_host_sequential_monotonic_and_utc_only',
+                  'host': {**numbers(host, ('logical_cpu_count', 'affinity_cpu_count', 'clock_ticks_per_second', 'page_size_bytes')), 'os': host['os'], 'architecture': host['architecture']},
+                  'measurement': {**numbers(measurement, ('started_monotonic_ns', 'ended_monotonic_ns', 'period_seconds', 'max_records', 'max_runtime_seconds', 'sample_count', 'dropped_records', 'child_returncode', 'forwarded_signal')), 'started_utc': timestamp(measurement['started_utc']), 'ended_utc': timestamp(measurement['ended_utc']), 'timed_out': flag(measurement['timed_out']), 'complete': flag(measurement['complete']), 'read_errors': numbers(measurement['read_errors'], ('cpu', 'load', 'memory', 'swap', 'pressure_cpu', 'pressure_memory', 'pressure_io', 'cgroup', 'cgroup_cpu', 'cgroup_memory'))},
+                  'samples': [],
+              }
+              for sample in data['samples']:
+                  cpu = sample['cpu']
+                  result['samples'].append({
+                      **numbers(sample, ('monotonic_ns', 'elapsed_ns')), 'utc': timestamp(sample['utc']),
+                      'cpu': None if cpu is None else {'ticks': numbers(cpu['ticks'], ('user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal')), 'utilization': numbers(cpu['utilization'], ('busy_percent', 'idle_percent', 'iowait_percent', 'steal_percent'))},
+                      'load': numbers(sample['load'], ('one', 'five', 'fifteen', 'runnable', 'total')),
+                      'memory_kib': numbers(sample['memory_kib'], ('total', 'available', 'swap_total', 'swap_free')),
+                      'swap_pages': numbers(sample['swap_pages'], ('in', 'out', 'in_delta', 'out_delta')),
+                      'pressure': {kind: None if sample['pressure'][kind] is None else {scope: numbers(values, ('avg10', 'avg60', 'avg300', 'total')) for scope, values in sample['pressure'][kind].items() if scope in ('some', 'full')} for kind in ('cpu', 'memory', 'io')},
+                      'cgroup': cgroup(sample['cgroup']),
+                  })
+              return result
           for source, name in reports.items():
               path = Path(source)
               if not path.exists():
@@ -101,6 +164,18 @@ jobs:
               destination.mkdir(mode=0o700, parents=True, exist_ok=True)
               target = destination / name
               target.write_text(json.dumps(safe(data), indent=2, allow_nan=False) + '\n')
+              target.chmod(0o600)
+          capacity = Path('artifacts/test-host-capacity.json')
+          if capacity.exists():
+              if capacity.is_symlink() or not stat.S_ISREG(capacity.stat().st_mode):
+                  raise SystemExit('Safe capacity export refused an unexpected file type')
+              try:
+                  data = capacity_report(json.loads(capacity.read_text()))
+              except (OSError, ValueError, TypeError, KeyError):
+                  raise SystemExit('Safe capacity export refused invalid metadata')
+              destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+              target = destination / 'test-host-capacity.json'
+              target.write_text(json.dumps(data, indent=2, allow_nan=False) + '\n')
               target.chmod(0o600)
           PY
       - name: Preserve safe browser measurements
@@ -118,3 +193,6 @@ jobs:
             artifacts/ci-safe/render-sample-timing-result.json
             artifacts/ci-safe/render-sample-timing-progress.json
             artifacts/ci-safe/render-sample-rejected.json
+            artifacts/ci-safe/https-sdk-progress.json
+            artifacts/ci-safe/https-proxy-result.json
+            artifacts/ci-safe/test-host-capacity.json

@@ -56,7 +56,9 @@ function writeChatProof(){
 }
 try{
  const {login,get,post}=await import('../e2e/helpers');
- browser=await chromium.launch();const first=await login(browser,'ReservedA');
+ browser=await chromium.launch({headless:true});
+ const browserEnvironment={engine:'chromium-headless-shell',channel:'default',headless:true,version:browser.version(),executablePathReportedByPlaywright:chromium.executablePath(),executablePathIsLaunchedBinary:false,physicalHardwareTested:false};
+ const first=await login(browser,'ReservedA');
  const ready=await first.page.request.get(origin+'/readyz');assert.equal(ready.status(),200);
  assert.equal((await ready.json()).release,expectedRelease,'Browser acceptance must use the intended active release');
  const rt=await first.page.request.get('https://realtime.staging.dartspoint.nl/readyz');assert.equal(rt.status(),200);
@@ -87,7 +89,7 @@ try{
   // Login contexts never start tracing; screenshots run after the measured phase.
   await first.page.bringToFront();await first.page.getByLabel('Chatbericht',{exact:true}).focus();
   const senderState=await pageState(first.page),receiverState=await pageState(second.page),samples:any[]=[];
-  chatProof={release:expectedRelease,samples,targets:{localMs:50,recipientMs:250},localGate:'reported-only-user-priority-2026-10-13',recipientGate:'reported-only-user-priority-2026-10-13',measurement:{sender:senderState,receiver:receiverState,receiverUnfocused:!receiverState.focused,tracing:false,screenshotsDuringMeasurement:false,warmupSamplesExcluded:0},environment:'Staging web/PostgreSQL/Redis/Colyseus over Tailscale; two Chromium sessions, actual focus and visibility recorded per sample; no injected delay'};
+  chatProof={release:expectedRelease,browserEnvironment,samples,targets:{localMs:50,recipientMs:250},localGate:'reported-only-user-priority-2026-10-13',recipientGate:'reported-only-user-priority-2026-10-13',measurement:{sender:senderState,receiver:receiverState,receiverUnfocused:!receiverState.focused,tracing:false,screenshotsDuringMeasurement:false,warmupSamplesExcluded:0},environment:'Staging web/PostgreSQL/Redis/Colyseus over Tailscale; two Chromium sessions, actual focus and visibility recorded per sample; no injected delay'};
   assert.equal(senderState.focused,true,'Measured staging sender has document focus');assert.equal(senderState.visibility,'visible','Measured staging sender is visible');
   for(let n=0;n<15;n++){
    if(n%3===0)await first.page.waitForTimeout(2200);
@@ -124,7 +126,7 @@ try{
    child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(new Error(`Staging ${mode} failed (${code})`)));
   });
  }
- writeFileSync(`artifacts/staging-${mode}-acceptance.json`,JSON.stringify({ok:true,release:expectedRelease,origin,mode,verifiedAt:new Date().toISOString(),transport:'TLS via local CONNECT proxy and Tailscale',reservedPlayers:2},null,2));
+ writeFileSync(`artifacts/staging-${mode}-acceptance.json`,JSON.stringify({ok:true,release:expectedRelease,origin,mode,browserEnvironment,verifiedAt:new Date().toISOString(),transport:'TLS via local CONNECT proxy and Tailscale',reservedPlayers:2},null,2));
 }finally{
  try{writeChatProof();}finally{await browser?.close();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>proxy.close(()=>resolve()));}
 }

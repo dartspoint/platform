@@ -78,9 +78,13 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string){
   const stoppedAt=performance.now(),axis=type==='dart.stop_horizontal'?'horizontal':type==='dart.stop_vertical'?'vertical':null,sample=axis?drawn.current[axis]:null;
   if(axis&&(!sample||sample.phaseToken!==s.state.phaseToken||s.state.timingVersion===TIMING_VERSION&&sample.sampleAt<s.state.phaseStartedAt||!serverCalibrated.current||!clock.current.ready))return;
   const payload={protocolVersion:1,commandId:crypto.randomUUID(),matchId:s.matchId,expectedStateVersion:s.stateVersion,type,phaseToken:s.state.phaseToken,...(axis&&sample&&s.state.timingVersion===TIMING_VERSION?{renderSample:{sampleAt:sample.sampleAt,connectionId:connectionId.current,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1}}:{})};pending.current=payload;
-  const element=axis==='horizontal'?xIndicator.current:yIndicator.current,geometry=axis&&element?meterGeometry(element,axis):undefined;
-  if(axis&&sample){lockMeter(element,axis,sample.fraction);const trace={event:'local-stop',commandId:payload.commandId,matchId:s.matchId,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1,phase:axis,phaseToken:s.state.phaseToken,phaseStartedAt:s.state.phaseStartedAt,timingVersion:s.state.timingVersion,rendered:sample,geometry,inputAt:stoppedAt,clockOffset:clock.current.phaseOffset(s.state.phaseToken),localLock:sample.fraction};timingTrace(trace);performance.mark('dp-local-stop',{detail:{...trace,axis:type,at:stoppedAt,x:xMeter.get(),y:yMeter.get()}});}
-  readyRetries.current=0;setSending(true);socket.current.send('command',payload);
+  const element=axis==='horizontal'?xIndicator.current:yIndicator.current;
+  if(axis&&sample)lockMeter(element,axis,sample.fraction);
+  const stopAppliedAt=performance.now(),sendAt=performance.now();
+  // Submit the frozen sample before geometry reads, diagnostics or React work.
+  socket.current.send('command',payload);const sendReturnedAt=performance.now();
+  readyRetries.current=0;setSending(true);
+  if(axis&&sample){const geometry=element?meterGeometry(element,axis):undefined,trace={event:'local-stop',commandId:payload.commandId,matchId:s.matchId,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1,phase:axis,phaseToken:s.state.phaseToken,phaseStartedAt:s.state.phaseStartedAt,timingVersion:s.state.timingVersion,rendered:sample,geometry,inputAt:stoppedAt,stopAppliedAt,sendAt,sendReturnedAt,clockOffset:clock.current.phaseOffset(s.state.phaseToken),localLock:sample.fraction};timingTrace(trace);performance.mark('dp-local-stop',{detail:{...trace,axis:type,at:stoppedAt,x:xMeter.get(),y:yMeter.get(),handlerCompletedAt:performance.now()}});}
  },[xMeter,yMeter]);
  const startOrStop=useCallback(()=>{const s=current.current;if(!active||!s||s.seat!==s.state.turn||s.lifecycle!=='playing'||pending.current)return;if(s.state.phase==='horizontal')command('dart.stop_horizontal');else if(s.state.phase==='vertical')command('dart.stop_vertical');if(preferences.haptics)navigator.vibrate?.(12);},[active,preferences.haptics,command]);
  const beginMatch=useCallback(async()=>command('match.ready'),[command]);

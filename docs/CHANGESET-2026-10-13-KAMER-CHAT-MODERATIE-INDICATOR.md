@@ -692,8 +692,8 @@ geautoriseerde, canonieke afleveringen en documentfocus/zichtbaarheid blijven
 verplicht. Playwright emuleert documentfocus; fysieke OS-focus is niet bewezen.
 Geen grens is verhoogd en geen sample gefilterd, verwijderd of opnieuw gemeten.
 Alle werphandler-/framegrenzen van 50 ms, 1-CSS-pixelgrenzen en oorspronkelijke
-admission-/statecontroles blijven hard. De applicatiebroncode in apps,
-packages, Supabase en ops is ongewijzigd ten opzichte van actieve a74;
+admission-/statecontroles blijven hard. Op dit historische meetmoment was de applicatiebroncode in apps,
+packages, Supabase en ops ongewijzigd ten opzichte van actieve a74;
 CI-uitvoering, fixtures, rapportagebeleid en documentatie zijn gewijzigd.
 
 De aanvullende flooddiagnostiek bewaart apart de RAF-callbacktijd en de tijd
@@ -723,3 +723,86 @@ niet. Bewijs staat in
 met private log, ruwe `generated-files`, samenvatting en bronhashmanifest
 (`measuredFixtureUnchanged: true`). Dit is lokale headless browseracceptatie;
 staging en fysieke apparaten blijven apart.
+
+De [staging-CI voor `04eb3f3`, run 38451467991](https://github.com/dartspoint/platform/actions/runs/38451467991)
+bewaart geslaagde wedstrijd- en oefenwerpproeven vóór een afzonderlijke
+`HTTPS SDK fixture timed out` bij de 90-secondenlimiet. Wedstrijd: **9/9**
+pogingen behouden, **8 geldig** en **1 correct geweigerd** wegens een sample
+van **99 ms** buiten **54 ms**, met volledige state ongewijzigd, zichtbare
+fout en herstel; geen uitgesloten pogingen. Alle zes as/delaycohorts bevatten
+een geldige stop. Handlermaximum is **2 ms**, frame-p95/maximum **32 ms**,
+freeze/ACK **0 CSS px**; vier grounded impacts wijken maximaal
+**0,000005172 CSS px** af en blijven stabiel. Oefenen: **16/16 geldig**, nul
+uitgesloten, handler-p95/maximum **0,4 ms**, frame-p95/maximum **13,6 ms** en
+freeze/pending/ACK **0 CSS px**; acht grounded impacts maximaal
+**0,000013579 CSS px**. Cold-readyguard en aparte oude-samplecontrole slagen.
+De CI-upload bewaart deze veilige numerieke rapporten; private log en
+samenvatting staan onder `artifacts/staging-final-proof/04eb-staging-ci-*`.
+De HTTPS-timeoutoorzaak is niet vastgesteld; deze run bereikte de
+workspace/floodsuite niet en verklaart de eerdere **479,8 ms** niet. Images en
+deployment zijn overgeslagen: actieve staging blijft exact
+`a74fbf556b9428841bf7e381593d2719bd27e4fb`. Dit bewijst hosted CI-werpgedrag,
+geen nieuwe live stagingacceptatie of fysieke apparaten.
+
+### Aanvullend latencyonderzoek vóór nieuwe commit
+
+Drie nog niet gepushte appwijzigingen zetten pending/busy en exacte lokale
+lock vóór direct socket-/native-fetchdispatch; geometrielezingen, logging en
+React-updates volgen. Geselecteerd stop/send-werk is circa **0,3 ms**, maar
+oorspronkelijke native-eventtijd tot afgeronde frozen geometrie blijft voor
+**iedere poging ≤50 ms**, met **≤1 CSS px** en ongewijzigde sample-/UUID-/
+ingress-/retryregels. Tijdelijk full Chromium 145.0.7632.6 verschilt van de
+oorspronkelijke vaste Playwright-headless-shellpolicy: deze proeven blijven
+apart; de oorspronkelijke policy is daarna hersteld.
+
+Ongetraceerde wedstrijd faalt bij mobiele poging vijf: **54,8 ms** vóór
+capture, **0,2 ms** commandwerk en **66,8 ms** tot frozen geometrie; alle vijf
+pogingen behouden. Ongetraceerd oefenen faalt bij poging dertien met
+**41,5/0,2/54,7 ms**. Alle dertien HTTP 200/exacte samples met 0-pixel-
+freeze/pending/ACK blijven behouden; eerste twaalf maximum **31,1 ms**,
+laatste ingress **51 ms binnen 106 ms**. Drie resterende samples en aparte
+oude-samplecontrole zijn niet bereikt. De aparte wedstrijdtrace faalt met
+**36,9/0,2/58,5 ms**, bij correcte acceptatie (**29 ms binnen 54 ms**).
+Workspace/floodprofiel meet horizontaal/verticaal **31,7/32,7 ms** en slaagt
+als diagnostische run, geen vervangende normale acceptatie.
+
+De wedstrijdtrace meet **12,761 ms** opgenomen rendereractiviteit binnen
+58,5 ms, layout **0,317 ms**, style **0,813 ms**, GC nul. Software-Viz is
+vrijwel continu actief; layer-/filter- en kernel-schedulerattributie ontbreken.
+De screencast zelf gebruikt **17,84 ms browser-main CPU**. Het expliciet
+gekoppelde monotone hostinterval meet **95,96% CPU-bezetting**,
+**48,97% CPU-pressure some** en load **15,82** op twaalf logische cores.
+Dit ondersteunt onafhankelijke capaciteitsverificatie, geen bewezen oorzaak
+voor hosted **349,9/479,8 ms** of ongetraceerde failures. Hosted CI-VM's waren
+afzonderlijk; gemeten overlap verklaart 349,9 ms niet. Later stabiele
+PNG-centra liggen binnen 1 CSS px; gecorrigeerde CDP-metadata is
+metadata-aanmaaktijd, geen bewezen swap/presentatie binnen 50 ms of fysiek
+schermbewijs. Geen gemeten boardrasteroorzaak rechtvaardigt een SVG-rewrite.
+
+**138 > 124 ms** blijft een aparte correcte afwijzing: latency 45 is
+begrensde halve onderste RTT-kwartielwaarde en geeft
+`min(90,max(20,3*45))+34 = 124 ms`. Appreceive wordt vóór async auth
+vastgelegd; latere pool-/rowlock-/transaction-/COMMITwachten verlengen die
+sampleleeftijd niet. `processedAt`, `queueMs`, `dbMs` en send-calltijd zijn
+geen volledige wire-/commit-/presentatietijdlijn; klok-/queuebeperkingen staan
+in het timingdocument. Private failures/profielen blijven in de drie
+proofmappen van **19:50:52, 19:53:49 en 20:03:51 UTC** onder
+`artifacts/local-final-proof`. Git blijft `04eb3f3`, live staging `a74fbf5`;
+nieuwe CI en liveacceptatie volgen nog.
+
+
+De nieuwe normale lokale policybundel gebruikt dezelfde gewijzigde app met
+vastgepinde Chromium Headless Shell, native `event.timeStamp`, echte mobiele
+touch-input en alle harde gates: wedstrijd 8/8 exact geldig, frame-p95/max
+45,7 ms; oefenen 16/16 HTTP 200 exact, frame-p95/max 30,7 ms; originele
+flood H/V 21,5/20,3 ms. Freeze/pending/ACK zijn 0 CSS px, 12 stabiele impacts
+hebben maximaal 0,000015889 CSS px fout; geen uitgesloten pogingen. Alle zes
+wedstrijdcohorts, lost-ACK/UUID/reconnect en de aparte 160-ms oude-sample-
+afwijzing met volledig statebehoud slagen. Workspace: 21/21 checks en 15/15
+canonieke chatregels; informatieve chat-p95 11,7/236 ms. Bewijs:
+`artifacts/local-final-proof/native-policy-shell-acceptance-20261013T200853Z/`.
+Dit vervangt geen full-Chromiumfailure of hosted/stagingmeting. CI is op
+ubuntu-24.04 vastgezet en bewaart begrensde 1-Hz-capaciteitmetadata plus
+HTTPS-fixturefasen; de 90-seconden-HTTPSgate blijft gelijk. SDK-operations en
+cleanup hebben afzonderlijke harde grenzen; gesloten owned rooms wachten
+niet op een toekomstige leave-event. Nieuwe CI/liveacceptatie volgen apart.
