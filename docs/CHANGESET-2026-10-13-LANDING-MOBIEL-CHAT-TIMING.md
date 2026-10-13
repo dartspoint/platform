@@ -19,6 +19,25 @@ Opdracht: `reference/update-2026-10-13/START-HIER-CODEX.txt`; vaste visuele bron
 | P01 | Synchrone lokale stop; duurzaam ingressmoment; gedeelde timing; begrensde queue | Voor/na traces, input/queue/DB/correctie, vertraagde bevestigingen | Lokaal geverifieerd; fysieke apparaten/120 Hz niet getest |
 | A01 | Bestaande CI en gecontroleerde stagingpipeline | Typecheck, tests, build, operations, release-SHA/HTTPS | Lokaal geverifieerd; staginggate volgt |
 
+## Bestanden per eis
+
+Alle paden zijn relatief aan de repositoryroot; de volledige bestandswijzigingen zijn zichtbaar in de implementatiecommits.
+
+| Eis | Belangrijkste implementatiebestanden | Gerichte verificatie |
+|---|---|---|
+| L01 | `apps/web/public/landing/index.html` | `tests/e2e/update-2026-10-13.ts`, `tests/e2e/interface.ts` |
+| L02 | `ops/Caddyfile.landing.template`, `ops/update-host.template.py`, `scripts/build-host-update.py` | `tests/integration/landing-proxy.py` |
+| L03 | `packages/data/src/launch.ts`, `apps/web/app/api/launch-signups/route.ts`, `apps/web/app/api/launch-unsubscribe/route.ts`, beide `20261013*`-migraties, `scripts/launch-export.ts` | `tests/integration/update-2026-10-13.ts`, `tests/integration/restore.ts`, `scripts/verify-launch-storage.ts` |
+| U01 | `apps/web/components/darts-community.tsx`, `darts-community.css`, `darts-play-shell.css` in dezelfde map | `tests/e2e/update-2026-10-13.ts`, `tests/e2e/interface.ts` |
+| U02 | `apps/web/components/darts-app.tsx`, `darts-lobby.tsx`, `darts-practice.tsx` in dezelfde map; `packages/data/src/community.ts`, `practice.ts` in dezelfde map | `tests/integration/update-2026-10-13.ts`, `tests/e2e/practice.ts` |
+| U03 | `packages/data/src/projections.ts`, `community.ts` in dezelfde map; `apps/realtime/src/server.ts`, `apps/web/components/chat-badge.tsx`, `apps/web/lib/chat-unread.ts` | `tests/e2e/chat-read.ts`, `tests/integration/update-2026-10-13.ts` |
+| U04 | `apps/web/components/player-identity.tsx`, app-/beheercomponenten; `packages/emails/src/templates.ts`, `apps/web/lib/darts-email-templates.ts` | `tests/unit/update-2026-10-13.test.ts`, `tests/integration/mail.ts`, browserbeelden |
+| U05 | `apps/web/components/darts-community.tsx`, `darts-community.css` in dezelfde map | `tests/e2e/visual.ts`, `tests/e2e/update-2026-10-13.ts` |
+| U06 | `apps/web/components/darts-app.tsx`, `darts-game.tsx` in dezelfde map; `packages/data/src/admin.ts`, `community.ts` in dezelfde map | `tests/integration/update-2026-10-13.ts`, mobiele/desktop Meer-beelden |
+| U07 | `packages/game-core/src/audit-presentation.ts`, `packages/data/src/admin.ts`, `apps/web/components/admin/darts-admin.tsx` | `tests/unit/update-2026-10-13.test.ts`, `tests/e2e/visual.ts` |
+| P01 | `apps/web/lib/use-server-game.ts`, `use-timing-input.ts` in dezelfde map; `packages/game-core/src/timing.ts`, `packages/data/src/timing.ts`, `matches.ts`, `practice.ts` in dezelfde map; `apps/realtime/src/server.ts` | `tests/e2e/game-timing.ts`, `tests/e2e/update-2026-10-13.ts`, `tests/integration/load.ts`, unit-/retrytests |
+| A01 | `.github/workflows/deploy.yml`, `scripts/ci-integration.sh`, `ops/scripts/deploy.py`, `backup-gate.py`, `restore-db.py` in dezelfde map | Bestaande CI, lokale acceptatie- en infrastructuretests; stagingrun volgt na rootinstallatie |
+
 ## Woordenlijst
 
 **DP — DartsPoints** zijn rankingpunten. De bestaande ratingformule, plaatsing en historie blijven behouden; interne Elo-veldnamen blijven waar passend. DP zijn geen koopbaar tegoed. **Divisiepunten / competitiepunten** tellen afzonderlijk mee voor het klassement.
