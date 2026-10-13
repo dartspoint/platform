@@ -26,6 +26,7 @@ try{
  const channel=(await db().query("select id from channels where room_id=$1 and kind='community'",[room])).rows[0].id;
  const dmB=(await privateChannel(a,{targetId:b.id})).channelId,dmC=(await privateChannel(a,{targetId:c.id})).channelId;
  for(let i=0;i<3;i++)await sendMessage(b,{channelId:channel,clientMessageId:randomUUID(),body:'Kamer '+i});
+ await new Promise(resolve=>setTimeout(resolve,2100)); // Separate intentional new-message bursts; no runtime send delay.
  for(let i=0;i<2;i++)await sendMessage(b,{channelId:dmB,clientMessageId:randomUUID(),body:'Privé B '+i});
  await sendMessage(c,{channelId:dmC,clientMessageId:randomUUID(),body:'Privé C'});
  const sum=async()=> (await chatChannelsProjection(a)).reduce((n,x)=>n+x.unread,0);
@@ -48,7 +49,7 @@ try{
  assert.equal((await roomsProjection(false,a.id)).find(x=>x.id===room)!.canManage,false);await assert.rejects(moderate(a,{targetId:c.id,roomId:room,kind:'warn',reason:'Rechten ingetrokken',minutes:1}),{code:'forbidden'});
  const audit=(await db().query("select action from private.audit_events where actor_id=$1 and action like 'room.moderator.%'",[own.id])).rows;assert.equal(audit.filter(x=>x.action.endsWith('assigned')).length,2);assert.equal(audit.filter(x=>x.action.endsWith('revoked')).length,1);
  const session=await practiceCommand(a,{type:'reset',commandId:randomUUID(),configuration:{mode:'free',tutorial:false,chosenDouble:20,finish:170}});await new Promise(r=>setTimeout(r,10));
- const payload={type:'horizontal',commandId:randomUUID(),sessionId:session.id,expectedStateVersion:session.stateVersion,phaseToken:session.state.phaseToken};const received=Date.now();await new Promise(r=>setTimeout(r,300));const receipt=await practiceCommand(a,payload,{receivedAt:received,latencyMs:0});assert.equal(receipt.timing.receivedAt,received);assert.ok(Math.abs(receipt.state.lockedX!-meterPosition(received,session.state.phaseStartedAt,'horizontal'))<1e-10,'Queue delay cannot move admitted stop');assert.deepEqual(await practiceCommand(a,payload),receipt);
+ const received=Date.now(),connectionId=randomUUID();const payload={type:'horizontal',commandId:randomUUID(),sessionId:session.id,expectedStateVersion:session.stateVersion,phaseToken:session.state.phaseToken,renderSample:{sampleAt:received-1,connectionId,dartNumber:1}};await new Promise(r=>setTimeout(r,300));const receipt=await practiceCommand(a,payload,{receivedAt:received,latencyMs:0,connectionId,admissionWindowMs:54});assert.equal(receipt.timing.receivedAt,received);assert.ok(Math.abs(receipt.state.lockedX!-meterPosition(payload.renderSample.sampleAt,session.state.phaseStartedAt,'horizontal'))<1e-10,'Queue delay cannot move admitted rendered sample');assert.deepEqual(await practiceCommand(a,payload),receipt);
  await assert.rejects(registerIngress('practice',a,payload.commandId,{...payload,type:'vertical'},{receivedAt:Date.now()}),{code:'idempotency_conflict'});
  const rating=(await db().query('select rating,ranked_played from player_ratings where user_id=$1',[a.id])).rows[0];assert.equal(Number(rating.rating),1500);assert.equal(rating.ranked_played,0);
  await joinRoom(a,{roomId:other});await assert.rejects(practiceSnapshot(a,session.id),{code:'join_room_first'});await assert.rejects(practiceCommand(a,{...payload,commandId:randomUUID()}),{code:'practice_room_changed'});

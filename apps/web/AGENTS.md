@@ -9,6 +9,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 <!-- END:nextjs-agent-rules -->
 
 De actuele gedragswijzigingen en bewijschecklist staan in
-`docs/CHANGESET-2026-10-13-LANDING-MOBIEL-CHAT-TIMING.md` (vanaf de repositoryroot).
+`docs/CHANGESET-2026-10-13-KAMER-CHAT-MODERATIE-INDICATOR.md` (vanaf de repositoryroot).
+De voorafgaande landing/mobile-release staat in `docs/CHANGESET-2026-10-13-LANDING-MOBIEL-CHAT-TIMING.md`.
 De vaste opdracht/ontwerpbron staat in `reference/update-2026-10-13/`.
 Gebruik deze uitsluitend als visuele bron; behoud echte Auth, persistence en serverautoriteit.

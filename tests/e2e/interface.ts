@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import {writeFile} from 'node:fs/promises';
 import {login,get,post,origin} from './helpers';
 const browser=await chromium.launch();
@@ -9,9 +9,11 @@ try{
  const changed=page.waitForResponse(r=>r.url().endsWith('/api/platform/practice')&&r.request().method()==='POST');await page.getByLabel('Jouw dubbel',{exact:true}).selectOption('7');const prior=await(await changed).json();assert.equal(prior.state.configuration.chosenDouble,7);
  await page.getByRole('button',{name:'Finishes',exact:true}).click();await page.getByLabel('Uitgooien vanaf',{exact:true}).waitFor();
  const stale=await page.request.post(origin+'/api/platform/practice',{data:{type:'horizontal',commandId:crypto.randomUUID(),sessionId:prior.id,expectedStateVersion:prior.stateVersion,phaseToken:prior.state.phaseToken}});assert.equal(stale.status(),409);assert.equal((await stale.json()).code,'practice_session_completed');
- await page.getByRole('button',{name:'Stop de richting',exact:true}).waitFor();await page.getByLabel('Uitgooien vanaf',{exact:true}).focus();await page.keyboard.press('Space');assert.equal(await page.getByRole('button',{name:'Stop de richting',exact:true}).count(),1,'Focused input cannot throw');
+ // Keyboard input does not auto-wait for an enabled control. Exercise the
+ // actual focus guard after v3 clock calibration, then stop each ready phase.
+ await expect(page.getByRole('button',{name:'Stop de richting',exact:true})).toBeEnabled();await page.getByLabel('Uitgooien vanaf',{exact:true}).focus();await page.keyboard.press('Space');assert.equal(await page.getByRole('button',{name:'Stop de richting',exact:true}).count(),1,'Focused input cannot throw');
  await page.evaluate(()=>{(document.activeElement as HTMLElement)?.blur();});await page.keyboard.press('Space');await page.getByRole('button',{name:'Stop de hoogte en gooi',exact:true}).waitFor();
- await page.keyboard.press('Space');await page.getByRole('button',{name:'Volgende pijl',exact:true}).waitFor();
+ await expect(page.getByRole('button',{name:'Stop de hoogte en gooi',exact:true})).toBeEnabled();await page.keyboard.press('Space');await page.getByRole('button',{name:'Volgende pijl',exact:true}).waitFor();
  await page.evaluate(()=>navigator.serviceWorker.ready);await page.reload();await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
  const cached=await page.evaluate(async()=>{const urls=[];for(const name of await caches.keys())for(const request of await(await caches.open(name)).keys())urls.push(new URL(request.url).pathname);return urls;});
  assert.ok(cached.includes('/offline.html'));assert.equal(cached.some(path=>path.startsWith('/api/')||['/inloggen','/registreren','/lobby','/oefenen','/spelen','/clubhuis'].includes(path)),false,'No private HTML/API responses in cache');

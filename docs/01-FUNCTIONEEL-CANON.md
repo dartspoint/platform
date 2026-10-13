@@ -95,7 +95,7 @@ Het ownerpaneel in Sites is geen blauwdruk om alles client-side af te schermen. 
 
 ### 5.1 Lobby
 
-De lobby is een overzicht van alle kamers, zoeken/filteren, favoriete kamers en promotie van officiële actieve evenementen. Een bestaande eigen partij kan expliciet worden hervat. Vrienden en privéberichten hebben aparte navigatiepagina's. Geen kamerledenlijst of kamerchat in de lobby: de speler is nog niet aan een kamer verbonden. De vriendenpagina bevat geen inboxoverzicht.
+De lobby is een overzicht van alle kamers, zoeken/filteren, favoriete kamers, echte aankondigingen en promotie van officiële actieve evenementen. Een bestaande eigen partij kan expliciet worden hervat. Vanaf 1024 CSS-pixels staan overzicht/spel/oefenen links en een permanente community rechts, elk 50%. Rechts boven delen kamerleden en vrienden de helft; rechts onder staat één chat. Zonder kamer is er geen kamerchat of verzonnen ledenlijst; vrienden en eigen privégesprekken blijven beschikbaar. Mobiel hebben vrienden en privéberichten aparte navigatiepagina's. De vriendenpagina bevat geen inboxoverzicht.
 
 Kamers tonen naam, categorie, bezetting/maximaal en relevante toegang. Gewone kamers hebben maximaal 50 aanwezigen. Voor productie moeten bezetting, vol/gesloten en toelating atomair aan de server worden gecontroleerd; een stale kaartje verleent geen plek. Favorieten mogen voorkeuren zijn, geen autorisatietoekenning.
 
@@ -103,7 +103,7 @@ Kamercategorieën: sociaal, ranked, beginners en toernooi. Status: open, geslote
 
 De toernooicategorie opent een concreet event of een eventkiezer. Een toevallig gelijke kamernaam mag een sociale kamer niet overnemen; gebruik stabiele IDs en expliciete relaties.
 
-Na een bevestigde kamerjoin is de kamerchat het primaire scherm. Deelname start geen wedstrijd. De contexten zijn lobby, kamerkeuze zonder lidmaatschap, kamerchat zonder partij, oefenen binnen een kamer en actieve wedstrijd. Privégesprekken behouden historie, concepten, tabstatus en eigen berichtenteller. Direct `/oefenen` zonder lidmaatschap leidt naar kamerkeuze; verlopen/veranderde kamerrechten en een actieve partij worden ook door de API gecontroleerd.
+Na een bevestigde kamerjoin wordt de kamerchat geselecteerd. Mobiel is dit het primaire scherm; desktop houdt het overzicht links en de community rechts. Deelname start geen wedstrijd. De contexten zijn lobby, kamerkeuze zonder lidmaatschap, kamerchat zonder partij, oefenen binnen een kamer en actieve wedstrijd. Privégesprekken behouden historie, concepten, tabstatus en eigen berichtenteller. Direct `/oefenen` zonder lidmaatschap leidt naar kamerkeuze; verlopen/veranderde kamerrechten en een actieve partij worden ook door de API gecontroleerd. Een echte lidmaatschapsovergang schrijft atomair één getypeerd `room.member_joined`-systeembericht met unieke bezoek-ID. Heartbeat, retry, refresh en tweede tab schrijven geen extra join. Systeemberichten geven geen ongelezen badge of geluid.
 
 In de kamer opent **Meer** het gebruikersmenu met profiel en instellingen. Kamerbeheer verschijnt alleen met de actuele servercapability voor deze stabiele kamer-ID/gebruiker-ID. Platformbeheerder en kamerbeheerder zijn aparte bevoegdheden. Auditvoorvertoning, actielogboek en export gebruiken één op event-ID gededupliceerde feed en dezelfde Nederlandse formatter; namen worden waar mogelijk historisch vastgelegd, onbekende/verwijderde onderwerpen krijgen een eerlijke fallback.
 
@@ -113,17 +113,21 @@ Lijsten laten huidige aanwezigheid zien: offline, beschikbaar, speelt, kijkt en 
 
 Klik/tik op een naam opent één dropdown met toegestane acties: profiel, uitnodigen, vriend toevoegen/verwijderen of verzoekactie, privéchat, persoonlijke mute, blokkeren, melden en moderatie waar toegestaan. Behoud focus bij het openen van een vervolgmodal.
 
-Een speluitnodiging opent eerst de instellingenmodal. De uitnodiging bewaart de exacte regels; acceptatie start die wedstrijd, afwijzen/ verlopen/intrekken doet dat niet. Productie moet dezelfde speler niet tegelijkertijd in twee actieve wedstrijden laten starten. De demotegenstander en expliciete demoacceptatie vervallen voor echte personen.
+Een speluitnodiging opent eerst de instellingenmodal. De uitnodiging bewaart de exacte regels; acceptatie start die wedstrijd, afwijzen/ verlopen/intrekken doet dat niet. Verzenden, workerbezorging en acceptatie controleren beide spelers op actieve of gepauzeerde partijen en reserveringen. Acceptatie lockt de toelating transactioneel; een oude modal kan geen tweede partij maken. De demotegenstander en expliciete demoacceptatie vervallen voor echte personen.
 
 ### 5.3 Chatkanalen en levenscyclus
 
-In een wedstrijd is de volgorde **Spelchat → Kamerchat → privétabs**. Buiten een kamer zijn alleen privégesprekken beschikbaar. Elk privétab heeft een eigen sluitknop en kan met Delete worden gesloten. Sluiten bewaart berichten en concepttekst; een gesloten gesprek springt niet door een inkomend bericht spontaan weer open. Het blijft via Berichten of vrienden heropenbaar. Na het sluiten van de laatste privétab: lege staat in de lobby; Spelchat als terugval in de kamer.
+In een wedstrijd is de volgorde **Spelchat → Kamerchat → privétabs**. Buiten een kamer zijn alleen privégesprekken beschikbaar. Elk privétab heeft een eigen sluitknop en kan met Delete worden gesloten. Sluiten bewaart berichten en concepttekst; een gesloten gesprek springt niet door een inkomend bericht spontaan weer open. Het blijft via Berichten of vrienden heropenbaar. Na het sluiten van de laatste privétab: lege staat zonder kamer; Kamerchat met een kamer; Spelchat uitsluitend met een echte partij. Een nieuwe eigen partij selecteert Spelchat eenmaal, latere updates stelen de tab niet.
 
 De opslag `lib/darts-chat-state.ts` maakt onderscheid tussen histories, drafts en `openPrivateTabs`. Behoud dit onderscheid in productie. Bezorging, gelezen-status en ongelezen aantallen vereisen echte database-/realtimegegevens; voeg geen verzonnen vinkjes toe. Een nieuwe tab openen geeft geen toegang tot andermans thread.
 
 Voorkeuren voor nieuwe privéchats: iedereen, alleen vrienden, niemand. Bestaande gesprekken blijven beschikbaar conform de bestaande interactie. Geblokkeerde personen en sancties gaan vóór gemak. Snelle zinnen blijven beschikbaar. Rustige eigen beurt buffert nieuwe inkomende inhoud visueel en toont deze na de beurt; de serverbezorging mag hierdoor niet verloren gaan.
 
 Productie: tekstlimieten, server-side rate limits, kanaallidmaatschap, escaping, blokkeer-/muteregels en abonnementsbeëindiging bij vertrek. Chatberichten krijgen server-ID en tijd. De individuele client bepaalt geen afzender/rolkleur van anderen. Nooit mailadressen of authclaims meesturen in openbare communitystate.
+
+De aanvulling van 13 oktober gebruikt een synchrone optimistic sendguard met één intent-UUID, dezelfde UUID bij retry, een atomair accountbudget van standaard 30 nieuwe berichten/minuut en maximaal 3 per 2 seconden. Dubbele genormaliseerde tekst in hetzelfde kanaal heeft een standaardvenster van 2 seconden. Een afzonderlijk endpointbudget begrenst verzoekmisbruik. HTTP-bevestiging, eigen echo en catchup voegen op bericht-ID samen; een oude response mag nieuwere berichten of concepten niet overschrijven.
+
+Chat, snelle zinnen, eerste naamkeuze en iedere latere naamswijziging gebruiken hetzelfde actuele serverfilter. Owner kan regels, categorieën, scopes, aliassen, uitzonderingen en limieten met reden/version beheren en testen. Woordgrenzen voorkomen toevallige substringblokkades. Bestaande ongewenste namen krijgen na gecontroleerde scan een verplichte naamwijziging en consequent tijdelijk label; account-ID, vrienden, historie en DP blijven behouden. Menurechten worden per actuele room/match/bericht/case gecontroleerd, ook na intrekken van een bevoegdheid.
 
 ## 6. Gameplay en wedstrijdregels
 

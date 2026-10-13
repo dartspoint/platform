@@ -29,8 +29,9 @@ export async function transaction<T>(fn:(c:PoolClient)=>Promise<T>):Promise<T> {
  }
 }
 export async function audit(c:PoolClient,actor:string|null,action:string,subject:string,data:unknown={},reason?:string) {
- const names=(await c.query('select (select username from profiles where id=$1) actor,coalesce((select username from profiles where id::text=$2),(select name from community_rooms where id::text=$2),(select name from tournaments where id::text=$2),(select name from seasons where id::text=$2)) subject',[actor,subject])).rows[0];
- const details={...(data&&typeof data==='object'?data:{}),actorName:names.actor,subjectName:names.subject};
+ const names=(await c.query('select (select username from profiles where id=$1) actor,coalesce((select username from profiles where id::text=$2),(select name from community_rooms where id::text=$2),(select name from tournaments where id::text=$2),(select name from seasons where id::text=$2),(select term from private.content_filter_rules where id::text=$2)) subject',[actor,subject])).rows[0];
+ const fields=data&&typeof data==='object'?data as Record<string,unknown>:{};
+ const details={...fields,actorName:names.actor,subjectName:names.subject??fields.subjectName??null};
  await c.query('insert into private.audit_events(actor_id,action,subject,data,reason) values($1,$2,$3,$4,$5)',[actor,action,subject,JSON.stringify(details),reason??null]);
 }
 export async function outbox(c:PoolClient,key:string,kind:string,user:string|null,payload:unknown) {

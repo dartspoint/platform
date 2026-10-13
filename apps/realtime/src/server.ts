@@ -6,9 +6,11 @@ import {WebSocketTransport} from '@colyseus/ws-transport';
 import {db,redis,transaction} from '../../../packages/data/src/db';
 import {verifyToken,assertSessionActive,actorById,type Actor} from '../../../packages/data/src/auth';
 import {drainAdmissions} from '../../../packages/data/src/lifecycle';
+import {personalChatChange} from '../../../packages/data/src/community';
 import {readiness} from '../../../packages/data/src/health';
-import {acquireMatch,renewMatch,matchAccess,matchAccessBatch,matchCommand,connection} from '../../../packages/data/src/matches';
-import {trustedLatency} from '../../../packages/game-core/src/timing';
+import {acquireMatch,renewMatch,matchAccess,matchAccessBatch,captureMatchIngress,matchCommand,connection} from '../../../packages/data/src/matches';
+import {trustedLatency,sampleWindow} from '../../../packages/game-core/src/timing';
+import {IngressOrder} from '../../../packages/data/src/ingress-order';
 import {DomainError,requireThat,uuid} from '../../../packages/contracts/src/index';
 
 const writerId=randomUUID();
@@ -28,21 +30,28 @@ class DartsPersonal extends Room {
 class DartsMatch extends Room {
  maxClients=52;matchId='';fence=0;version=-1;queue:Promise<unknown>=Promise.resolve();pendingCommands=0;publishing=false;
  challenges=new WeakMap<Client,{nonce:string;at:number}>();samples=new WeakMap<Client,number[]>();
+ connections=new WeakMap<Client,string>();
+ ingressOrder=new IngressOrder(16,16);
+ challenge(client:Client){if(this.challenges.has(client))return;const nonce=randomUUID();this.challenges.set(client,{nonce,at:performance.now()});client.send('clock.challenge',{nonce});}
  async onCreate(options:any){
   this.matchId=uuid.parse(options.matchId);this.fence=await acquireMatch(this.matchId,writerId);await this.setMetadata({matchId:this.matchId});
   this.onMessage('command',(client:Client,input:unknown)=>{
-   const receivedAt=Date.now(),actor=client.auth as Actor,latencyMs=trustedLatency(this.samples.get(client)??[]);
-   if(this.pendingCommands>=16||actor.expiresAt<=receivedAt){client.send('error',{code:'command_busy',message:'Wacht op je vorige actie of herstel je verbinding.'});return;}
+   const receivedAt=Date.now(),actor=client.auth as Actor,samples=this.samples.get(client)??[],latencyMs=trustedLatency(samples),connectionId=this.connections.get(client),admissionWindowMs=sampleWindow(samples);
+   const commandId=uuid.safeParse((input as any)?.commandId).success?(input as any).commandId:undefined;
+   if(this.pendingCommands>=16||actor.expiresAt<=receivedAt){client.send('error',{commandId,code:'command_busy',message:'Wacht op je vorige actie of herstel je verbinding.'});return;}
    this.pendingCommands++;
+   // Reserve receive order before asynchronous policy/DB reads. Capture has its
+   // own short queue; snapshots and clocks never enter either command queue.
+   const captured=this.ingressOrder.reserve('commands').run(()=>captureMatchIngress(actor,input,{receivedAt,latencyMs,connectionId,admissionWindowMs})).then(()=>({ok:true as const}),error=>({ok:false as const,error}));
    this.queue=this.queue.then(async()=>{
-    try{const result=await matchCommand(actor,input,writerId,this.fence,{receivedAt,latencyMs});client.send('receipt',result);void this.publish();}
-    catch(e){client.send('error',{code:e instanceof DomainError?e.code:'invalid_command',message:e instanceof DomainError?e.message:'De actie kon niet worden uitgevoerd.'});}
+    try{const capture=await captured;if(!capture.ok)throw capture.error;const result=await matchCommand(actor,input,writerId,this.fence,{receivedAt,latencyMs,connectionId,admissionWindowMs});client.send('receipt',result);void this.publish();}
+    catch(e){client.send('error',{commandId,code:e instanceof DomainError?e.code:'invalid_command',message:e instanceof DomainError?e.message:'De actie kon niet worden uitgevoerd.'});}
     finally{this.pendingCommands--;}
    });
   });
-  this.onMessage('clock.ping',(client:Client,input:any)=>{try{const nonce=uuid.parse(input?.nonce);client.send('clock.sample',{nonce,serverAt:Date.now()});}catch{}});
-  this.onMessage('clock.echo',(client:Client,input:any)=>{const challenge=this.challenges.get(client);if(!challenge||input?.nonce!==challenge.nonce)return;this.challenges.delete(client);const rtt=performance.now()-challenge.at;if(rtt>=0&&rtt<=1000)this.samples.set(client,[...(this.samples.get(client)??[]),rtt].slice(-12));});
-  this.clock.setInterval(()=>{for(const client of this.clients){const nonce=randomUUID();this.challenges.set(client,{nonce,at:performance.now()});client.send('clock.challenge',{nonce});}},2000);
+  this.onMessage('clock.ping',(client:Client,input:any)=>{const serverReceivedAt=Date.now();try{const nonce=uuid.parse(input?.nonce);client.send('clock.sample',{nonce,serverAt:Date.now(),serverReceivedAt,connectionId:this.connections.get(client),ready:(this.samples.get(client)?.length??0)>=3});if((this.samples.get(client)?.length??0)<3)this.challenge(client);}catch{}});
+  this.onMessage('clock.echo',(client:Client,input:any)=>{const challenge=this.challenges.get(client);if(!challenge||input?.nonce!==challenge.nonce)return;this.challenges.delete(client);const rtt=performance.now()-challenge.at;if(rtt>=0&&rtt<=1000){const samples=[...(this.samples.get(client)??[]),rtt].slice(-12);this.samples.set(client,samples);client.send('clock.ready',{connectionId:this.connections.get(client),ready:samples.length>=3});}});
+  this.clock.setInterval(()=>{for(const client of this.clients)this.challenge(client);},2000);
   this.onMessage('authenticate',async(client:Client,input:any)=>{try{const actor=await verifyToken(input?.token);requireThat(actor.id===(client.auth as Actor).id,'identity_mismatch',403);client.auth=actor;}catch{client.leave(4001);}});
   // At most one publication; periodic reads never join the authoritative command queue.
   this.clock.setInterval(()=>{void this.publish();},100);
@@ -50,7 +59,7 @@ class DartsMatch extends Room {
   this.clock.setInterval(async()=>{for(const client of this.clients){try{const actor=client.auth as Actor;requireThat(actor.expiresAt>Date.now(),'session_expired',401);await assertSessionActive(actor);const fresh=await actorById(actor.id,actor.expiresAt);requireThat(fresh.sessionVersion===actor.sessionVersion,'session_revoked',401);await matchAccess(fresh,this.matchId);}catch{client.leave(4001);}}},10000);
  }
  async onAuth(_client:Client,options:any){const actor=await verifyToken(options?.token);await matchAccess(actor,this.matchId);return actor;}
- async onJoin(client:Client){await connection(client.auth as Actor,this.matchId,true);client.send('snapshot',await matchAccess(client.auth as Actor,this.matchId));}
+ async onJoin(client:Client){this.connections.set(client,randomUUID());await connection(client.auth as Actor,this.matchId,true);client.send('snapshot',await matchAccess(client.auth as Actor,this.matchId));this.challenge(client);}
  async publish(){
   if(this.publishing||this.clients.length===0)return;this.publishing=true;
   try{
@@ -89,8 +98,10 @@ const server=new Server({greet:false,gracefullyShutdown:false,transport:new WebS
 server.define('match',DartsMatch).filterBy(['matchId']);
 server.define('personal',DartsPersonal).filterBy(['userId']);
 const notifications=(await redis()).duplicate();await notifications.connect();
-await notifications.subscribe('dartspoint:chat-events',data=>{
- try{const event=JSON.parse(data);for(const userId of new Set<string>(event.userIds))for(const client of inboxes.get(userId)?.clients??[]){if((client.auth as Actor).expiresAt>Date.now())client.send('chat.changed',{channelId:event.channelId,messageId:event.messageId});}}catch{console.error(JSON.stringify({event:'chat_notification_failed'}));}
+await notifications.subscribe('dartspoint:chat-events',async data=>{
+ try{const event=JSON.parse(data),clients=[...new Set<string>(event.userIds)].flatMap(userId=>inboxes.get(userId)?.clients??[]),messages=await personalChatChange(event.messageId,clients.map(client=>client.auth as Actor));
+  for(const client of clients){const actor=client.auth as Actor,message=messages.get(actor.id+':'+actor.sessionId);if(message&&actor.expiresAt>Date.now())client.send('chat.changed',{channelId:message.channel_id,messageId:message.id,seq:Number(message.seq),cursor:Number(message.cursor),kind:message.kind,redacted:message.redacted===true,message});}
+ }catch{console.error(JSON.stringify({event:'chat_notification_failed'}));}
 });
 await server.listen(Number(process.env.PORT??42567),process.env.BIND_HOST??'127.0.0.1');
 console.log(JSON.stringify({event:'realtime_started',release:process.env.RELEASE_SHA??'local-development'}));

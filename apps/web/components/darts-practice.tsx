@@ -1,6 +1,7 @@
 "use client";
 import {timingInput} from "@/lib/use-timing-input";
-import {ServerClock,meterFraction} from "../../../packages/game-core/src/timing";
+import {ServerClock,TIMING_VERSION} from "../../../packages/game-core/src/timing";
+import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} from '@/lib/drawn-meter';
 /* Native links preserve the prototype's reliable full-page mobile navigation. */
 /* eslint-disable @next/next/no-html-link-for-pages */
 
@@ -10,7 +11,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Award, BookOpen, Check, CheckCircl
 import { BOARD_GEOMETRY, DART_NUMBERS, applyDart, dartPoseAt, dartTipPosition, dartTransform, scoreDart, type DartHit } from "@/lib/darts-rules";
 import { getCheckoutRoutes } from "@/lib/darts-checkouts";
 import {currentPracticeProgress,practiceBadges,practiceChallenge,serverPracticeProgress} from '@/lib/darts-practice';
-import {api,refreshPlatform,subscribePlatform} from '@/lib/platform-client';
+import {api,ApiError,refreshPlatform,subscribePlatform} from '@/lib/platform-client';
 import './darts-practice.css';
 const subscribePractice=subscribePlatform;
 const subscribeHydration = () => () => {};
@@ -74,7 +75,7 @@ function PracticeDart({ hit, flying, onLand }: { hit: DartHit; flying: boolean; 
     const flight = animate(0, 1, { duration: .56, ease: [.2, .68, .35, 1], onUpdate: draw, onComplete: finish });
     return () => flight.stop();
   }, [hit, flying, onLand, reduced]);
-  return <g ref={visual} transform={dartTransform(dartPoseAt(hit, flying && !reduced ? 0 : 1))}>
+  return <g className="practice-dart-tip" ref={visual} transform={dartTransform(dartPoseAt(hit, flying && !reduced ? 0 : 1))}>
     <path d="M0 0 V13" stroke="#e6ece8" strokeWidth="1.4" strokeLinecap="butt"/>
     <path d="M-2 12 L-3 17 L-2.5 28 L0 31 L2.5 28 L3 17 L2 12 Z" fill="#c1cbc4" stroke="#788b81" strokeWidth=".7"/>
     <path d="M-2.5 18 H2.5 M-2.5 21 H2.5 M-2.5 24 H2.5 M-2 27 H2" stroke="#54645b" strokeWidth=".9"/>
@@ -116,7 +117,7 @@ const tutorialSteps = [
   { title: "Nog één pijl. Helemaal van jou.", text: "Je kent de bediening. Pak je eigen ritme en kies een vak. In een 501-wedstrijd eindig je op een dubbel of BULL.", hint: "Je score verandert pas wanneer de punt het bord raakt." },
 ];
 
-export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolean; onClose?: () => void }) {
+export function DartsPractice({ tutorial = false, onClose,embedded=false }: { tutorial?: boolean; onClose?: () => void;embedded?:boolean }) {
   const { progress, challenge } = usePracticeProgress();
   const query = useSyncExternalStore(subscribeQuery, browserQuery, emptyQuery);
   const queryParams = new URLSearchParams(query);
@@ -138,14 +139,15 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
   const [attemptEnded, setAttemptEnded] = useState(false);
   const [inputError, setInputError] = useState("");
   const xMeter = useMotionValue(.5), yMeter = useMotionValue(.5);
-  const xPosition = useTransform(xMeter, value => `${value * 100}%`), yPosition = useTransform(yMeter, value => `${value * 100}%`);
+  const xIndicator=useRef<HTMLElement|null>(null),yIndicator=useRef<HTMLElement|null>(null),drawn=useRef<{horizontal:DrawnMeterSample|null;vertical:DrawnMeterSample|null}>({horizontal:null,vertical:null}),connectionId=useRef(''),serverCalibrated=useRef(false),pending=useRef<any>(null);
+  const [timingReady,setTimingReady]=useState(false);
   const lockedX = useRef(.5), dartId = useRef(0), landedId = useRef(0);
   const [sessionReady,setSessionReady]=useState(false),[sending,setSending]=useState(false);
   const authoritative=useRef<any>(null),busy=useRef(false),clock=useRef(new ServerClock());
   const apply=useCallback((snapshot:any)=>{
     const old=authoritative.current;if(old?.id===snapshot.id&&old.stateVersion>snapshot.stateVersion)return;
     setSessionReady(true);authoritative.current=snapshot;clock.current.seed(snapshot.serverAt);const state=snapshot.state;
-    if(state.lockedX!=null)xMeter.set((state.lockedX+1.14)/2.28);if(state.lockedY!=null)yMeter.set((state.lockedY+1.14)/2.28);
+    if(state.lockedX!=null){const f=(state.lockedX+1.14)/2.28;xMeter.set(f);lockMeter(xIndicator.current,'horizontal',f);}if(state.lockedY!=null){const f=(state.lockedY+1.14)/2.28;yMeter.set(f);lockMeter(yIndicator.current,'vertical',f);}
     setPhase(state.phase);setDart(state.dart);setVisit(state.visit);setCount(state.count);setSessionPoints(state.sessionPoints);setTargetsHit(state.targetsHit);setRemaining(state.remaining);setAttemptEnded(state.attemptEnded);setMessage(state.message);
     if(state.phase==='pause'||state.phase==='done')void refreshPlatform();
   },[]);
@@ -156,9 +158,8 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
   useEffect(() => {
     if (phase !== "horizontal" && phase !== "vertical") return;
     const meter = phase === "horizontal" ? xMeter : yMeter;
-    const duration = phase === "horizontal" ? 2200 : 2500;
     let frame=0;
-    const tick=()=>{const s=authoritative.current?.state;if(s&&!busy.current&&s.phase===phase){meter.set(meterFraction(clock.current.now(),s.phaseStartedAt,phase as 'horizontal'|'vertical'));}frame=requestAnimationFrame(tick);};
+    const tick=()=>{const s=authoritative.current?.state;if(s&&!busy.current&&s.phase===phase&&clock.current.ready&&serverCalibrated.current){const axis=phase as 'horizontal'|'vertical',at=clock.current.phaseNow(s.phaseToken,performance.now(),s.timingVersion??'receive-v1');if(s.timingVersion!==TIMING_VERSION||at>=s.phaseStartedAt){const sample=drawMeter(axis==='horizontal'?xIndicator.current:yIndicator.current,axis,at,s.phaseStartedAt,s.phaseToken);if(sample){drawn.current[axis]=sample;meter.set(sample.fraction);}}}frame=requestAnimationFrame(tick);};
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [phase, xMeter, yMeter]);
@@ -168,10 +169,14 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
     try{const value=await api('practice',{type:'reset',commandId:crypto.randomUUID(),configuration:{mode:nextMode,tutorial:nextTutorial,chosenDouble:nextDouble,finish:nextFinish}});setMode(nextMode);setTutorial(nextTutorial);setInputError('');apply(value);}catch(e){setInputError(e instanceof Error?e.message:'De oefensessie kon niet worden gestart.');}finally{busy.current=false;setSending(false);}
   },[mode,isTutorial,finish,chosenDouble,apply]);
   useEffect(()=>{void reset();},[]);
-  useEffect(()=>{let disposed=false;const sample=async()=>{const sent=performance.now();try{const value=await api('timing/ping',{});if(disposed)return;clock.current.sample(value.serverAt,sent);await api('timing/echo',{nonce:value.nonce});}catch{}};void sample();const timer=setInterval(sample,2000);return ()=>{disposed=true;clearInterval(timer);};},[]);
+  useEffect(()=>{let disposed=false,inFlight=false,n=0;const sample=async()=>{if(inFlight)return;inFlight=true;const sent=performance.now();try{const value=await api('timing/ping',connectionId.current?{connectionId:connectionId.current}:{});if(disposed)return;connectionId.current=value.connectionId;clock.current.sample(value.serverAt,sent,performance.now(),value.serverReceivedAt);const echo=await api('timing/echo',{nonce:value.nonce});if(disposed)return;serverCalibrated.current=echo.ready===true;setTimingReady(clock.current.ready&&serverCalibrated.current);}catch{}finally{inFlight=false;}};void sample();const timer=setInterval(()=>{n++;if(n<=6||n%20===0)void sample();},100);return ()=>{disposed=true;clearInterval(timer);};},[]);
   const act=useCallback(async()=>{
-    const current=authoritative.current;if(!current||busy.current||['flying','done'].includes(current.state.phase))return;busy.current=true;const stoppedAt=performance.now();if(current.state.phase==='horizontal')xMeter.set(meterFraction(clock.current.now(stoppedAt),current.state.phaseStartedAt,'horizontal'));if(current.state.phase==='vertical')yMeter.set(meterFraction(clock.current.now(stoppedAt),current.state.phaseStartedAt,'vertical'));performance.mark('dp-local-stop',{detail:{axis:current.state.phase,at:stoppedAt,x:xMeter.get(),y:yMeter.get()}});setSending(true);
-    try{apply(await api('practice',{type:current.state.phase==='horizontal'?'horizontal':current.state.phase==='vertical'?'vertical':'next',commandId:crypto.randomUUID(),sessionId:current.id,expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken}));}catch(e){setInputError(e instanceof Error?e.message:'De worp kon niet worden uitgevoerd.');try{apply(await api('practice/'+current.id));}catch{setSessionReady(false);}}finally{busy.current=false;setSending(false);}
+    const current=authoritative.current;if(!current||busy.current||['flying','done'].includes(current.state.phase))return;
+    const axis=current.state.phase==='horizontal'?'horizontal':current.state.phase==='vertical'?'vertical':null,sample=axis?drawn.current[axis]:null;
+    if(axis&&(!sample||sample.phaseToken!==current.state.phaseToken||current.state.timingVersion===TIMING_VERSION&&sample.sampleAt<current.state.phaseStartedAt||!clock.current.ready||!serverCalibrated.current))return;
+    busy.current=true;const stoppedAt=performance.now(),payload={type:axis??'next',commandId:crypto.randomUUID(),sessionId:current.id,expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken,...(axis&&sample&&current.state.timingVersion===TIMING_VERSION?{renderSample:{sampleAt:sample.sampleAt,connectionId:connectionId.current,dartNumber:current.state.count+1}}:{})};pending.current=payload;
+    if(axis&&sample){const element=axis==='horizontal'?xIndicator.current:yIndicator.current,geometry=element?meterGeometry(element,axis):undefined;lockMeter(element,axis,sample.fraction);const trace={event:'local-stop',commandId:payload.commandId,sessionId:current.id,dartNumber:current.state.count+1,phase:axis,phaseToken:current.state.phaseToken,phaseStartedAt:current.state.phaseStartedAt,timingVersion:current.state.timingVersion,rendered:sample,geometry,inputAt:stoppedAt,clockOffset:clock.current.phaseOffset(current.state.phaseToken),localLock:sample.fraction};timingTrace(trace);performance.mark('dp-local-stop',{detail:{...trace,axis,at:stoppedAt,x:xMeter.get(),y:yMeter.get()}});}setSending(true);
+    try{let receipt:any;try{receipt=await api('practice',payload);}catch(error){if(error instanceof TypeError||error instanceof DOMException||error instanceof ApiError&&error.status>=500)receipt=await api('practice',payload);else throw error;}if(receipt.commandId!==pending.current?.commandId)return;timingTrace({event:'receipt',commandId:receipt.commandId,sessionId:receipt.id,timing:receipt.timing,lockedX:receipt.state.lockedX,lockedY:receipt.state.lockedY,hit:receipt.state.dart?.hit});setInputError('');apply(receipt);}catch(e){timingTrace({event:'rejected',commandId:payload.commandId});setInputError(e instanceof Error?e.message:'De worp kon niet worden uitgevoerd.');try{const fresh=await api('practice/'+current.id);if(e instanceof ApiError&&['invalid_render_sample','timing_connection_mismatch'].includes(e.code))clock.current.recoverPhase(fresh.state.phaseToken);apply(fresh);}catch{setSessionReady(false);}}finally{pending.current=null;busy.current=false;setSending(false);}
   },[apply,xMeter,yMeter]);
   useEffect(()=>{if(phase!=='flying')return;const timer=setInterval(()=>{const current=authoritative.current;if(current)void api('practice/'+current.id).then(apply).catch(()=>{setSessionReady(false);setInputError('Je kamerlidmaatschap is verlopen. Ga terug naar de kamer en sluit opnieuw aan.');});},100);return ()=>clearInterval(timer);},[phase,apply]);
   useEffect(() => {
@@ -186,8 +191,8 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
   const tutorialStep = tutorialSteps[Math.min(count, 4)];
   const buttonText = phase === "horizontal" ? "RICHTING" : phase === "vertical" ? "HOOGTE" : phase === "flying" ? "GOOI!" : phase === "done" ? "KLAAR" : attemptEnded ? "OPNIEUW" : "VOLGENDE";
 
-  return <div className="darts-practice">
-    <header className="practice-header">{onClose ? <button className="practice-back" onClick={onClose}><ArrowLeft size={18}/><span>Terug</span></button> : <a className="practice-back" href="/spelen"><ArrowLeft size={18}/><span>Kamer</span></a>}<div><Target size={18}/><strong>{isTutorial ? "Je eerste vijf pijlen" : "Het oefenbord"}</strong></div><span className="practice-unranked"><i/>Geen ratingpunten</span></header>
+  return <div className={`darts-practice ${embedded?'practice-is-embedded':''}`}>
+    {!embedded&&<header className="practice-header">{onClose ? <button className="practice-back" onClick={onClose}><ArrowLeft size={18}/><span>Terug</span></button> : <a className="practice-back" href="/spelen"><ArrowLeft size={18}/><span>Kamer</span></a>}<div><Target size={18}/><strong>{isTutorial ? "Je eerste vijf pijlen" : "Het oefenbord"}</strong></div><span className="practice-unranked"><i/>Geen ratingpunten</span></header>}
     <main className="practice-layout">
       <section className="practice-play">
         <div className="practice-heading"><div><span className="practice-eyebrow">{isTutorial ? `PIJL ${Math.min(count + 1, 5)} VAN 5` : "RUIMTE OM BETER TE WORDEN"}</span><h1>{isTutorial ? tutorialStep.title : "Vind jouw ritme."}</h1></div><button className="practice-icon-button" aria-label="Oefensessie opnieuw starten" disabled={phase === "flying" || sending || !sessionReady} onClick={() => reset()}><RotateCcw size={17}/></button></div>
@@ -196,10 +201,10 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
           <div className="practice-mode-options">{mode === "doubles" ? <><label htmlFor="practice-double">Jouw dubbel</label><select id="practice-double" value={chosenDouble} disabled={phase === "flying" || sending || !sessionReady} onChange={event => { const next=Number(event.target.value);setChosenDouble(next);void reset(mode,isTutorial,finish,next); }}>{Array.from({ length: 20 }, (_, i) => 20 - i).map(number => <option key={number} value={number}>D{number} · {number * 2} punten</option>)}</select></> : mode === "checkout" ? <><label htmlFor="practice-checkout">Uitgooien vanaf</label><input id="practice-checkout" type="number" min={2} max={170} value={finishInput} disabled={phase === "flying" || sending || !sessionReady} onChange={event => setFinishInput(event.target.value)}/><button onClick={updateFinish} disabled={phase === "flying" || sending || !sessionReady}>Instellen<Check size={14}/></button></> : mode === "challenge" ? <><Flame size={16}/><span>{target ? `Volgende dubbel: ${target}` : "Alle vijf dubbels geraakt. Lekker gegooid!"}</span><b>{challenge.targets.filter(label => challengeHit.includes(label)).length}/5</b></> : mode === "bull" ? <><Crosshair size={16}/><span>De rode BULL telt 50. Groen eromheen is 25.</span></> : <><Target size={16}/><span>Drie pijlen per beurt. Alle ruimte om te oefenen.</span></>}</div>{inputError && <p className="practice-error" role="alert">{inputError}</p>}
         </>}
         <div className="practice-arena">
-          <div className={`practice-meter practice-meter-x ${phase === "horizontal" ? "is-running" : ""}`} aria-label="Richtingsbalk"><ArrowRight size={16}/><div><motion.i style={{ left: xPosition }}/></div></div>
+          <div className={`practice-meter practice-meter-x ${phase === "horizontal" ? "is-running" : ""}`} aria-label="Richtingsbalk"><ArrowRight size={16}/><div><i ref={xIndicator} style={{ left: '50%' }}/></div></div>
           <div className="practice-board-space"><PracticeBoard target={target} dart={dart} flying={phase === "flying"} chip={phase === "pause" || phase === "done"} onLand={land}/></div>
-          <div className={`practice-meter practice-meter-y ${phase === "vertical" ? "is-running" : ""}`} aria-label="Hoogtebalk"><span>↑</span><div><motion.i style={{ top: yPosition }}/></div><span>↓</span></div>
-          <button className="practice-throw" {...timingInput(act)} disabled={!sessionReady || sending || phase === "flying" || phase === "done"} aria-label={phase === "horizontal" ? "Stop de richting" : phase === "vertical" ? "Stop de hoogte en gooi" : "Volgende pijl"}><strong>{buttonText}</strong><ArrowUpRight size={22}/></button>
+          <div className={`practice-meter practice-meter-y ${phase === "vertical" ? "is-running" : ""}`} aria-label="Hoogtebalk"><span>↑</span><div><i ref={yIndicator} style={{ top: '50%' }}/></div><span>↓</span></div>
+          <button className="practice-throw" {...timingInput(act)} disabled={!sessionReady || !timingReady || sending || phase === "flying" || phase === "done"} aria-label={phase === "horizontal" ? "Stop de richting" : phase === "vertical" ? "Stop de hoogte en gooi" : "Volgende pijl"}><strong>{buttonText}</strong><ArrowUpRight size={22}/></button>
           <AnimatePresence>{phase === "done" && <motion.div className="practice-complete" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} role="status"><span className="practice-complete-medal"><Award size={30}/></span><span className="practice-eyebrow">JE EERSTE BADGE IS BINNEN</span><h2>Jij hebt het ritme.</h2><p>Vijf pijlen. {sessionPoints} punten. Klaar voor je eerste wedstrijd?</p><a href="/lobby">Naar de lobby<ArrowRight size={16}/></a><button onClick={() => reset("free", false)}>Nog even oefenen</button></motion.div>}</AnimatePresence>
         </div>
         <div className="practice-status" role="status" aria-live="polite"><span className={attemptEnded && remaining === 0 ? "is-success" : ""}>{message}</span><small>Spatie werkt ook</small></div>

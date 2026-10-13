@@ -38,8 +38,8 @@ try{
  // Capture genuine private evidence, forbid outsiders, and deliver a single resolution.
  const messageId=(await db().query('select id from chat_messages where channel_id=$1',[channel.channelId])).rows[0].id;
  await assert.rejects(report(c,{targetId:a.id,reason:'Ongewenst bericht',messageId}),{code:'forbidden'});
- const reported=await report(b,{targetId:a.id,reason:'Ongewenst bericht',messageId,roomId:room});
- const saved=(await db().query('select * from private.moderation_cases where id=$1',[reported.id])).rows[0];assert.equal(saved.evidence.message.body,message.body);assert.equal(saved.room_id,room);
+ const reported=await report(b,{targetId:a.id,reason:'Ongewenst bericht',messageId,channelId:channel.channelId});
+ const saved=(await db().query('select * from private.moderation_cases where id=$1',[reported.id])).rows[0];assert.equal(saved.evidence.message.body,message.body);assert.equal(saved.evidence.channel.id,channel.channelId);assert.equal(saved.room_id,null);
  const response='Je melding is onderzocht en afgehandeld.';await adminAction(own,{action:'case',args:[reported.id,'resolved',response]});await adminAction(own,{action:'case',args:[reported.id,'resolved',response]});
  assert.equal((await db().query("select count(*) n from private.outbox_events where kind='report-resolution' and payload->>'caseId'=$1",[reported.id])).rows[0].n,'1');
  assert.equal((await bootstrap(b)).social.reports.find(r=>r.id===reported.id)?.response,response);assert.equal((await bootstrap(c)).social.reports.some(r=>r.id===reported.id),false);

@@ -31,6 +31,9 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/multiplayer.t
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/practice.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/services.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/update-2026-10-13.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-moderation.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-projection.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/render-sample-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/competitions.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/restore.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/drain.ts
@@ -39,6 +42,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/owner
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/load.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/mail.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/visual.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-moderation-ui.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/interface.ts
@@ -49,5 +53,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/update-2026-1
 python3 tests/integration/landing-proxy.py
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-read.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-chat.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/game-timing.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/render-sample-timing.ts

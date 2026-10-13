@@ -2,7 +2,7 @@
 import {timingInput} from "@/lib/use-timing-input";
 
 import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
-import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { ArrowDown, ArrowUp, ArrowRight, ArrowUpRight, RotateCcw } from "lucide-react";
 import { BOARD_GEOMETRY, DART_NUMBERS, dartPoseAt, dartTipPosition, dartTransform, opponentTarget, scoreDart, type DartHit } from "@/lib/darts-rules";
 import { dartsGameReducer, initialGameState, type BoardDart } from "@/lib/darts-game-state";
@@ -219,10 +219,8 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
   const panel = useRef<HTMLDivElement>(null);
   const audioContext = useRef<AudioContext | null>(null);
   const previousDarts = useRef(game.dartCount[0] + game.dartCount[1]);
-  const xPosition = useTransform(game.xMeter, [0, 1], ["0%", "100%"]);
-  const yPosition = useTransform(game.yMeter, [0, 1], ["0%", "100%"]);
   const active = game.phase === "horizontal" || game.phase === "vertical";
-  const disabled = game.phase === "opponent" || game.phase === "flight" || interactionBlocked || !game.ready || !!game.offlineUntil || game.sending;
+  const disabled = game.phase === "opponent" || game.phase === "flight" || interactionBlocked || !game.ready || !!game.offlineUntil || game.sending || (active && !game.timingReady);
 
   useEffect(() => {
     setActive(true);
@@ -232,7 +230,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
   useEffect(() => () => { void audioContext.current?.close().catch(() => {}); audioContext.current = null; }, []);
 
   const throwWithGesture = useCallback(() => {
-    if (interactionBlocked || !game.ready || game.offlineUntil || game.sending || phase === "flight" || phase === "opponent") return;
+    if (interactionBlocked || !game.ready || game.offlineUntil || game.sending || (active && !game.timingReady) || phase === "flight" || phase === "opponent") return;
     if (phase === "won") { void game.rematch(); return; }
     startOrStop();
     // Audio is created only inside a real button/keyboard gesture, never on load.
@@ -243,7 +241,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
         if (audioContext.current?.state === "suspended") void audioContext.current.resume().catch(() => {});
       } catch { /* The playable demo still works when audio is unavailable. */ }
     }
-  }, [phase, startOrStop, muted, interactionBlocked, game.ready, game.offlineUntil, game.sending, game.rematch]);
+  }, [phase, startOrStop, muted, interactionBlocked, game.ready, game.offlineUntil, game.sending, game.timingReady, active, game.rematch]);
 
   useEffect(() => {
     const dartCount = game.dartCount[0] + game.dartCount[1];
@@ -310,14 +308,14 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
       <div className="dp-board-and-height">
         <div className="dp-aim-header">
           <div className={`dp-direction-meter ${game.phase === "horizontal" ? "is-running" : ""}`} aria-label="Horizontale timingbalk rechtsboven het dartbord">
-            <div className={`dp-meter-row ${game.phase === "horizontal" ? "is-running" : ""}`}><span className="dp-meter-icon"><ArrowRight size={13} aria-hidden="true" /></span><div className="dp-meter-track"><motion.span className="dp-meter-indicator" style={{ left: xPosition }} /></div></div>
+            <div className={`dp-meter-row ${game.phase === "horizontal" ? "is-running" : ""}`}><span className="dp-meter-icon"><ArrowRight size={13} aria-hidden="true" /></span><div className="dp-meter-track"><span ref={game.xIndicator} className="dp-meter-indicator" style={{ left: "50%" }} /></div></div>
           </div>
         </div>
         <div className="dp-oche-playfield">
           <Dartboard key={game.id} darts={game.pendingDart ? [...(game.freshVisit ? [] : game.landedDarts), game.pendingDart] : game.landedDarts} pendingId={game.pendingDart?.id ?? null} onLand={game.landDart} lessMotion={lessMotion} checkoutHit={game.celebration === "checkout" && game.events.at(-1)?.hit.double ? game.events.at(-1)?.hit : undefined} />
           <div className={`dp-height-meter ${game.phase === "vertical" ? "is-running" : ""}`} aria-label="Verticale timingbalk voor de hoogte van je worp">
             <ArrowUp size={12} aria-hidden="true" />
-            <div className="dp-meter-track dp-meter-track-vertical"><motion.span className="dp-meter-indicator" style={{ top: yPosition }} /></div>
+            <div className="dp-meter-track dp-meter-track-vertical"><span ref={game.yIndicator} className="dp-meter-indicator" style={{ top: "50%" }} /></div>
             <ArrowDown size={12} aria-hidden="true" />
           </div>
         </div>

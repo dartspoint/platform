@@ -34,7 +34,8 @@ const actions:Record<string,string>={
  'division.startDivisionSeason':'heeft een seizoen gestart',
  'division.recordDivisionResult':'heeft een divisieresultaat verwerkt',
  'division.match-finalized':'heeft een divisiewedstrijd verwerkt',
- 'profile.onboard':'heeft een spelersprofiel voltooid','member.role':'heeft de platformrol gewijzigd',
+ 'profile.onboard':'heeft een spelersprofiel voltooid','profile.rename':'heeft de spelersnaam gewijzigd','profile.rename-required':'heeft een naamswijziging verplicht gesteld','member.role':'heeft de platformrol gewijzigd',
+ 'chat.filter.save':'heeft een filterregel bijgewerkt','chat.limits':'heeft de chatlimieten gewijzigd','chat.message.redact':'heeft een chatbericht verwijderd',
  'room.save':'heeft de kamer bijgewerkt','room-close':'heeft de kamer gesloten','room-delete':'heeft de kamer verwijderd',
  'room.moderator.assigned':'heeft kamerbeheerrechten toegewezen','room.moderator.revoked':'heeft kamerbeheerrechten ingetrokken',
  'moderation.warn':'heeft een waarschuwing gegeven','moderation.mute':'heeft een chatmute ingesteld','moderation.remove':'heeft een speler uit de kamer verwijderd','moderation.suspend':'heeft een speler geschorst',
@@ -57,6 +58,15 @@ export function formatAudit(entry:AuditRecord){
   else if(data.before?.status&&data.after?.status&&data.before.status!==data.after.status)change=`${auditWord(data.before.status)} → ${auditWord(data.after.status)}`;
  }
  if(entry.action.startsWith('room.moderator.'))change=data.roomName||'Onbekende kamer';
+ if(entry.action==='chat.filter.save'){
+  if(data.created)action='heeft een filterregel toegevoegd';
+  const version=data.before?.version?`Versie ${data.before.version} → ${data.after?.version}`:`Versie ${data.after?.version??'onbekend'}`;
+  change=[version,data.after?.active===false?'Uitgeschakeld':'Actief',data.after?.allow?'Uitzondering':'Blokkade'].join(' · ');
+ }
+ if(entry.action==='chat.limits')change=`Instellingenversie ${data.before?.version??'onbekend'} → ${data.after?.version??'onbekend'}`;
+ if(entry.action==='profile.rename')change=data.before?.username&&data.after?.username?`${data.before.username} → ${data.after.username}`:'';
+ if(entry.action==='profile.rename-required')change='De speler kiest bij de volgende actie een toegestane naam';
+ if(['chat.filter.save','chat.limits','chat.message.redact','profile.rename-required'].includes(entry.action)&&entry.detail&&entry.detail[0]!=='{')change=[change,entry.detail].filter(Boolean).join(' · ');
  const localTime=new Date(entry.at).toLocaleString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
  const summary=`${actor} ${action}.`;
  return {actor,action,subject,change,summary,localTime,technical:{code:entry.action,subjectId:entry.subject,data,detail:entry.detail}};

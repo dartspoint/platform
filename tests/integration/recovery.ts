@@ -9,6 +9,7 @@ import {queue,advanceQueues} from '../../packages/data/src/queue';
 import {respondInvite} from '../../packages/data/src/matches';
 import {transaction} from '../../packages/data/src/db';
 import {adminAction} from '../../packages/data/src/admin';
+import {domainTiming} from './timing-fixture';
 assert.equal(process.env.APP_ENV,'development');
 try{
  await(await redis()).set('dartspoint:draining','0');
@@ -16,7 +17,7 @@ try{
  const actors=await Promise.all(users.map(p=>actorById(p.id,Date.now()+3600000)));const room=(await db().query("select id from community_rooms where name='Nederland 1'")).rows[0].id;for(const a of actors)await joinRoom(a,{roomId:room});
  const rules={startScore:701 as const,doubleIn:false,doubleOut:true,bestOf:3,format:'sets' as const,bestOfSets:3};
  const {matchId}=await transaction(c=>createMatch(c,actors[0],actors[1].id,room,rules,'casual'));let writer=crypto.randomUUID(),fence=await acquireMatch(matchId,writer);
- async function command(actor:any,type:string,override:any={}){const s=await matchAccess(actor,matchId);const payload={protocolVersion:1,commandId:crypto.randomUUID(),matchId,expectedStateVersion:s.stateVersion,type,phaseToken:s.state.phaseToken,...override};return {payload,receipt:await matchCommand(actor,payload,writer,fence)};}
+ async function command(actor:any,type:string,override:any={}){const s=await matchAccess(actor,matchId),timing=domainTiming(s.state,type);const payload={protocolVersion:1,commandId:crypto.randomUUID(),matchId,expectedStateVersion:s.stateVersion,type,phaseToken:s.state.phaseToken,...(timing.renderSample?{renderSample:timing.renderSample}:{}),...override};return {payload,receipt:await matchCommand(actor,payload,writer,fence,timing.ingress)};}
  await command(actors[0],'match.ready');await command(actors[1],'match.ready');await command(actors[0],'dart.stop_horizontal');const launch=await command(actors[0],'dart.stop_vertical');
  const ownerId=(await db().query("select user_id from user_roles where role='owner' and revoked_at is null limit 1")).rows[0].user_id;const owner=await actorById(ownerId,Date.now()+3600000);
  await adminAction(owner,{action:'room-close',args:[room]});await assert.rejects(adminAction(owner,{action:'room-delete',args:[room]}),{code:'active_matches'});

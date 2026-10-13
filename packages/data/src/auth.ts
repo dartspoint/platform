@@ -3,20 +3,21 @@ import { createClient } from '@supabase/supabase-js';
 import { createRemoteJWKSet, jwtVerify, decodeProtectedHeader } from 'jose';
 import { db } from './db';
 import { requireThat, DomainError, uuid } from '../../contracts/src/index';
-export type Actor={id:string;username:string|null;role:'owner'|'admin'|'vip'|'player';sessionVersion:number;expiresAt:number;onboarded:boolean;sessionId?:string};
+export type Actor={id:string;username:string|null;role:'owner'|'admin'|'vip'|'player';sessionVersion:number;expiresAt:number;onboarded:boolean;renameRequired?:boolean;sessionId?:string};
+export function publicPlayerName(id:string,name:string|null,renameRequired:boolean){return renameRequired?'Speler-'+id.replaceAll('-','').slice(0,12):name;}
 let jwks:ReturnType<typeof createRemoteJWKSet>|undefined;
 export function authAdmin() {
  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SECRET_KEY!,{global:{fetch:providerFetch},auth:{persistSession:false,autoRefreshToken:false}});
 }
 export async function actorById(id:string,expiresAt:number,complete=true):Promise<Actor>{return loadActor(id,expiresAt,complete,'access');}
 async function loadActor(id:string,expiresAt:number,complete:boolean,scope:'access'|'revoke'):Promise<Actor> {
- const q=await db().query(`select p.*, coalesce((select role from user_roles r where r.user_id=p.id and r.revoked_at is null order by case role when 'owner' then 0 else 1 end limit 1), case when exists(select 1 from vip_entitlements v where v.user_id=p.id and v.status='active' and v.starts_at<=now() and (v.ends_at is null or v.ends_at>now())) then 'vip' else 'player' end) role from profiles p where p.id=$1`,[id]);
+ const q=await db().query(`select p.*, coalesce((select role from user_roles r where r.user_id=p.id and r.revoked_at is null order by case role when 'owner' then 0 else 1 end limit 1), case when exists(select 1 from vip_entitlements v where v.user_id=p.id and v.status='active' and v.starts_at<=now() and (v.ends_at is null or v.ends_at>now())) then 'vip' else 'player' end) role,
+ exists(select 1 from sanctions where target_id=p.id and room_id is null and kind='suspend' and starts_at<=now() and ends_at>now() and revoked_at is null) globally_suspended from profiles p where p.id=$1`,[id]);
  const p=q.rows[0]; requireThat(p,'unauthenticated',401);
  if(scope==='access')requireThat(p.status==='active','banned',403,'Je account heeft op dit moment geen toegang.');
- const sanctions=await db().query("select 1 from sanctions where target_id=$1 and room_id is null and kind='suspend' and starts_at<=now() and ends_at>now() and revoked_at is null",[id]);
- if(scope==='access')requireThat(!sanctions.rowCount,'banned',403);
+ if(scope==='access')requireThat(!p.globally_suspended,'banned',403);
  requireThat(!complete || p.onboarded_at,'profile_incomplete',403,'Kies eerst je spelersnaam.');
- return {id:p.id,username:p.username,role:p.role,sessionVersion:p.session_version,expiresAt,onboarded:!!p.onboarded_at};
+ return {id:p.id,username:publicPlayerName(p.id,p.username,p.rename_required),role:p.role,sessionVersion:p.session_version,expiresAt,onboarded:!!p.onboarded_at,renameRequired:!!p.rename_required};
 }
 export async function verifyToken(token:string,complete=true):Promise<Actor>{return verifyIdentity(token,complete,'access');}
 // A suspended player may revoke a verified session; this grants no application access.

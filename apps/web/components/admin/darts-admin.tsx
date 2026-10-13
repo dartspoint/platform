@@ -8,6 +8,7 @@ import { MotionConfig, motion } from "motion/react";
 import { Brand } from "@/components/design-studio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AdminSeasons } from "./darts-seasons";
+import {AdminChatModeration} from './darts-chat-moderation';
 import { DartsTournaments } from "./darts-tournaments";
 import { AdminPlayers, AdminRooms, AdminModeration } from "./darts-operations";
 import { AdminGameSettings, AdminPlatformSettings, AdminEloSettings } from "./darts-settings";
@@ -26,6 +27,7 @@ const navigation = [
   { id: "players", label: "Spelers & rollen", icon: Users },
   { id: "rooms", label: "Kamers", icon: Gamepad2 },
   { id: "moderation", label: "Moderatie", icon: ShieldCheck },
+  { id: "chat-moderation", label: "Chat & moderatie", icon: ShieldCheck },
   { id: "game", label: "Spel & deelname", icon: SlidersHorizontal, group: "HET PLATFORM" },
   { id: "elo", label: "DP & competitie", icon: Target },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
@@ -40,6 +42,7 @@ const titles: Record<AdminTab, { title: string; description: string }> = {
   players: { title: "De mensen achter de pijlen.", description: "Een helder overzicht van spelers, rollen en accountmaatregelen." },
   rooms: { title: "Een plek voor iedereen.", description: "Richt kamers in, bepaal de toegang en bewaak de bezetting." },
   moderation: { title: "Houd de club prettig.", description: "Behandel meldingen met context, een passende maatregel en een duidelijke reden." },
+  'chat-moderation': {title:'Chat & moderatie',description:'Beheer woorden, uitzonderingen, chatlimieten en verplichte naamwijzigingen.'},
   game: { title: "Jouw spelregels.", description: "Stel de basis in voor nieuwe toernooien en bepaal wie mag deelnemen." },
   elo: { title: "Een eerlijke plek op de ladder.", description: "Bekijk het actieve DP-beleid en reken een nieuw beleidsvoorstel door." },
   platform: { title: "DartsPoint, zoals jij het wilt.", description: "Beheer platformvoorkeuren, aankondigingen en de toegang tot jouw community." },
@@ -126,8 +129,8 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
           <section className="adm-panel"><div className="adm-panel-heading"><h2>Dit verdient aandacht</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? `${openCases} melding${openCases === 1 ? "" : "en"} open` : "Een rustige community"}</strong><p>Bekijk de context voordat je een maatregel neemt.</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} toernooiconcepten</strong><p>Controleer spelregels en deelname voordat je publiceert.</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>DP-beleid: K = 32</strong><p>10 wedstrijden en 5 verschillende tegenstanders voor plaatsing.</p></div></button></div></section>
 
         </div></div>
-      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "platform" ? <AdminPlatformSettings/> : <AuditPanel entries={audit}/>}
-      <footer className="adm-page-footer"><span>DARTSPOINT · OWNER BACKOFFICE</span><span>Beheerhandelingen worden op dit apparaat bewaard.</span></footer>
+      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "platform" ? <AdminPlatformSettings/> : <AuditPanel entries={audit}/>}
+      <footer className="adm-page-footer"><span>DARTSPOINT · OWNER BACKOFFICE</span><span>Beheerhandelingen worden op de server gecontroleerd en vastgelegd.</span></footer>
       </main>
     </div>
     <Dialog open={searchOpen} onOpenChange={setSearchOpen}><DialogContent className="adm-command-dialog"><DialogHeader><DialogTitle>Waar wil je naartoe?</DialogTitle><DialogDescription>Zoek een onderdeel van platformbeheer.</DialogDescription></DialogHeader><label className="adm-search adm-command-search"><Search size={17}/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Bijvoorbeeld toernooien of spelregels" aria-label="Zoek beheeronderdeel"/></label><div className="adm-command-items">{navigation.filter(item => `${item.label} ${titles[item.id].title} ${titles[item.id].description}`.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} onClick={() => navigate(item.id)}><item.icon size={17}/>{item.label}<ArrowRight size={14}/></button>)}</div></DialogContent></Dialog>

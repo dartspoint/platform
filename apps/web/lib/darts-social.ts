@@ -10,8 +10,9 @@ export type ModerationEntry = { id: string; name: string; room: string; kind: Mo
 export type PlayerReport = { id: string; name: string; room: string; gameId: string; reason: string; detail: string; context: string; createdAt: number; status: "Nieuw" | "In behandeling" | "Afgesloten"; response?: string; messageId?: string };
 export type SocialState = { friends: string[]; friendRequests: FriendRequest[]; muted: string[]; blocked: string[]; moderation: ModerationEntry[]; reports: PlayerReport[]; queues: Record<string, string[]> };
 export function getDartsSocial():SocialState{return getPlatform().social;}
-export function getPlayerPresence(name:string):PlayerPresence{return getPlatform().players.find(p=>p.name===name)?.presence??{online:false,room:"",status:"Offline",available:false};}
-export function friendStatus(name:string,current=getDartsSocial()):FriendStatus{if(name===selfName())return "self";if(current.friends.includes(name))return "friends";return current.friendRequests.find(p=>p.name===name)?.direction??"none";}
+function displayName(idOrName:string){return getPlatform().players.find(p=>p.id===idOrName)?.name??idOrName;}
+export function getPlayerPresence(name:string):PlayerPresence{return getPlatform().players.find(p=>p.id===name||p.name===name)?.presence??{online:false,room:"",status:"Offline",available:false};}
+export function friendStatus(name:string,current=getDartsSocial()):FriendStatus{name=displayName(name);if(name===selfName())return "self";if(current.friends.includes(name))return "friends";return current.friendRequests.find(p=>p.name===name)?.direction??"none";}
 export function useDartsSocial(){const p=usePlatform();return {...p.social,isBlocked,isMuted:isPersonallyMuted,isFriend,friendStatus,getPresence:getPlayerPresence} as SocialState&{isBlocked:typeof isBlocked;isMuted:typeof isPersonallyMuted;isFriend:typeof isFriend;friendStatus:typeof friendStatus;getPresence:typeof getPlayerPresence};}
 async function act(action:string,name:string):Promise<SocialResult>{try{await mutate("social",{action,targetId:playerId(name)});return {ok:true};}catch(e){return {ok:false,error:e instanceof Error?e.message:"De actie kon niet worden uitgevoerd."};}}
 export function sendFriendRequest(name:string){return act("request",name);}
@@ -20,9 +21,9 @@ export function rejectFriendRequest(name:string){return act("reject",name);}
 export function cancelFriendRequest(name:string){return act("cancel",name);}
 export function removeFriend(name:string){return act("remove",name);}
 export function simulateFriendAcceptance(_name:string){return Promise.resolve({ok:false,error:"Alleen de ontvanger kan het verzoek accepteren."} as SocialResult);}
-export function isFriend(name:string){return getDartsSocial().friends.includes(name);}
-export function isBlocked(name:string){return getDartsSocial().blocked.includes(name);}
-export function isPersonallyMuted(name:string){return getDartsSocial().muted.includes(name);}
+export function isFriend(name:string){name=displayName(name);return getDartsSocial().friends.includes(name);}
+export function isBlocked(name:string){name=displayName(name);return getDartsSocial().blocked.includes(name);}
+export function isPersonallyMuted(name:string){name=displayName(name);return getDartsSocial().muted.includes(name);}
 export function toggleBlocked(name:string){return act(isBlocked(name)?"unblock":"block",name);}
 export function togglePersonalMute(name:string){return act(isPersonallyMuted(name)?"unmute":"mute",name);}
 export function isRoomMuted(name:string,room:string,at=Date.now()){return getDartsSocial().moderation.some(e=>e.name===name&&e.room===room&&e.kind==="mute"&&e.until>at);}
@@ -30,13 +31,14 @@ export function isRoomRemoved(name:string,room:string,at=Date.now()){return getD
 function roomContext(idOrName:string){const p=getPlatform(),membership=p.players.find(player=>player.id===p.actor?.id)?.presence.roomId;const current=p.rooms.find(r=>r.id===membership);return p.rooms.find(r=>r.id===idOrName)??(current?.name===idOrName?current:undefined);}
 export function canManageRoom(roomIdOrName:string){return roomContext(roomIdOrName)?.canManage===true;}
 export function canModeratePlayer(name:string,room:string,actor=selfName()){
- const p=getPlatform(),viewer=p.actor,victim=p.players.find(p=>p.name===name),context=roomContext(room);
- if(!viewer||viewer.username!==actor||!victim||victim.id===viewer.id||victim.role==='owner')return false;
+ const p=getPlatform(),viewer=p.actor,victim=p.players.find(p=>p.id===name||p.name===name),context=roomContext(room);
+ if(!viewer||viewer.username!==actor||!victim||!context||victim.id===viewer.id||victim.role==='owner')return false;
  return viewer.role==='owner'||viewer.role==='admin'&&victim.role!=='admin'||canManageRoom(room)&&victim.role==='player'&&!context?.moderatorIds?.includes(victim.id);
 }
-export async function moderationAction(input:{name:string;room:string;kind:ModerationKind;reason:string;minutes?:number;actor?:string}){try{await mutate("moderation",{targetId:playerId(input.name),roomId:roomContext(input.room)?.id,kind:input.kind,reason:input.reason,minutes:input.minutes??10});return true;}catch{return false;}}
+export async function moderationAction(input:{name:string;room:string;kind:ModerationKind;reason:string;minutes?:number;actor?:string;targetId?:string;channelId?:string;matchId?:string;messageId?:string}){const context=roomContext(input.room);if(!context)return false;try{await mutate("moderation",{targetId:input.targetId??playerId(input.name),roomId:context.id,kind:input.kind,reason:input.reason,minutes:input.minutes??10,...(input.channelId?{channelId:input.channelId}:{}),...(input.matchId?{matchId:input.matchId}:{}),...(input.messageId?{messageId:input.messageId}:{})});return true;}catch{return false;}}
+export function invitationReason(name:string){const p=getPlatform(),self=p.players.find(v=>v.id===p.actor?.id),target=p.players.find(v=>v.id===name||v.name===name);if(self?.playing||p.matches.some(m=>m.players?.some((v:any)=>v.id===p.actor?.id)&&['reserved','playing','paused'].includes(m.lifecycle)))return 'Je zit al in een wedstrijd';if(target?.playing||target?.invitationAvailable===false)return 'Deze speler zit al in een wedstrijd';return '';}
 export async function revokeModeration(id:string,_actor=selfName()){try{await mutate("moderation/revoke",{id,reason:"Sanctie na beoordeling ingetrokken"});return true;}catch{return false;}}
-export async function reportPlayer(input:Omit<PlayerReport,"id"|"createdAt"|"status">){const result=await mutate("report",{targetId:playerId(input.name),reason:input.reason,detail:input.detail,...(input.messageId?{messageId:input.messageId}:{}),...(getPlatform().rooms.find(r=>r.name===input.room)?{roomId:getPlatform().rooms.find(r=>r.name===input.room)!.id}:{}),...((getPlatform().matches.some(m=>m.id===input.gameId)||getPlatform().records.some(m=>m.id===input.gameId))?{matchId:input.gameId}:{})});return result.id as string;}
+export async function reportPlayer(input:Omit<PlayerReport,"id"|"createdAt"|"status">&{targetId?:string;roomId?:string;channelId?:string}){const result=await mutate("report",{targetId:input.targetId??playerId(input.name),...(input.channelId?{channelId:input.channelId}:{}),...(input.roomId?{roomId:input.roomId}:{}),reason:input.reason,detail:input.detail,...(input.messageId?{messageId:input.messageId}:{}),...(getPlatform().rooms.find(r=>r.name===input.room)?{roomId:getPlatform().rooms.find(r=>r.name===input.room)!.id}:{}),...((getPlatform().matches.some(m=>m.id===input.gameId)||getPlatform().records.some(m=>m.id===input.gameId))?{matchId:input.gameId}:{})});return result.id as string;}
 export function toggleQueue(matchId:string,_name=selfName()){return mutate("queue",{matchId});}
 export async function advanceQueue(matchId:string){return (await mutate("queue/advance",{matchId})).name as string|null;}
 export function canReceivePrivate(name:string,policy:"everyone"|"friends"|"nobody",existing:boolean){return !isBlocked(name)&&(existing||policy==="everyone"||(policy==="friends"&&isFriend(name)));}

@@ -27,7 +27,7 @@ Publiceer alleen een allowlist-projectie voor marketing: openbare nickname, toeg
 
 | Tabel | Belangrijkste velden | Regels |
 |---|---|---|
-| `profiles` | `id` FK auth.users, `username`, `username_key`, avatar, country, `onboarded_at`, `status`, `session_version` | Username pas na succesvolle OTP; unique canonical key; actieve complete profiel vereist voor spelen |
+| `profiles` | `id` FK auth.users, `username`, `username_key`, avatar, country, `onboarded_at`, `status`, `session_version`, `rename_required` | Username pas na succesvolle OTP; unique canonical key; verplichte rename behoudt ID/rating/history en gebruikt een consequent tijdelijk openbaar label |
 | `profile_private` | profiel-ID, privacy-/notificatie-instellingen, accountactiestatus | Alleen eigenaaraccount en strikt noodzakelijke backendtoegang; e-mail niet dubbel publiek opslaan |
 | `user_roles` | user-ID, rol, granted_by/at, revoked_at | Alleen server/bevoegde owner wijzigt rollen; geen self-promotion |
 | `vip_entitlements` | user-ID, starts_at, ends_at, source, status | VIP is een voordeel/badge, geen moderatorpermissie; effectieve naamkleur volgt owner > admin > VIP > speler |
@@ -48,11 +48,13 @@ Usernamepolicy uit de accountflow centraal afdwingen: trimmen, exact `[A-Za-z0-9
 | `personal_mutes` | Eigen demping | PK `(user_id, muted_id)`; geen globale sanctie |
 | `channels` | `private`, `community`, `match` plus context-FK | Precies één passende context; privépair key uniek |
 | `channel_memberships` | channel/user, rol, joined_at, left_at, last_read_cursor | Toegang uit serverdomein; privéconversatie heeft exact twee gerechtigde accounts |
-| `chat_messages` | channel-ID, sender-ID, seq, body, created_at, redacted_at | Unique `(channel_id, seq)` en `(sender_id, client_message_id)`; plain text; bodylimiet |
+| `chat_messages` | channel-ID, nullable sender-ID/client-ID, seq, change_cursor, body, kind, actor_id, actor_name, event_id, room_id, created_at, redacted_at | Menselijke berichten hebben sender-ID/client-ID; getypeerde `room.member_joined` gebruikt bezoek-ID als uniek event_id; redaction heeft een afzonderlijke catchup-cursor; plain text, geen system-unread/sound |
 | `chat_preferences` | user/channel, closed_at, pinned, notification_mode | Alleen eigen rij; tab sluiten verandert geen channelmembership/historie |
 | `chat_reports` | reporter, message-ID, category, status, assigned_to | Gemeld bericht wordt server-side opgezocht; geen vervalste clientcontext als bewijs |
 
 Gebruik geordende UUID-paren voor vriendschap/DM, niet twee vrije usernames. Een constraint of gecontroleerde functie bewaakt dat een privéchannel exact twee deelnemers heeft; maak geen generieke browser-API waarmee de derde gebruiker zichzelf toevoegt. Blokkeren annuleert pending verzoeken en stopt toekomstige uitnodigingen/DM-verzending in beide richtingen. Bestaande berichten worden daardoor niet stilzwijgend gewist.
+
+De uitbreiding van 13 oktober voegt interne filterregels/-uitzonderingen, geversioneerde chatlimieten, echte kamerbezoeken, de v3-ingressvelden en een duurzame redaction-cursor toe met vier uitsluitend uitbreidende CLI-migraties. Nieuwe interne tabellen krijgen expliciete backendgrants/RLS, geen anon/authenticated-browsertoegang. Filterbeheer, limietwijziging, redaction en verplichte rename schrijven reden en audit. Het accountbrede berichtbudget wordt onder een transactie/advisory-lock gecontroleerd, ook tussen processen. Seeds overschrijven latere ownerwijzigingen niet. Zie `CHANGESET-2026-10-13-KAMER-CHAT-MODERATIE-INDICATOR.md` voor de exacte migratienamen en acceptatie.
 
 `everyone/friends/nobody` geldt voor nieuwe gesprekken. Een bestaand gesprek kan volgens bestaand UX-beleid hervat worden zolang geen blokkade of sanctie geldt. Persoonlijke mute is lokaal ontvangstgedrag; servermute is schrijfverbod. Toon in de UI het verschil. Een gesloten privétab blijft gesloten bij een nieuw bericht; inbox/unread verandert wel. Berichthistorie en concept blijven behouden.
 

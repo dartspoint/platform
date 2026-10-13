@@ -46,9 +46,11 @@ Controleer lettertypebelasting vóór screenshotvergelijking. Een fallbackfont k
 
 ## 4. Exacte spelindeling
 
-### 4.1 Desktop vanaf 1100 CSS-pixels
+### 4.1 Desktop vanaf 1024 CSS-pixels
 
-De zichtbare viewport heeft een compacte header over de volle breedte. Daaronder links en rechts ieder de helft. Links staat de actieve spelervaring: groot bord, horizontale richtingsbalk rechtsboven het bord, verticale hoogtebalk rechts ernaast, rode gooiknop laag bij de scoretabel, finishregel en scoretabel. Rechts boven staan kamerleden links en vrienden rechts; daaronder chat. De bovenste rechtse verdeling is ongeveer 1,55:1. De lijsten en chat hebben eigen scrollvlakken; de pagina zelf wordt geen eindeloos dashboard.
+De aanvulling van 13 oktober vervangt de oude desktopverdeling. De zichtbare dynamische viewport heeft een compacte header over de volle breedte. Daaronder links en rechts ieder 50%. Links staat het overzicht met echte aankondigingen en gepubliceerde evenementen, het actieve spel of oefenen. Rechts blijft in alle drie contexten dezelfde community zichtbaar: de bovenste helft bevat kamerleden en vrienden met ieder 50% breedte; de onderste helft bevat precies één chat met vaste composer. Lijsten en berichten scrollen intern met `min-height:0`; de pagina wordt geen eindeloos dashboard. Zonder kamer zijn kamerleden en kamerchat een duidelijke lege toestand; privégesprekken en vrienden blijven bereikbaar.
+
+In het spel blijven groot bord, horizontale richtingsbalk rechtsboven, verticale hoogtebalk ernaast, rode gooiknop, finishregel en scoretabel behouden. Overzicht, spel en oefenen gebruiken dezelfde werkruimtecomponent.
 
 Het openen van een communitypaneel of resize mag het spel niet remounten. Een actieve pijl, score en roomverbinding blijven behouden. Lijsten mogen geen renderfrequentie of verbinding van het spel beïnvloeden.
 
@@ -60,7 +62,7 @@ De spelpagina vult de **zichtbare** viewport, inclusief dynamische browserbalken
 
 Tijdens een actieve partij schuiven Kamer en Chat vanaf onder tot 60% hoogte; buiten een partij vullen vrienden/berichten en kamerchat de bruikbare viewport. Het actieve bord blijft zichtbaar erboven. Het Kamer-paneel opent op de huidige spelerslijst; terugpijl brengt naar kamerkeuze met aantallen/maximaal. Chat heeft tabvolgorde Spelchat, Kamerchat en privégesprekken. De ondernavigatie blijft logisch bereikbaar; composer blijft boven het mobiele toetsenbord.
 
-Landscape met geringe hoogte heeft eigen compacte regels; de bron zet vanaf 640 breed en maximaal 540 hoog de scorezone naast het bord. Niet forceren tot een onbruikbare verkleinde portraitindeling. Gebruik containerqueries/minmax/min-height:0 zoals in de bron. De gekozen indeling bij 1099 en 1100 px moet bewust omschakelen, zonder dubbele navigatie of verdwenen chat.
+Landscape met geringe hoogte heeft eigen compacte regels; de bron zet vanaf 640 breed en maximaal 540 hoog de scorezone naast het bord. Niet forceren tot een onbruikbare verkleinde portraitindeling. Gebruik containerqueries/minmax/min-height:0 zoals in de bron. De gekozen indeling bij 1023 en 1024 px moet bewust omschakelen, zonder dubbele navigatie, dubbele chat of verdwenen state.
 
 ### 4.3 Bord, meters en knop
 
@@ -133,8 +135,8 @@ Alle maten zijn CSS-pixels, geen bestandsresoluties. Controleer op 100% zoom én
 | iPhone | 393×852 of 430×932 | Safari dynamische viewport, notch/homeindicator, OTP-paste, PWAstandalone. |
 | Telefoon landscape | 844×390, 915×412 | Compact bord+tabel naast elkaar, geen buttonoverlap, modal/composer bruikbaar. |
 | Tablet portrait | 768×1024, 820×1180 | Ruimteverdeling, ondernav, panels en auth/marketingcopy. |
-| Tablet landscape | 1024×768 | Net onder desktopbreakpoint: geen halve desktoplayout. |
-| Breakpointgrens | 1099×768 en 1100×768 | Precies één gamecomponent, juiste nav, geen verdwijnende state. |
+| Tablet landscape | 1024×768 | Desktopwerkruimte met twee gelijke helften. |
+| Breakpointgrens | 1023×768 en 1024×768 | Precies één gamecomponent en chat, juiste nav, geen verdwijnende state. |
 | Kleine desktop | 1280×720, 1366×768 | Rechterlijsten/chat intern scrollbaar; game+score zonder bodyoverflow. |
 | Grote desktop | 1440×900, 1920×1080 | Links/rechts halve viewport, max-widths behouden, geen uitgerekte logo/kaarten. |
 | Korte desktop | 1100×600, 1440×620 | Compacte headers, composer en score bereikbaar, geen lege overlays. |

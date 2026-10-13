@@ -8,8 +8,9 @@ export async function serverAuth(){const store=await cookies();return createServ
 export async function currentActor(request?:Request,complete=true){
  const bearer=request?.headers.get('authorization');
  if(bearer?.startsWith('Bearer '))return verifyToken(bearer.slice(7),complete);
- const auth=await serverAuth();const {data,error}=await auth.auth.getUser();if(error||!data.user?.email_confirmed_at)throw new DomainError('unauthenticated',401);
- const {data:session}=await auth.auth.getSession();if(!session.session)throw new DomainError('unauthenticated',401);
+ // Read the cookie only to obtain its token. verifyToken remains the single
+ // authoritative provider verification, followed by fresh local access checks.
+ const auth=await serverAuth();const {data:session,error}=await auth.auth.getSession();if(error||!session.session)throw new DomainError('unauthenticated',401);
  return verifyToken(session.session.access_token,complete);
 }
 export async function currentActorForLogout(request:Request){

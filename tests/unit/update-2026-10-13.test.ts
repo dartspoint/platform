@@ -22,6 +22,8 @@ test('Unread counts actual messages, includes closed DMs and deduplicates channe
 test('Dutch audit deduplication distinguishes global role and per-room rights',()=>{
  const event={id:'1',at:Date.now(),actor:'Danny',action:'member.role',subject:'123e4567-e89b-12d3-a456-426614174000',subjectName:'Sam',detail:'',data:{beforeRole:'player',role:'admin'}};const formatted=formatAudit(event);assert.equal(formatted.change,'Speler → Platformbeheerder');assert.equal(formatted.subject,'Sam');assert.equal(dedupeAudit([event,event]).length,1);
  assert.equal(formatAudit({...event,action:'room.moderator.assigned',data:{roomName:'Nederland 1'}}).change,'Nederland 1');assert.equal(formatAudit({...event,subjectName:undefined,data:undefined}).subject,'Verwijderd of onbekend onderwerp');
+ const filterAudit=formatAudit({...event,action:'chat.filter.save',subjectName:'regel',detail:'De regel is gecontroleerd',data:{before:{version:2},after:{version:3,active:false,allow:false}}});assert.equal(filterAudit.action,'heeft een filterregel bijgewerkt');assert.match(filterAudit.change,/Versie 2 → 3.*Uitgeschakeld.*De regel is gecontroleerd/);
+ assert.equal(formatAudit({...event,action:'profile.rename-required',detail:'De naam is gecontroleerd',data:{}}).action,'heeft een naamswijziging verplicht gesteld');
 });
 test('Launch validation normalizes email and forbids consent omission, honeypots and extra data',()=>{
  assert.equal(launchSignupSchema.parse({email:'  PLAYER@EXAMPLE.COM ',consent:true,website:''}).email,'player@example.com');

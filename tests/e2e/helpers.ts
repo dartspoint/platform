@@ -1,10 +1,27 @@
 import {chromium,type Page,type Browser} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
-export const origin='http://127.0.0.1:4300';
+import {readFileSync,statSync} from 'node:fs';
+export const origin=process.env.E2E_ORIGIN??'http://127.0.0.1:4300';
+let stagingAccount=0;
 // Isolate local browser IP budgets; native QA bypasses the production Caddy ingress.
 export function testClientHeaders(){const id=randomUUID().replaceAll('-','');return {'x-forwarded-for':`198.18.${parseInt(id.slice(0,2),16)}.${parseInt(id.slice(2,4),16)}`};}
 export async function login(browser:Browser,label:string){
- const context=await browser.newContext({viewport:{width:1366,height:768}});const headers=testClientHeaders();
+ if(process.env.E2E_STAGING_FIXTURE){
+  if(origin!=='https://staging.dartspoint.nl')throw new Error('Reserved staging fixture only');
+  const path=process.env.E2E_STAGING_FIXTURE,metadata=statSync(path);
+  if(metadata.mode&0o077)throw new Error('Browser fixture requires private file permissions');
+  const fixture=JSON.parse(readFileSync(path,'utf8'));
+  if(fixture.origin!==origin||!Array.isArray(fixture.fixtures)||fixture.fixtures.length!==2)throw new Error('Unexpected staging fixture');
+  const user=fixture.fixtures[stagingAccount++%2],context=await browser.newContext({viewport:{width:1366,height:768},...(process.env.E2E_STAGING_PROXY?{proxy:{server:process.env.E2E_STAGING_PROXY}}:{})});
+  await context.addInitScript('globalThis.__name = (fn) => fn;');
+  const cookieName='sb-'+new URL(fixture.supabaseUrl).hostname.split('.')[0]+'-auth-token',encoded='base64-'+Buffer.from(JSON.stringify(user.session)).toString('base64url');
+  const pieces=encoded.match(/.{1,3180}/g)!;
+  await context.addCookies(pieces.map((value,index)=>({name:cookieName+(pieces.length>1?'.'+index:''),value,url:origin,secure:true,sameSite:'Lax' as const,httpOnly:false})));
+  const page=await context.newPage();await page.goto(origin+'/lobby');
+  const state=await get(page,'bootstrap');if(state.actor.id!==user.id||state.actor.role!=='player')throw new Error('Fixture identity mismatch');
+  return {page,context,email:user.session.user.email,name:user.username,id:user.id,token:user.session.access_token};
+ }
+ const context=await browser.newContext({viewport:{width:1366,height:768}});await context.addInitScript('globalThis.__name = (fn) => fn;');const headers=testClientHeaders();
  await context.route('**/api/platform/auth/**',route=>route.continue({headers:{...route.request().headers(),...headers}}));const page=await context.newPage();
  const suffix=randomUUID().replaceAll('-','').slice(0,8),email=`qa-${label}-${suffix}@dartspoint.local`,name=`${label}${suffix}`;
  await page.goto(origin+'/inloggen');await page.getByLabel('E-mailadres',{exact:true}).fill(email);await page.getByRole('button',{name:'Ontvang je inlogcode'}).click();await page.getByLabel('Je eenmalige code').waitFor();

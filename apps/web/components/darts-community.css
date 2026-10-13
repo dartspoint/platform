@@ -358,3 +358,13 @@
 .chat-tabs [data-slot=tabs-trigger]{gap:6px}
 .chat-messages{overscroll-behavior:contain;overflow-anchor:none}
 @media(max-width:640px){.profile-view{--profile-padding:16px}.profile-view .profile-rating{margin-left:auto}.profile-view .profile-identity>div{min-width:110px}.profile-section-title{flex-wrap:wrap}}
+.chat-avatar-menu{display:block;flex:none;padding:0;border-radius:8px}
+.chat-name-menu{padding:0;font-size:12px;font-weight:600;line-height:1.4}
+.chat-send-status{display:block;margin-top:4px;color:#9ab3a3;font-size:10px}
+.chat-send-failed{display:flex;flex-wrap:wrap;gap:7px;margin-top:5px;font-size:10px;color:#f3ab9c}
+.chat-send-failed>span{flex-basis:100%}
+.chat-send-failed>button{padding:4px 7px;border:1px solid #db978b50;border-radius:5px;min-height:28px}
+.chat-system time{margin-left:auto;flex:none;opacity:.65;font-size:9px}
+.chat-message-meta>.dp-player-menu-trigger{min-width:0;max-width:calc(100% - 42px);overflow:hidden}
+.chat-message-meta>.dp-player-menu-trigger .player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-tabs .chat-private-tab .dp-avatar{width:18px;height:18px;flex:none;font-size:7px}

@@ -5,7 +5,7 @@ import { Crown, Info } from "lucide-react";
 import { playerByName, type DartsPlayer, type PlayerRole } from "@/lib/darts-data";
 import { ratingStatus } from "@/lib/darts-elo";
 import { useRatingProfile } from "@/lib/darts-ratings";
-import { useAdminOperations } from "@/lib/darts-admin-operations";
+import {usePlatform} from "@/lib/platform-client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import "./player-identity.css";
 
@@ -18,8 +18,8 @@ const roleLabels: Record<PlayerRole, string> = {
 
 /** Nickname styling communicates a role, independently of the player's rating. */
 export function PlayerName({ name, className = "" }: { name: string; className?: string }) {
-  const operations = useAdminOperations();
-  const role = operations.members.find(member => member.name === name)?.role ?? playerByName(name).role;
+  usePlatform();
+  const role = playerByName(name).role;
   return <span className={`dp-player-name dp-role-${role} ${className}`} title={`${name} · ${roleLabels[role]}`} aria-label={`${name}, ${roleLabels[role]}`}>
     {role === "vip" && <Crown className="dp-vip-crown" size={13} strokeWidth={1.8} aria-hidden="true" />}
     <span className="dp-player-name-text">{name}</span><DivisionBadge name={name} compact/>

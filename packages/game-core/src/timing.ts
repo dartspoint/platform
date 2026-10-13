@@ -1,5 +1,8 @@
-export const TIMING_VERSION='bounded-latency-v2' as const;
-export type TimingVersion='receive-v1'|typeof TIMING_VERSION;
+export const TIMING_VERSION='render-sample-v3' as const;
+export type TimingVersion='receive-v1'|'bounded-latency-v2'|typeof TIMING_VERSION;
+export const MAX_COMPENSATION_MS=90;
+export const MAX_RENDER_AGE_MS=34;
+export type RenderSampleClaim={sampleAt:number;connectionId:string;dartNumber:number};
 export function meterPosition(at:number,startedAt:number,axis:'horizontal'|'vertical'){
  const period=axis==='horizontal'?2200:2500;
  const phase=(((at-startedAt)/period+.25)%1+1)%1;
@@ -17,14 +20,39 @@ export function trustedLatency(samples:readonly number[]){
  // At least three challenges; lower quartile resists transient queues and inflated echoes.
  return valid.length<3?0:Math.min(90,Math.floor(valid[Math.floor((valid.length-1)/4)]/2));
 }
+// A measured connection supplies a bounded allowance, not a client-chosen RTT.
+// Frame age is separate from (and cannot increase) the 90ms network allowance.
+export function sampleWindow(samples:readonly number[]){
+ const valid=samples.filter(n=>Number.isFinite(n)&&n>=0&&n<=1000);
+ if(valid.length<3)return 0;
+ return Math.min(MAX_COMPENSATION_MS,Math.max(20,trustedLatency(valid)*3))+MAX_RENDER_AGE_MS;
+}
+export function admittedSample(sampleAt:number,receivedAt:number,windowMs:number,phaseStartedAt:number,lastAcceptedAt:number,processedAt:number){
+ if(![sampleAt,receivedAt,windowMs,phaseStartedAt,lastAcceptedAt,processedAt].every(Number.isFinite)||windowMs<MAX_RENDER_AGE_MS||windowMs>MAX_COMPENSATION_MS+MAX_RENDER_AGE_MS||receivedAt>processedAt||sampleAt>receivedAt||sampleAt<receivedAt-windowMs||sampleAt<phaseStartedAt||sampleAt<lastAcceptedAt)throw new Error('invalid_render_sample');
+ return sampleAt;
+}
 export class ServerClock {
- private epoch:number|null=null;private samples:{rtt:number;epoch:number}[]=[];
+ private epoch:number|null=null;private conservativeEpoch:number|null=null;private samples:{rtt:number;epoch:number;lowerEpoch:number}[]=[];private phases=new Map<string,number>();
  seed(serverAt:number,at=performance.now()){if(this.epoch===null)this.epoch=serverAt-at;}
- sample(serverAt:number,sentAt:number,receivedAt=performance.now()){
-  const rtt=receivedAt-sentAt;if(!Number.isFinite(serverAt)||rtt<0||rtt>5000)return;
-  this.samples.push({rtt,epoch:serverAt-(sentAt+receivedAt)/2});this.samples=this.samples.slice(-12);
+ sample(serverAt:number,sentAt:number,receivedAt=performance.now(),serverReceivedAt=serverAt){
+  const processing=serverAt-serverReceivedAt,rtt=receivedAt-sentAt-processing;if(!Number.isFinite(serverAt)||processing<0||rtt<0||rtt>5000)return;
+  this.samples.push({rtt,epoch:serverAt-receivedAt+rtt/2,lowerEpoch:serverAt-receivedAt});this.samples=this.samples.slice(-12);
   const best=[...this.samples].sort((a,b)=>a.rtt-b.rtt).slice(0,3).sort((a,b)=>a.epoch-b.epoch);
   this.epoch=best.length<3?[...this.samples].sort((a,b)=>a.rtt-b.rtt)[0].epoch:best[Math.floor(best.length/2)].epoch;
+  // Send minus receive is a lower bound regardless of uplink/downlink
+  // asymmetry. Midpoint estimates can be in the future after a cold uplink
+  // queue; a new sample policy never advances beyond its measured lower bound.
+  this.conservativeEpoch=Math.max(...best.map(sample=>sample.lowerEpoch));
+ }
+ get ready(){return this.samples.length>=3;}
+ restartCalibration(){this.samples=[];this.epoch=null;this.conservativeEpoch=null;}
+ get offset(){return this.epoch;}
+ recoverPhase(phaseToken:string){this.phases.delete(phaseToken);}
+ phaseOffset(phaseToken:string){return this.phases.get(phaseToken);}
+ phaseNow(phaseToken:string,at=performance.now(),version:TimingVersion=TIMING_VERSION){
+  if(!this.ready)throw new Error('clock_not_calibrated');
+  let epoch=this.phases.get(phaseToken);if(epoch===undefined){epoch=version===TIMING_VERSION?this.conservativeEpoch!:this.epoch!;this.phases.set(phaseToken,epoch);if(this.phases.size>8)this.phases.delete(this.phases.keys().next().value!);}
+  return epoch+at;
  }
  now(at=performance.now()){return (this.epoch??Date.now()-at)+at;}
 }

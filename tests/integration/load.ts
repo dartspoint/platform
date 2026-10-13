@@ -9,7 +9,7 @@ import {joinRoom} from '../../packages/data/src/community';
 import {createMatch,matchAccess} from '../../packages/data/src/matches';
 
 assert.equal(process.env.APP_ENV,'development');
-const sockets:Room[]=[],latencies:number[]=[];let staleStateReconciliations=0,connectionReconciliations=0;const admin=authAdmin();const ids:string[]=[];
+const sockets:Room[]=[],latencies:number[]=[],calibrations=new WeakMap<Room,{connectionId:string;ready:boolean}>();let staleStateReconciliations=0,connectionReconciliations=0;const admin=authAdmin();const ids:string[]=[];
 try{
  const profiles=(await db().query("select p.id from profiles p where p.username like 'qa%' and p.status='active' and not exists(select 1 from active_player_reservations a where a.user_id=p.id) and not exists(select 1 from user_roles r where r.user_id=p.id and revoked_at is null) order by p.created_at desc limit 50")).rows;assert.equal(profiles.length,50);
  const users:{actor:Actor;token:string}[]=[];
@@ -22,7 +22,7 @@ try{
  const sdk=new Client('ws://127.0.0.1:42567');
  async function connect(user:typeof users[number],matchId:string){
   for(let attempt=0;attempt<3;attempt++)try{
-   const socket=await sdk.joinOrCreate('match',{matchId,token:user.token});socket.onMessage('snapshot',()=>{});socket.onMessage('clock.challenge',(sample:any)=>socket.send('clock.echo',{nonce:sample.nonce}));sockets.push(socket);return socket;
+   const socket=await sdk.joinOrCreate('match',{matchId,token:user.token});socket.onMessage('snapshot',()=>{});socket.onMessage('clock.challenge',(sample:any)=>socket.send('clock.echo',{nonce:sample.nonce}));socket.onMessage('clock.ready',(sample:any)=>calibrations.set(socket,sample));socket.onMessage('clock.sample',(sample:any)=>calibrations.set(socket,sample));sockets.push(socket);for(let n=0;n<6;n++)setTimeout(()=>{if(socket.connection.isOpen)socket.send('clock.ping',{nonce:randomUUID()});},n*100);return socket;
   }catch(error){
    if((error as {code?:number}).code!==4001||attempt===2)throw error;
    // A local Auth/room handshake may close before Colyseus returns a useful
@@ -51,6 +51,7 @@ try{
     assert.ok(performance.now()-start<10000,'Authoritative load phase did not become ready');
     await new Promise(r=>setTimeout(r,25));state=await matchAccess([pair.a,pair.b][seat].actor,pair.id);
    }
+   while(phase&&!calibrations.get(socket)?.ready){assert.ok(performance.now()-start<10000,'Clock calibration did not complete');await new Promise(r=>setTimeout(r,25));}
    const accepted=await new Promise<boolean>((resolve,reject)=>{
     const cleanup=()=>{clearTimeout(timeout);offReceipt();offError();};
     const timeout=setTimeout(()=>{cleanup();reject(new Error('Realtime load receipt timeout'));},10000);
@@ -58,7 +59,8 @@ try{
     const offError=socket.onMessage('error',(e:any)=>{cleanup();if(e.code==='stale_state')resolve(false);else reject(new Error('Realtime load rejected: '+e.code));});
     // A rejected stale intent gets a new UUID after a fresh authoritative read.
     // No accepted command is replayed with a changed payload.
-    socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type});
+    const calibration=calibrations.get(socket);assert.ok(!phase||calibration?.ready,'Socket must complete measured calibration');
+    socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type,...(phase?{renderSample:{sampleAt:Math.max(state.state.phaseStartedAt,Date.now()-2),connectionId:calibration!.connectionId,dartNumber:state.state.dartCount[0]+state.state.dartCount[1]+1}}:{})});
    });
    if(accepted){latencies.push(performance.now()-start);return;}
    staleStateReconciliations++;

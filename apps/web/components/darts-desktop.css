@@ -10,7 +10,7 @@
 .dp-desktop-nav { display:none; }
 .dp-fullscreen-stage:focus { outline:none; }
 
-@media(min-width:1100px) {
+@media(min-width:1024px) {
   .darts-app.dp-fullscreen.is-desktop-workspace {
     --dp-nav-height:0px;
     --dp-header-height:68px;
@@ -59,7 +59,7 @@
 
   .dp-desktop-community {
     display:grid;
-    grid-template-rows:minmax(0,1.08fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) minmax(0,1fr);
     min-width:0;
     min-height:0;
     gap:12px;
@@ -69,7 +69,7 @@
     --muted:#8ba695;
     --border:#a0c3aa1b;
   }
-  .dp-desktop-community-top { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:12px; min-width:0; min-height:0; }
+  .dp-desktop-community-top { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; min-width:0; min-height:0; }
   .dp-desktop-players,.dp-desktop-friends,.dp-desktop-chat { min-width:0; min-height:0; }
   .dp-desktop-players { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:15px; background:linear-gradient(145deg,#182f2166,transparent 75%),var(--surface); overflow:hidden; }
   .dp-desktop-room-toolbar { display:flex; align-items:center; flex:none; gap:8px; min-height:69px; padding:10px 13px 11px 9px; border-bottom:1px solid #a0c3aa11; }
@@ -138,7 +138,7 @@
   .is-desktop-workspace .dp-play-toast { bottom:25px; }
 }
 
-@media(min-width:1100px) and (max-height:680px) {
+@media(min-width:1024px) and (max-height:680px) {
   .dp-desktop-community { grid-template-rows:minmax(0,1fr) minmax(0,1fr); gap:9px; padding-top:10px; padding-bottom:10px; }
   .dp-desktop-room-toolbar,.dp-desktop-friends .community-heading { min-height:53px; padding-block:8px; }
   .dp-desktop-chat .chat-tabs { height:40px!important; }
@@ -156,7 +156,7 @@
   .dp-desktop-chat .chat-message p { font-size:12px; }
 }
 
-@media(min-width:1100px) {
+@media(min-width:1024px) {
   .dp-desktop-chat { container-type:size; container-name:desktopchat; }
   .dp-desktop-room-content.is-room-list { display:flex; flex-direction:column; overflow:hidden; }
   .dp-desktop-room-content.is-room-list>.room-list-panel { flex:1; min-height:0; }
@@ -183,4 +183,59 @@
   .dp-desktop-chat .chat-panel .chat-person-tools { padding-block:3px; font-size:9px; }
   .dp-desktop-chat .chat-panel .chat-person-tools button { min-height:24px; font-size:9px; }
   .dp-desktop-chat .chat-panel .chat-messages { padding-block:7px; }
+}
+/* Fixed workspace: desktop starts at 1024 CSS px; each list and history owns its scroll. */
+.dp-room-community{height:100%;min-height:0;overflow-y:auto;padding:28px;color:#e8eee6;scrollbar-width:thin}
+.dp-room-community h1{font-size:clamp(24px,3vw,42px);line-height:1.15;margin:8px 0 12px;font-weight:650;overflow-wrap:anywhere}
+.dp-room-community>p{font-size:14px;line-height:1.65;color:#a7b9ac}
+.dp-room-community-actions{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 30px}
+.dp-room-community-actions>a,.dp-room-community-actions>button{display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 14px;border-radius:10px;border:1px solid #97b69f38;font-size:12px;background:#263d2e}
+.dp-room-community-actions>a{background:#dc7766;color:#17251b;border-color:transparent;font-weight:650}
+.dp-room-community>section{padding:20px 0;border-top:1px solid #a4c3ab21}
+.dp-room-community h2{font-size:16px;margin-bottom:12px;font-weight:600}
+.dp-room-empty{font-size:13px;line-height:1.6;color:#8eaa97}
+.dp-room-tournament{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #9fbaa727;border-radius:10px;margin-bottom:10px;font-size:13px}
+.dp-room-tournament>span{display:flex;align-items:center;justify-content:space-between;color:#9aba9e;font-size:11px}
+.dp-workspace-header{display:flex;align-items:center;gap:20px;height:68px;flex:none;padding:12px 24px;border-bottom:1px solid #9cbbaa26;color:#c1d0c0;font-size:13px}
+.dp-workspace-header>a:last-child{margin-left:auto}
+.dp-workspace-header .brand{width:150px}
+.dp-workspace-feedback{position:fixed;bottom:16px;left:20px;z-index:40;background:#243b2b;border-radius:10px;padding:12px;color:#e9eee5}
+@media(min-width:1024px){
+ .dp-lobby-fixed{height:var(--lobby-height,100dvh);min-height:0!important;display:flex;flex-direction:column;overflow:hidden;--surface:#12231a;--border:#a0c3aa1b;--text:#e6eee6;--muted:#8ba695}
+ .dp-lobby-fixed .lobby-header{position:relative;flex:none;height:68px}
+ .dp-lobby-fixed .lobby-header-inner{height:100%;max-width:none;padding-inline:24px}
+ .dp-lobby-fixed>.dp-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);flex:1;min-height:0}
+ .dp-lobby-fixed .lobby-main{width:100%;margin:0;max-width:none;padding:20px;min-height:0;overflow-y:auto;border-right:1px solid #8cb49a1c}
+ .dp-lobby-fixed .lobby-main:has(>.dp-room-community){padding:0;overflow:hidden}
+ .dp-lobby-fixed .lobby-page-heading{margin-bottom:20px}
+ .dp-lobby-fixed .lobby-page-heading h1{font-size:32px}
+ .dp-lobby-fixed .lobby-room-total{display:none}
+ .dp-lobby-fixed .lobby-room-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dp-lobby-fixed .lobby-footer{display:none}
+ .dp-desktop-community{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}
+ .dp-desktop-community-top{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .dp-desktop-room-content{overflow-y:auto;overscroll-behavior:contain}
+ .dp-desktop-room-content>.players-panel{min-height:0;height:auto}
+ .dp-desktop-chat .chat-panel{overflow:hidden;min-height:0}
+ .dp-desktop-chat .chat-empty-state{min-height:0}
+ .dp-desktop-chat .chat-privacy-feedback{font-size:10px;line-height:1.35;max-height:52px;overflow-y:auto}
+ .dp-desktop-chat .chat-tabs{gap:12px;padding-inline:12px}
+ .dp-room-mode .dp-room-home{height:100%;min-height:0;overflow:hidden;max-width:none!important;padding:0!important}
+ .dp-room-mode .dp-room-selection{height:100%;min-height:0;overflow-y:auto}
+ .dp-practice-workspace .practice-is-embedded{height:100%;min-height:0}
+}
+@media(min-width:1024px){
+ .dp-practice-workspace .practice-is-embedded{min-height:0;overflow-y:auto;padding-bottom:20px}
+ .practice-is-embedded .practice-layout{width:calc(100% - 36px);margin:14px auto 0;grid-template-columns:minmax(0,1fr);gap:16px}
+ .practice-is-embedded .practice-heading h1{font-size:25px;margin:7px 0 12px}
+ .practice-is-embedded .practice-arena{width:min(100%,calc(100dvh - 355px));max-width:640px;padding:27px 32px 26px 0}
+ .practice-is-embedded .practice-mode-tabs button{padding-inline:7px;min-height:38px;font-size:10px}
+ .practice-is-embedded .practice-mode-options{min-height:50px}
+ .practice-is-embedded .practice-status{font-size:11px;min-height:36px}
+ .practice-is-embedded .practice-visit{min-height:66px;padding:10px}
+ .practice-is-embedded .practice-sidebar{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+ .practice-is-embedded .practice-sidebar .practice-tutorial-link{grid-column:1/-1}
+ .practice-is-embedded .practice-achievements-wrap{width:calc(100% - 36px);margin-top:20px}
+ .practice-is-embedded .practice-badge-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .practice-is-embedded .practice-records{grid-template-columns:repeat(2,minmax(0,1fr))}
 }

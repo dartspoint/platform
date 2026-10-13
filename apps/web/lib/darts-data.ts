@@ -27,4 +27,4 @@ export function ratingTone(rating: number, played = 0, distinctOpponents = playe
   return displayed >= 1550 ? "rating-green" : displayed < 1450 ? "rating-red" : "rating-amber";
 }
 
-export function playerByName(name:string):DartsPlayer{return getPlatform().players.find(p=>p.name===name)??{name,role:"player",rating:1500,average:0,status:"Beschikbaar",initials:name.slice(0,2).toUpperCase()||"?",wins:0,played:0,oneEighties:0,country:""};}
+export function playerByName(name:string):DartsPlayer{return getPlatform().players.find(p=>p.id===name||p.name===name)??{name,role:"player",rating:1500,average:0,status:"Beschikbaar",initials:name.slice(0,2).toUpperCase()||"?",wins:0,played:0,oneEighties:0,country:""};}

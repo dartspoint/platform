@@ -8,6 +8,7 @@ import {readiness} from '../../../packages/data/src/health';
 import {scheduleCompetitions,competitionResult} from '../../../packages/data/src/competitions';
 
 import {advanceQueues} from '../../../packages/data/src/queue';
+import {deliverGameInviteNotification} from '../../../packages/data/src/notifications';
 
 const workerId=process.env.WORKER_ID??'dartspoint';
 const release=process.env.RELEASE_SHA??'local-development';
@@ -17,6 +18,7 @@ let stopping=false;
 process.on('SIGTERM',()=>{stopping=true;});
 async function send(event:any){
  if(event.kind==='match-result'){await transaction(c=>competitionResult(c,event));return;}
+ if(event.kind==='game-invite'){await deliverGameInviteNotification(event);return;}
  if(event.user_id){
   await db().query('insert into notifications(user_id,kind,payload,source_event) values($1,$2,$3,$4) on conflict(source_event) do nothing',[event.user_id,event.kind,JSON.stringify(event.payload),event.id]);
  }
