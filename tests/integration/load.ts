@@ -9,7 +9,7 @@ import {joinRoom} from '../../packages/data/src/community';
 import {createMatch,matchAccess} from '../../packages/data/src/matches';
 
 assert.equal(process.env.APP_ENV,'development');
-const sockets:Room[]=[],latencies:number[]=[];const admin=authAdmin();const ids:string[]=[];
+const sockets:Room[]=[],latencies:number[]=[];let staleStateReconciliations=0;const admin=authAdmin();const ids:string[]=[];
 try{
  const profiles=(await db().query("select p.id from profiles p where p.username like 'qa%' and p.status='active' and not exists(select 1 from active_player_reservations a where a.user_id=p.id) and not exists(select 1 from user_roles r where r.user_id=p.id and revoked_at is null) order by p.created_at desc limit 50")).rows;assert.equal(profiles.length,50);
  const users:{actor:Actor;token:string}[]=[];
@@ -25,21 +25,41 @@ try{
   // Allocate four matches per room; user indices do not overlap.
   const a=users[(index%2)+Math.floor(index/2)*4],b=users[(index%2)+Math.floor(index/2)*4+2];
   const result=await transaction(c=>createMatch(c,a.actor,b.actor.id,rooms[index%2],{startScore:701,doubleIn:false,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},'casual'));ids.push(result.matchId);
-  const playerSockets=[];for(const user of [a,b]){const socket=await sdk.joinOrCreate('match',{matchId:result.matchId,token:user.token});socket.onMessage('snapshot',()=>{});sockets.push(socket);playerSockets.push(socket);}
+  const playerSockets=[];for(const user of [a,b]){const socket=await sdk.joinOrCreate('match',{matchId:result.matchId,token:user.token});socket.onMessage('snapshot',()=>{});socket.onMessage('clock.challenge',(sample:any)=>socket.send('clock.echo',{nonce:sample.nonce}));sockets.push(socket);playerSockets.push(socket);}
   pairs.push({a,b,id:result.matchId,sockets:playerSockets});
  }
  // Sixteen players and thirty-four spectators, fifty live WebSocket connections.
- for(let index=16;index<50;index++){const pair=pairs.find((_,n)=>n%2===index%2)!;const socket=await sdk.joinOrCreate('match',{matchId:pair.id,token:users[index].token});socket.onMessage('snapshot',()=>{});sockets.push(socket);}
+ for(let index=16;index<50;index++){const pair=pairs.find((_,n)=>n%2===index%2)!;const socket=await sdk.joinOrCreate('match',{matchId:pair.id,token:users[index].token});socket.onMessage('snapshot',()=>{});socket.onMessage('clock.challenge',(sample:any)=>socket.send('clock.echo',{nonce:sample.nonce}));sockets.push(socket);}
  async function command(pair:typeof pairs[number],seat:number,type:string){
-  const state=await matchAccess([pair.a,pair.b][seat].actor,pair.id),socket=pair.sockets[seat],start=performance.now();
-  await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('Realtime load receipt timeout')),10000);const offReceipt=socket.onMessage('receipt',()=>{clearTimeout(timeout);offReceipt();offError();resolve();});const offError=socket.onMessage('error',(e:any)=>{clearTimeout(timeout);offReceipt();offError();reject(new Error('Realtime load rejected: '+e.code));});socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type});});latencies.push(performance.now()-start);
+  const socket=pair.sockets[seat],start=performance.now();
+  for(let attempt=0;attempt<4;attempt++){
+   let state=await matchAccess([pair.a,pair.b][seat].actor,pair.id);
+   const phase=type==='dart.stop_horizontal'?'horizontal':type==='dart.stop_vertical'?'vertical':null;
+   while(type!=='match.ready'&&(state.state.pendingDart||phase&&(state.state.phase!==phase||state.state.turn!==seat))){
+    assert.ok(performance.now()-start<10000,'Authoritative load phase did not become ready');
+    await new Promise(r=>setTimeout(r,25));state=await matchAccess([pair.a,pair.b][seat].actor,pair.id);
+   }
+   const accepted=await new Promise<boolean>((resolve,reject)=>{
+    const cleanup=()=>{clearTimeout(timeout);offReceipt();offError();};
+    const timeout=setTimeout(()=>{cleanup();reject(new Error('Realtime load receipt timeout'));},10000);
+    const offReceipt=socket.onMessage('receipt',()=>{cleanup();resolve(true);});
+    const offError=socket.onMessage('error',(e:any)=>{cleanup();if(e.code==='stale_state')resolve(false);else reject(new Error('Realtime load rejected: '+e.code));});
+    // A rejected stale intent gets a new UUID after a fresh authoritative read.
+    // No accepted command is replayed with a changed payload.
+    socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type});
+   });
+   if(accepted){latencies.push(performance.now()-start);return;}
+   staleStateReconciliations++;
+  }
+  throw new Error('Realtime load state could not be reconciled');
  }
+
  await Promise.all(pairs.map(async pair=>{await command(pair,0,'match.ready');await command(pair,1,'match.ready');for(let dart=0;dart<3;dart++){await command(pair,0,'dart.stop_horizontal');await command(pair,0,'dart.stop_vertical');await new Promise(r=>setTimeout(r,750));}}));
  assert.equal(sockets.filter(s=>s.connection.isOpen).length,50);
  const response=await fetch('http://127.0.0.1:42567/internal/deploy/metrics',{headers:{Authorization:'Bearer '+process.env.INTERNAL_DEPLOY_TOKEN}});assert.ok(response.ok);const metrics=await response.json();
  latencies.sort((a,b)=>a-b);const p95=latencies[Math.ceil(latencies.length*.95)-1];assert.ok(p95<1000,'Local p95 receipt latency exceeds one second');assert.ok(metrics.eventLoopP95Ms<200,'Local event loop p95 exceeds 200ms');
  await Promise.all(pairs.map(pair=>command(pair,0,'match.forfeit')));
- await writeFile('artifacts/load-result.json',JSON.stringify({ok:true,rooms:2,matches:8,players:16,spectators:34,connections:50,commands:latencies.length,p95ReceiptMs:p95,...metrics,scope:'Local smoke load; no production capacity claim'},null,2));console.log('Two rooms, eight matches and fifty real WebSocket connections passed bounded local load');
+ await writeFile('artifacts/load-result.json',JSON.stringify({ok:true,rooms:2,matches:8,players:16,spectators:34,connections:50,commands:latencies.length,staleStateReconciliations,p95ReceiptMs:p95,...metrics,scope:'Local smoke load; no production capacity claim'},null,2));console.log('Two rooms, eight matches and fifty real WebSocket connections passed bounded local load');
 }finally{
  await Promise.allSettled(sockets.map(s=>s.leave()));
  if(ids.length)await db().query("update matches set lifecycle='cancelled',ended_at=now() where id=any($1::uuid[]) and lifecycle in('assigned','playing','paused')",[ids]);
