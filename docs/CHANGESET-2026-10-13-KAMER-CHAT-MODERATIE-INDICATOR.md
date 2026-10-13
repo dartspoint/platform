@@ -962,3 +962,15 @@ eenmalig en serieel: wedstrijd **8/8**, native eerste-geometrie maximum
 Die bundel bewijst de lokale applicatiecontrole; de nieuwe QA-account-,
 Docker-, browserdependency- en cleanupcontroles vereisen echte CI.
 Bewijs: `artifacts/local-final-proof/ci-runtime-parity-acceptance-20261013T211037Z/`.
+
+De eerste echte QA-jobs van `cff567ba9f86197b92df2fe2372d18168b8142e4`
+stoppen vóór dependencies of browsermetingen: [main](https://github.com/dartspoint/platform/actions/runs/38472291111)
+en [staging](https://github.com/dartspoint/platform/actions/runs/38472291876)
+weigeren `qa_socket_invalid`. Configuratie slaagt; publicatie/deployment zijn
+overgeslagen. De oorspronkelijke controle vereiste alleen de primaire
+socketgroep. De gerichte correctie erkent ook de eigen exclusieve subgid-range
+voor rootless namespaces en weigert vreemde of overlappende toewijzingen.
+Sockettype, eigenaar-UID, private parent en afwezige other-permissions blijven
+verplicht. Alleen begrensde UID/GID/mode-/booleanmetadata wordt gelogd.
+De daadwerkelijke afwijkende socketmetadata en oorzaak moeten door de
+volgende CI bevestigd worden; er wordt nog geen succesvolle test geclaimd.

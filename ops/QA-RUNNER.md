@@ -19,7 +19,7 @@ De eenmalige QA-installatie op `dartspoint-vps1` is op 13 oktober 2026 bevestigd
 
 Account en daemon gebruiken cgroup v2/systemd. De runnerunit en zijn eigen rootless daemon vallen onder dezelfde `user-<UID>.slice`: `MemoryHigh=5G`, `MemoryMax=6G`, `CPUWeight=10`, `IOWeight=10`, zonder CPU-quota. Gewichten geven QA een lagere prioriteit bij concurrentie; ze bewijzen geen haalbare werplatentie.
 
-Het QA-account krijgt geen algemene sudo, Docker-groep, deploymentgroep, app-socket of staging/production Environmentsecrets. CI maakt uitsluitend tijdelijke lokale providercredentials. `scripts/qa-runner-context.py` controleert de feitelijke account-UID, home, workspace, eigen socket, data-root, rootless SecurityOptions en cgroup. Container-user `0:0` wordt alleen op deze geverifieerde rootless daemon gebruikt en correspondeert daar met het QA-account op de host. Browserbibliotheken worden eenmalig door de beheerder geïnstalleerd; de QA-job installeert geen apt-packages.
+Het QA-account krijgt geen algemene sudo, Docker-groep, deploymentgroep, app-socket of staging/production Environmentsecrets. CI maakt uitsluitend tijdelijke lokale providercredentials. `scripts/qa-runner-context.py` controleert de feitelijke account-UID, home, workspace, eigen socket, data-root, rootless SecurityOptions en cgroup. De socketgroep moet de eigen primaire groep zijn of vallen binnen de exclusieve eigen, root-owned `/etc/subgid`-toewijzing; de eigenaar-UID en private runtime-directory blijven verplicht. Container-user `0:0` wordt alleen op deze geverifieerde rootless daemon gebruikt en correspondeert daar met het QA-account op de host. Browserbibliotheken worden eenmalig door de beheerder geïnstalleerd; de QA-job installeert geen apt-packages.
 
 ## Routering
 

@@ -54,6 +54,72 @@ def docker(*args, timeout=30):
                     '--config', str(QA_HOME / '.docker'), *args], timeout)
 
 
+def own_subgid(gid, uid):
+    # Rootless Docker maps namespace GID n>=1 through the daemon user's subgid
+    # allocation. Trust only a bounded, root-owned regular allocation file.
+    path = Path('/etc/subgid')
+    before = path.lstat()
+    require(stat.S_ISREG(before.st_mode) and before.st_uid == 0
+            and not before.st_mode & 0o022, 'qa_subgid_file_invalid')
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, 'rb') as source:
+        item = os.fstat(source.fileno())
+        require(stat.S_ISREG(item.st_mode) and item.st_uid == 0 and not item.st_mode & 0o022
+                and (item.st_dev, item.st_ino) == (before.st_dev, before.st_ino),
+                'qa_subgid_file_invalid')
+        content = source.read(1024 * 1024 + 1)
+    require(len(content) <= 1024 * 1024, 'qa_subgid_file_bound_exceeded')
+    try:
+        lines = content.decode('utf-8').splitlines()
+    except UnicodeError:
+        raise Refused('qa_subgid_file_invalid') from None
+    ranges = []
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        parts = line.split(':')
+        require(len(parts) == 3 and bool(re.fullmatch(r'[a-zA-Z0-9_.-]+', parts[0]))
+                and parts[1].isascii() and parts[1].isdigit()
+                and parts[2].isascii() and parts[2].isdigit(), 'qa_subgid_entry_invalid')
+        start, count = int(parts[1]), int(parts[2])
+        require(0 < count <= 2**32 and 0 <= start < 2**32
+                and start + count <= 2**32, 'qa_subgid_entry_invalid')
+        own = parts[0] == 'runner-qa' or (parts[0].isascii() and parts[0].isdigit()
+                                         and int(parts[0]) == uid)
+        ranges.append((start, start + count, own))
+    candidates = [(start, end) for start, end, own in ranges if own and start <= gid < end]
+    for start, end in candidates:
+        require(not any(not own and start < other_end and other_start < end
+                        for other_start, other_end, own in ranges), 'qa_subgid_range_overlap')
+    return bool(candidates)
+
+
+def validate_socket(item, uid, primary_gid):
+    primary = item.st_gid == primary_gid
+    subordinate = False
+    failure = None
+    if not primary:
+        try:
+            subordinate = own_subgid(item.st_gid, uid)
+        except Refused as error:
+            failure = error
+        except Exception:
+            failure = Refused('qa_subgid_unavailable')
+    # Always show bounded metadata, including successful mapped-GID validation.
+    # No paths, account names, allocation contents, environment or daemon config.
+    print(json.dumps({'event': 'qa_socket_metadata', 'isSocket': stat.S_ISSOCK(item.st_mode),
+                      'uid': item.st_uid, 'gid': item.st_gid, 'mode': stat.S_IMODE(item.st_mode),
+                      'expectedUid': uid, 'expectedPrimaryGid': primary_gid,
+                      'ownerUidMatches': item.st_uid == uid, 'primaryGidMatches': primary,
+                      'ownExclusiveSubgidMatches': subordinate, 'subgidChecked': not primary,
+                      'subgidCheckFailed': failure is not None,
+                      'otherPermissionsAbsent': not bool(item.st_mode & 0o007)}), flush=True)
+    if failure:
+        raise failure
+    require(stat.S_ISSOCK(item.st_mode) and item.st_uid == uid and (primary or subordinate)
+            and not item.st_mode & 0o007, 'qa_socket_invalid')
+
+
 def context():
     require(os.environ.get('DARTSPOINT_QA_RUNNER') == 'true', 'qa_not_enabled')
     require(os.environ.get('GITHUB_REPOSITORY') == 'dartspoint/platform'
@@ -80,8 +146,7 @@ def context():
     owned_directory(runtime, uid, private=True)
     endpoint = runtime / 'docker.sock'
     item = endpoint.lstat()
-    require(stat.S_ISSOCK(item.st_mode) and item.st_uid == uid and item.st_gid == account.pw_gid
-            and not item.st_mode & 0o007, 'qa_socket_invalid')
+    validate_socket(item, uid, account.pw_gid)
     require(os.environ.get('DOCKER_HOST') == 'unix://' + str(endpoint)
             and os.environ.get('XDG_RUNTIME_DIR') == str(runtime), 'qa_docker_endpoint_invalid')
     require(not any(os.environ.get(key) for key in ('DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH')),
