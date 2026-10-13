@@ -22,6 +22,10 @@ HOSTNAME=127.0.0.1 PORT=4300 node --env-file=.env.local dist/deploy/web/apps/web
 web_pid=$!
 trap 'kill "$web_pid" "$realtime_pid" "$worker_pid" 2>/dev/null || true' EXIT
 node --env-file=.env.local scripts/wait-local.mjs
+RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts create >artifacts/public-launch-probe-create.json
+RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts check >artifacts/public-launch-probe-check.json
+cmp artifacts/public-launch-probe-create.json artifacts/public-launch-probe-check.json
+RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts remove >artifacts/public-launch-probe-remove.json
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/unit/domain.test.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/multiplayer.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/practice.ts
