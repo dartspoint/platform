@@ -121,7 +121,7 @@ verschillen door CSS-subpixelafronding blijven zichtbaar in de resultaten.
 
 De uiteindelijke lokale native build doorstond beide browsertests. Oefenen
 mat 16 stops op desktop en mobiel: maximale verschuiving bij freeze en receipt
-was `0 CSS px`, de lokale input-p95 was `0,5 ms` en het maximale verschil van
+was `0 CSS px` (`0` van de balkbreedte/-hoogte), de lokale input-p95 was `0,5 ms` en het maximale verschil van
 de gelande pijlpunt met het serverraakpunt was `0,000012 CSS px`. De echte
 wedstrijd mat zes stops: freeze en receipt versprongen maximaal `0 CSS px`,
 de handler nam maximaal `0,7 ms` en de eerstvolgende frozen frame kwam binnen

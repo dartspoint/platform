@@ -181,7 +181,8 @@ van de daadwerkelijk gedeployde stagingrelease is nog open;
 hun resultaten en release-SHA worden afzonderlijk toegevoegd.
 
 De lokale timingbrowser meet bij oefenen en wedstrijden maximaal **0 CSS px**
-verschuiving bij stoppen en bevestigen. Oefeninvoer heeft p95 **0,5 ms**;
+verschuiving bij stoppen en bevestigen, dus **0 van de balkbreedte/-hoogte**.
+Oefeninvoer heeft p95 **0,5 ms**;
 wedstrijdhandlers duren maximaal **0,7 ms** en de eerste frozen frame verschijnt
 binnen **21,5 ms** op beide assen. De maximale afwijking van de gelande SVG-pijlpunt
 van het serverraakpunt is **0,000012 CSS px**. Vertraagde bevestigingen,
@@ -231,6 +232,14 @@ state/version en hervatte meter. Deze negatieve controle staat apart van de
 normale verdeling. Screenshots en snapshots worden tijdens de timingmeting
 uitgeschakeld; de overige UI-controles houden hun trace. De touchfixture wacht
 op drie echte ping/echo-paren en reset daarna via de gewone bediening.
+
+De functionele toetsenbordfixture controleert ieder echt stopantwoord tegen de
+oorspronkelijke ingress en bewaart alle nieuwe invoerpogingen. Een afzonderlijk
+verlopen verticale stop moet de hele spelstate intact laten en zichtbaar
+herstellen; daarna zijn geldige horizontale/verticale stops en precies één
+gescoorde pijl vereist. Dit is geen p95-meetreeks. De chat-leesfixture wacht
+vanaf een succesvol ontvangen antwoord, zodat haar gewone leescontroles binnen
+de ongewijzigde serverlimiet van drie berichten per twee seconden blijven.
 
 Implementatie-SHA, CI-runs en actieve staging-SHA worden na deployment
 en acceptatie hieronder vastgelegd. Chromiumemulatie,
