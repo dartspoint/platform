@@ -4,7 +4,7 @@ import type {PoolClient} from 'pg';
 import {db,transaction,audit,outbox,rateLimit,redis} from './db';
 import {actorById,publicPlayerName,type Actor} from './auth';
 import {requireThat,usernameSchema as username,uuid,DomainError} from '../../contracts/src/index';
-import {assertContentAllowed,normalizeDuplicateText} from './content-filter';
+import {assertContentAllowed,assertContentAllowedWithRules,filterRulesFromRows,normalizeDuplicateText} from './content-filter';
 
 export async function onboard(actor:Actor,input:unknown){
  const raw=z.object({username:z.string().max(80)}).strict().parse(input).username;
@@ -148,6 +148,39 @@ const systemName=`case when joined.rename_required then 'Speler-'||left(replace(
 const chatMessageSelect=`select m.id,m.channel_id,m.seq,coalesce(m.change_cursor,m.seq) cursor,m.redacted_at is not null redacted,case when m.redacted_at is not null then null when m.kind='room.member_joined' then (${systemName})||' komt de kamer binnen.' else m.body end body,m.client_message_id,m.sender_id,m.kind,m.event_id,m.actor_id,${systemName} actor_name,m.room_id,
  case when m.kind='room.member_joined' then ${systemName} when p.rename_required then 'Speler-'||left(replace(p.id::text,'-',''),12) else p.username end username,m.created_at
  from chat_messages m left join profiles p on p.id=m.sender_id left join profiles joined on joined.id=m.actor_id`;
+/** All reads happen in the snapshot acquired after the separate user lock. */
+async function chatSendSnapshot(c:PoolClient,actor:Actor,channelId:string,clientMessageId:string){
+ return (await c.query(`with context as (
+  select ch.*,game.id is not null match_found,room.id actual_room_id,room.status room_status,room.min_rating,room.max_rating,
+   coalesce((select rating from player_ratings where user_id=$1),1500) rating,
+   exists(select 1 from user_roles role where role.user_id=$1 and role.role in('admin','owner') and role.revoked_at is null) staff_allowed,
+   exists(select 1 from room_access grant_access where grant_access.room_id=room.id and grant_access.user_id=$1) private_grant,
+   exists(select 1 from room_memberships membership where membership.user_id=$1 and membership.room_id=room.id and membership.lease_until>now()) live_membership,
+   exists(select 1 from sanctions sanction where sanction.target_id=$1 and sanction.room_id=room.id and sanction.kind in('remove','suspend') and sanction.revoked_at is null and sanction.starts_at<=now() and sanction.ends_at>now()) room_removed,
+   exists(select 1 from sanctions sanction where sanction.target_id=$1 and (sanction.room_id is null or sanction.room_id=room.id) and sanction.kind in('mute','suspend') and sanction.revoked_at is null and sanction.starts_at<=now() and sanction.ends_at>now()) writing_muted,
+   exists(select 1 from user_blocks block where (block.blocker_id=ch.user_low and block.blocked_id=ch.user_high) or (block.blocker_id=ch.user_high and block.blocked_id=ch.user_low)) pair_blocked,
+   coalesce((select data->>'privateMessages' from preferences where user_id=case when ch.user_low=$1 then ch.user_high else ch.user_low end),'everyone') private_policy,
+   exists(select 1 from friendships friend where friend.user_low=ch.user_low and friend.user_high=ch.user_high) friends
+  from channels ch left join matches game on game.id=ch.match_id left join community_rooms room on room.id=coalesce(ch.room_id,game.room_id) where ch.id=$2
+ ) select (select row_to_json(context) from context) context,
+  (select row_to_json(existing) from(select id,channel_id,body from chat_messages where sender_id=$1 and client_message_id=$3) existing) existing,
+  coalesce((select jsonb_agg(rule order by rule.category,rule.term,rule.id) from private.content_filter_rules rule),'[]'::jsonb) rules,
+  coalesce((select data->'platform' from private.system_settings where key='settings'),'{}'::jsonb) settings,
+  coalesce((select jsonb_agg(recent order by recent.created_at desc) from(select channel_id,body,normalized_body,created_at,extract(epoch from now()-created_at) age from chat_messages where sender_id=$1 and kind='human' and created_at>now()-interval '60 seconds') recent),'[]'::jsonb) recent`,[actor.id,channelId,clientMessageId])).rows[0];
+}
+function requireChatSendAccess(actor:Actor,ch:any){
+ requireThat(ch,'channel_not_found',404);
+ if(ch.kind==='private'){
+  requireThat([ch.user_low,ch.user_high].includes(actor.id),'forbidden',403);requireThat(!ch.pair_blocked,'blocked',403);
+  requireThat(ch.private_policy==='everyone'||ch.private_policy==='friends'&&ch.friends,'private_messages_closed',403);
+ }else{
+  if(ch.kind==='match')requireThat(ch.match_found,'not_found',404);
+  requireThat(ch.actual_room_id,'room_unavailable',403);requireThat(ch.room_status!=='private'||ch.staff_allowed||ch.private_grant,'room_private',403);
+  requireThat(!ch.room_removed,'room_removed',403);requireThat(Number(ch.rating)>=ch.min_rating&&Number(ch.rating)<=ch.max_rating,'room_rating_restricted',403);
+  requireThat(ch.live_membership,'join_room_first',403);
+ }
+ requireThat(!ch.writing_muted,'muted',403);
+}
 export async function chatHistory(actor:Actor,channelId:string,after?:number){return transaction(async c=>{
  await channelAccess(c,actor,channelId);
  requireThat(after===undefined||Number.isSafeInteger(after)&&after>=0,'invalid_cursor',400);
@@ -168,24 +201,33 @@ export async function sendMessage(actor:Actor,input:unknown){
  const {channelId,clientMessageId,body}=z.object({channelId:uuid,clientMessageId:uuid,body:z.string().trim().min(1).max(2000)}).strict().parse(input);
  await rateLimit('chat-endpoint:'+actor.id,120,60);
  const result=await transaction(async c=>{
-  await channelAccess(c,actor,channelId,true);
-  // A per-user database lock makes all new-message budgets atomic across tabs and workers.
+  // Acquire the lock in a separate statement. Reads in the next statement must
+  // see earlier senders' commits even when this transaction waited for the lock.
   await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['chat-send:'+actor.id]);
-  const existing=(await c.query('select id,channel_id,body from chat_messages where sender_id=$1 and client_message_id=$2',[actor.id,clientMessageId])).rows[0];
-  if(existing){requireThat(existing.channel_id===channelId&&existing.body===body,'idempotency_conflict',409);return (await c.query(chatMessageSelect+' where m.id=$1',[existing.id])).rows[0];}
-  await assertContentAllowed(c,actor,body,'chat','channel:'+channelId);
-  const settings=(await c.query("select data->'platform' platform from private.system_settings where key='settings'")).rows[0]?.platform??{};
+  const snapshot=await chatSendSnapshot(c,actor,channelId,clientMessageId);requireChatSendAccess(actor,snapshot.context);
+  const existing=snapshot.existing;
+  if(existing){requireThat(existing.channel_id===channelId&&existing.body===body,'idempotency_conflict',409);await c.query(`with read_state as (insert into channel_memberships(channel_id,user_id,last_read_cursor) select id,$2,cursor from channels where id=$1 on conflict(channel_id,user_id) do update set left_at=null returning channel_id)
+   select channel_id from read_state`,[channelId,actor.id]);
+   // A concurrent moderator may redact while the read-state UPSERT waits.
+   return (await c.query(chatMessageSelect+' where m.id=$1',[existing.id])).rows[0];}
+  assertContentAllowedWithRules(actor,body,'chat','channel:'+channelId,filterRulesFromRows(snapshot.rules));
+  const settings=snapshot.settings??{};
   const burst=Math.max(1,Math.min(30,Number(settings.chatBurstCount??3))),window=Math.max(1,Math.min(10,Number(settings.chatBurstSeconds??2))),duplicate=Math.max(0,Math.min(30,Number(settings.chatDuplicateSeconds??2))),slow=Math.max(0,Math.min(60,Number(settings.chatSlowMode??0)));
-  const recent=(await c.query("select channel_id,body,normalized_body,extract(epoch from now()-created_at) age from chat_messages where sender_id=$1 and kind='human' and created_at>now()-interval '60 seconds' order by created_at desc",[actor.id])).rows;
-  if(recent.length>=30)throw new DomainError('chat_rate_limited',429,'Je kunt maximaal 30 nieuwe berichten per minuut verzenden.',Math.max(1,Math.ceil(60-Number(recent.at(-1).age))));
+  const recent=snapshot.recent as Array<{channel_id:string;body:string;normalized_body:string|null;age:number}>;
+  if(recent.length>=30)throw new DomainError('chat_rate_limited',429,'Je kunt maximaal 30 nieuwe berichten per minuut verzenden.',Math.max(1,Math.ceil(60-Number(recent.at(-1)!.age))));
   const fast=recent.filter(m=>Number(m.age)<window);
-  if(fast.length>=burst)throw new DomainError('chat_burst_limited',429,'Je verstuurt berichten erg snel. Wacht heel even.',Math.max(1,Math.ceil(window-Number(fast.at(-1).age))));
+  if(fast.length>=burst)throw new DomainError('chat_burst_limited',429,'Je verstuurt berichten erg snel. Wacht heel even.',Math.max(1,Math.ceil(window-Number(fast.at(-1)!.age))));
   const normalized=normalizeDuplicateText(body);
   const repeated=recent.find(m=>m.channel_id===channelId&&Number(m.age)<duplicate&&(m.normalized_body??normalizeDuplicateText(m.body))===normalized);
   if(repeated)throw new DomainError('chat_duplicate',429,'Dit bericht is zojuist al verstuurd.',Math.max(1,Math.ceil(duplicate-Number(repeated.age))));
   if(slow>0&&recent[0]&&Number(recent[0].age)<slow)throw new DomainError('chat_slow_mode',429,'In deze chat staat langzame modus aan. Wacht '+Math.ceil(slow-Number(recent[0].age))+' seconden.',Math.max(1,Math.ceil(slow-Number(recent[0].age))));
-  const seq=(await c.query('update channels set cursor=cursor+1 where id=$1 returning cursor',[channelId])).rows[0].cursor;
-  const r=await c.query('insert into chat_messages(channel_id,sender_id,client_message_id,seq,body,normalized_body) values($1,$2,$3,$4,$5,$6) returning id',[channelId,actor.id,clientMessageId,seq,body,normalized]);return (await c.query(chatMessageSelect+' where m.id=$1',[r.rows[0].id])).rows[0];
+  // Read state precedes cursor advance. Projection needs another statement:
+  // profiles may change while this statement waits on a membership/cursor lock.
+  const saved=(await c.query(`with read_state as (insert into channel_memberships(channel_id,user_id,last_read_cursor) select id,$2,cursor from channels where id=$1 on conflict(channel_id,user_id) do update set left_at=null returning channel_id),
+   next_cursor as (update channels set cursor=cursor+1 where id=$1 and exists(select 1 from read_state) returning cursor),
+   inserted as (insert into chat_messages(channel_id,sender_id,client_message_id,seq,body,normalized_body) select $1,$2,$3,cursor,$4,$5 from next_cursor returning *)
+   select id from inserted`,[channelId,actor.id,clientMessageId,body,normalized])).rows[0];
+  return (await c.query(chatMessageSelect+' where m.id=$1',[saved.id])).rows[0];
  });
  await publishChatChange(channelId,result.id,Number(result.seq),'human',result.redacted,Number(result.cursor));return result;
 }

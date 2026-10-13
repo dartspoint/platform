@@ -132,9 +132,14 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
     const viewport = window.visualViewport;
     const root = document.documentElement;
     const update = () => {
-      const height = viewport?.height ?? window.innerHeight;
+      // CSS zoom magnifies authored pixel lengths; browser zoom already reports
+      // the visual viewport in CSS pixels and needs no device-pixel correction.
+      const configuredZoom = Number.parseFloat(getComputedStyle(root).zoom);
+      const cssZoom = Number.isFinite(configuredZoom) && configuredZoom > 0 ? configuredZoom : 1;
+      root.style.setProperty("--dp-root-css-zoom", String(cssZoom));
+      const height = (viewport?.height ?? window.innerHeight) / cssZoom;
       root.style.setProperty("--dp-viewport-height", `${height}px`);
-      root.style.setProperty("--dp-viewport-top", `${viewport?.offsetTop ?? 0}px`);
+      root.style.setProperty("--dp-viewport-top", `${(viewport?.offsetTop ?? 0) / cssZoom}px`);
       root.classList.toggle("dp-short-viewport", height < 560);
     };
     update();
@@ -147,6 +152,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
       window.removeEventListener("resize", update);
       root.style.removeProperty("--dp-viewport-height");
       root.style.removeProperty("--dp-viewport-top");
+      root.style.removeProperty("--dp-root-css-zoom");
       root.classList.remove("dp-short-viewport");
     };
   }, []);

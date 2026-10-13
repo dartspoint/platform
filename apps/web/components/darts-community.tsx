@@ -98,6 +98,7 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
   const pendingFocus = useRef<string | null>(null);
   const chatReady = useChatHydrated();
   const platform=usePlatform();
+  const slowModeSeconds=Number(platform.settings?.platform?.chatSlowMode);
   const openPrivateNames = useOpenPrivateChatTabs();
   const privateNames = openPrivateNames.filter(id => !social.isBlocked(platform.channels.find(c=>c.id===id)?.userId??''));
   const requestedTab = activeTab ?? localTab;
@@ -190,6 +191,7 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
     </div>
     <div className="chat-compose-wrap">{!blocked && <div className="chat-quick-replies" aria-label="Snelle chatzinnen">{["Succes! 🎯", "Mooie finish! 👏", "Goed gespeeld!", "Revanche?"].map(text => <button key={text} type="button" onClick={() => send(text)}>{text}</button>)}</div>}{emojiOpen && <div className="chat-emoji-picker" aria-label="Kies een emoji">{["🎯", "👏", "🔥", "👋", "😂", "🏆", "💪", "🍻"].map(emoji => <button key={emoji} aria-label={`Voeg ${emoji} toe`} onClick={() => { setDraft(draft + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
       <form className="chat-compose" onSubmit={e => { e.preventDefault(); void send(); }}><Button variant="ghost" size="icon-sm" type="button" className="emoji-button" disabled={blocked} aria-label="Emoji kiezen" aria-expanded={emojiOpen} onClick={() => setEmojiOpen(value => !value)}><Smile size={18}/></Button><Input value={draft} disabled={blocked} onChange={e => setDraft(e.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();if(!event.repeat&&!event.nativeEvent.isComposing&&!event.shiftKey)void send();}}} placeholder={blocked ? "Deze speler is geblokkeerd" : privateName ? `Bericht aan ${privateName}…` : tab === "room" ? "Praat mee in de kamer…" : "Bericht in het spel…"} aria-label={privateName ? `Privébericht aan ${privateName}` : "Chatbericht"} maxLength={500}/><Button type="submit" size="icon-sm" className="chat-send" disabled={!draft.trim() || blocked} aria-label="Verstuur bericht"><Send size={17}/></Button></form>
+      {slowModeSeconds>0&&<p className="chat-footnote chat-slow-mode" role="status" style={{display:'block',opacity:1}}>Langzame chat actief · maximaal één nieuw bericht per {slowModeSeconds} {slowModeSeconds===1?'seconde':'seconden'}.</p>}
       <p className="chat-footnote">Speel sportief. <span>Berichten zijn gekoppeld aan je account.</span></p>
       {lobby && <div className="chat-privacy-preview"><span>Nieuwe chats: {preferences.privateMessages === "everyone" ? "iedereen" : preferences.privateMessages === "friends" ? "alleen vrienden" : "niemand"}</span><button type="button" onClick={tryNewPrivateChat}>Nieuw gesprek</button></div>}
       {privacyFeedback && <p className="chat-privacy-feedback" role="status">{privacyFeedback}</p>}

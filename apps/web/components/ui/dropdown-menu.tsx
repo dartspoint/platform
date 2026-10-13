@@ -34,10 +34,14 @@ function DropdownMenuTrigger({
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  style,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
     <DropdownMenuPrimitive.Portal>
+      {/* Floating UI positions in client pixels; cancel inherited root zoom
+          here and restore it on the content to retain enlarged text/targets. */}
+      <div data-slot="dropdown-menu-portal-layer" style={{zoom:"calc(1 / var(--dp-root-css-zoom, 1))"}}>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
@@ -46,7 +50,9 @@ function DropdownMenuContent({
           className
         )}
         {...props}
+        style={{...style,zoom:"var(--dp-root-css-zoom, 1)",maxHeight:"calc(var(--radix-dropdown-menu-content-available-height) / var(--dp-root-css-zoom, 1))",maxWidth:"calc((100vw - 24px) / var(--dp-root-css-zoom, 1))"}}
       />
+      </div>
     </DropdownMenuPrimitive.Portal>
   )
 }

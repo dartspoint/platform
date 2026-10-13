@@ -49,6 +49,7 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
@@ -72,6 +73,11 @@ function SheetContent({
           className
         )}
         {...props}
+        onEscapeKeyDown={event => {
+          onEscapeKeyDown?.(event)
+          // A nested menu consumes this Escape and restores its trigger first.
+          if (event.target instanceof Element && event.target.closest("[data-sheet-nested-menu]")) event.preventDefault()
+        }}
       >
         {children}
         {showCloseButton && (

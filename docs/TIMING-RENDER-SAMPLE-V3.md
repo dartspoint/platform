@@ -12,6 +12,15 @@ pointer/click/repeat-dubbelingen; volgende frames behouden de lokale lock.
 Motion verzorgt de dartanimatie, maar schrijft de timingindicator niet via een
 tweede RAF-renderer. Dat onderscheid voorkomt een vooruitlopende MotionValue.
 
+De SVG-pijlpunt gebruikt het gezaghebbende raakpunt en één vlucht per dart-ID.
+Een nieuwe snapshot met gelijke hitcoördinaten herstart de vlucht niet. Zodra
+de server de dart als geland presenteert, stopt de bestaande animatie in het
+layout-effect en staat de tip vóór de eerste grounded paint exact op dat
+raakpunt. De regressiecontrole dupliceert een werkelijk ontvangen flight-snapshot,
+meet de eerste grounded RAF en bewaart drie volgende frames: pixelafstand tot
+het serverdoel maximaal 1, met een ongewijzigde gelande SVG-transform. Zo kan
+een latere meting na een opnieuw afgespeelde animatie de fout niet verbergen.
+
 Een actieve fase heeft één vaste mapping van `performance.now()` naar
 servertijd. Pas na drie klokmetingen én drie serverchallenges wordt invoer
 actief. Snelle aanvankelijke challenges vermijden een verplichte wachttijd van

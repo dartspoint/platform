@@ -33,6 +33,8 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/servi
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/update-2026-10-13.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-moderation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-projection.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/player-visibility.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-send-batching.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/render-sample-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/competitions.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/restore.ts
@@ -54,6 +56,7 @@ python3 tests/integration/landing-proxy.py
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-read.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-chat.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-density.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/game-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/render-sample-timing.ts

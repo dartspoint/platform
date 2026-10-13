@@ -16,6 +16,32 @@ behoudt de volledige kamerflow en tijdens een partij de 60%-panelen. Een
 chatupdate remount geen spel. `darts-workspace.tsx`, `darts-community.tsx` en
 `darts-desktop.css` delen deze indeling.
 
+De dichte werkruimtecontrole reproduceerde een werkelijk buiten beeld geraakt
+invoerveld bij 200% CSS-zoom. De viewportvariabelen normaliseren hoogte en offset
+nu met uitsluitend de CSS-zoomfactor. De korte-viewportindeling gebruikt dezelfde
+hoogte. Er komt geen device-pixelratio-correctie bovenop de CSS-viewport die
+native browserzoom al rapporteert.
+
+Dezelfde zoomcontrole vond een te ver naar rechts geplaatst dropdownmenu.
+Floating UI levert clientcoördinaten; de overgeërfde rootzoom vergrootte de
+portaltranslatie nogmaals. De portallaag compenseert die schaal, waarna de
+menu-inhoud de oorspronkelijke vergroting voor tekst en klikdoelen terugkrijgt.
+Beschikbare hoogte en breedte gebruiken dezelfde schaal; langere actielijsten
+scrollen binnen het menu.
+
+De mobiele controle reproduceerde ook een verloren menutrigger bij Escape:
+de afzonderlijk gebundelde Radix-laagcontexten sloten zowel dropdown als Sheet.
+Het spelersmenu sluit nu expliciet bij die toets; het Sheet bewaart zichzelf
+voor dat geneste event. De bestaande autofocus herstelt de naamknop. Een
+volgende Escape buiten het menu sluit het Sheet normaal.
+
+Het algemene spelersoverzicht blijft begrensd op 2.000 actieve, ingeschreven
+accounts. De persoonlijke projectie voegt de actor, actuele kamerleden,
+vrienden en relevante persoonlijke contacten afzonderlijk toe. Een lage
+rating of positie buiten de algemene directory laat daarmee geen echt
+kamerlid of eigen contact uit het paneel verdwijnen. De publieke projectie
+blijft haar bestaande algemene subset gebruiken.
+
 Een echte kamerbezoeksovergang schrijft samen met het lidmaatschap één duurzaam
 `room.member_joined`-event met unieke bezoek-ID. Heartbeat, refresh, retry en
 tweede tab schrijven niets extra. Access/capacity worden vóór opslag en push
@@ -29,6 +55,9 @@ antwoord overschrijft geen nieuw concept. Accountbrede nieuwe-berichtlimieten
 zijn transactioneel: standaard 30/minuut, 3/2 seconden en gelijk genormaliseerde
 tekst in hetzelfde kanaal niet opnieuw binnen 2 seconden. Endpointmisbruik
 heeft een afzonderlijk budget. De owner kan burst/duplicate/slowmode wijzigen.
+Een actieve slowmode toont bij de composer de ingestelde accountbrede limiet,
+ook wanneer compacte schermen de gewone voetnoot verbergen. Een afwijzing
+laat het concept bewerkbaar; de melding voegt geen vertraging aan sends toe.
 
 De browsercontrole vond daarnaast een dubbele providerverificatie per
 cookie-aanvraag en een tweede HTTP-aanvraag vóór weergave bij de ontvanger.
@@ -40,6 +69,19 @@ projectie direct samen. Alleen echte history-responses schuiven de ophaalcursor
 door; polling/reconnect herstellen daardoor eerdere gemiste berichten en
 redactions. Chatregels worden afzonderlijk gememoiseerd en een conceptwijziging
 bouwt geen volledige inbox-/beheerprojectie opnieuw op.
+
+De hosted controles van release `467c5d7` maten vervolgens een echte
+chatvertraging: p95 410,9 en 422,6 ms bij de ontvanger. De verzendroute groepeert
+daarom actuele PostgreSQL-reads: een nieuw bericht, UUID-retry en retry van een
+verwijderd bericht gebruiken elk negen databasecalls inclusief persoonlijke
+projectie, met nog steeds één ongecachete Auth-providerverificatie. De
+gebruikerslock staat vóór de snapshot voor toegang, filter en quota. Na een
+eventuele wachttijd op membership- of cursorlocks volgt een afzonderlijke verse
+canonieke projectie; gelijktijdige naamsanering of redaction kan daardoor geen
+oude naam of verwijderde body in een ontvangstbevestiging laten verschijnen.
+`chat-send-batching.ts` controleert deze twee echte row-lockraces, ingetrokken
+sessies en rollen, actuele accountsancties, idempotentie en foutvolgorde. Redis
+blijft uitsluitend identifiers dragen; er is geen rechten- of bodycache.
 
 Bootstrap voor inbox- en gelezenmetadata wordt samengevoegd: na 500 ms zonder
 nieuwe refreshaanleiding volgt één aanvraag; bij voortdurende activiteit is de
@@ -81,6 +123,14 @@ ontvangsttijd leek te liggen; het toelatingsvenster blijft strikt behouden.
 Score, beurt, raakpunt en impact blijven serverbesluiten. Bestaande partijen
 behouden hun eerdere timingversie.
 
+De nieuwe wedstrijdcontrole vond ook een vluchtfout: een nieuwe hit-objectkopie
+kon de animatie herstarten, en een impactsnapshot kon dezelfde animatie opnieuw
+starten nadat de scorechip al een gelande pijl toonde. De vlucht gebruikt nu
+stabiele coördinaten en een actuele callback zonder herstart door objectidentiteit.
+Bij gezaghebbend landen wordt de animatie synchroon gestopt en de native
+SVG-tip vóór de eerste paint op hetzelfde serverraakpunt gezet. De
+560-ms-servervlucht, scoremomenten en spelregels blijven behouden.
+
 ## Schema en release
 
 De uitbreidende CLI-migraties bewaren toegepaste checksums en bestaande data:
@@ -111,8 +161,11 @@ De production-app en productiedatabase worden niet gedeployd of gemigreerd.
 | Gebied | Gerichte verificatie | Uitvoering |
 |---|---|---|
 | Desktop/mobile/één chat | `workspace-chat.ts`, bestaande visual/interface/update-tests | Nieuwe native browseracceptatie geslaagd: 19 checks en 15 chatsamples; bestaande visual/interface/update-regressies ook geslaagd |
+| Volle panelen/zoom/menu/toetsenbord | `workspace-density.ts` | Tien controles geslaagd op de definitieve portalbuild; drie desktopmaten, drie mobiele maten en 200% CSS-zoom |
 | Bezoeken/quota/filter/rechten/invites | `chat-moderation.ts`, bestaande services/update-tests | Echte lokale Auth/PostgreSQL/Redis; doeltests en bestaande services/update-tests geslaagd |
-| Ownerbeheer/rename | `chat-moderation-ui.ts` | Geslaagd: 10 checks met echte development-owner en afzonderlijk playerfixture |
+| Ownerbeheer/rename/slowmode | `chat-moderation-ui.ts` | Geslaagd: 12 checks met echte development-owner en afzonderlijk playerfixture; oorspronkelijke instellingen hersteld |
+| Spelers buiten directorylimiet | `player-visibility.ts` | Acht echte databasecontroles geslaagd met 2.020 eigen Auth-profielen; alle fixtures verwijderd |
+| Leesbevestigingen/unread | `chat-read.ts` | Native browser geslaagd: maximaal één lopende kamerwrite, hoogste zichtbare cursor, onafhankelijk privégesprek, fout/retry en verborgen chat |
 | Timingcontract/retry/legacy | unit `render-sample-timing.test.ts`, integration `render-sample-timing.ts` | Unit en echte databasechecks geslaagd |
 | Werkelijke DOM/flight/reconnect | `render-sample-timing.ts`, `game-timing.ts` | Lokale native build geslaagd: 16 oefenstops en zes wedstrijdstops, beide assen; staging volgt afzonderlijk |
 | Bron/operations | source parity, 39 operationele checks | Geslaagd; oorspronkelijke publieke assets/fonts behouden |
@@ -142,26 +195,92 @@ gezaghebbende bezetstatus, een geweigerde flood zonder bordremount en de echte
 spectator-handoff vanuit oefenen. De QA-partij is via een geautoriseerde opgave
 beëindigd; er bleef geen actieve spelerreservering achter.
 
-De laatste geslaagde meetreeks bevat 15 berichten tussen twee geauthenticeerde
-Chromiumgebruikers, zonder geïnjecteerde netwerkvertraging. De ontvangerspagina
-werd tijdens de reeks niet opnieuw gefocust of geladen. DOM-tijden komen uit
+De definitieve geslaagde meetreeks op de gegroepeerde verzendroute met
+samengevoegde leesbevestigingen bevat 15
+berichten tussen twee geauthenticeerde Chromiumgebruikers, zonder geïnjecteerde
+netwerkvertraging. De afzender heeft aantoonbaar focus; beide afzonderlijke
+headless browsercontexts melden in deze run feitelijk focus en zichtbaarheid.
+Deze reeks bewijst daardoor geen achtergrondontvanger. DOM-tijden komen uit
 daadwerkelijke berichtmutaties; push is onafhankelijk waargenomen via de
 persoonlijke Colyseus-inbox.
 
 | Meetpunt vanaf verzenden | p95 | Projectdoel |
 |---|---:|---:|
-| Eigen optimistic bericht zichtbaar | 10,2 ms | ≤50 ms |
-| HTTP-ontvangstbevestiging van het opgeslagen bericht | 237,4 ms | Afzonderlijk gemeten |
-| Persoonlijke realtimepush ontvangen | 241,9 ms | Afzonderlijk gemeten |
-| Bericht zichtbaar bij geautoriseerde ontvanger | 248,1 ms | ≤250 ms |
+| Eigen optimistic bericht zichtbaar | 9,2 ms | ≤50 ms |
+| HTTP-responseheaders ontvangen | 190,5 ms | Afzonderlijk gemeten |
+| HTTP-ontvangstbevestiging van het opgeslagen bericht | 204,4 ms | Afzonderlijk gemeten |
+| Persoonlijke realtimepush ontvangen | 200,4 ms | Afzonderlijk gemeten |
+| Bericht zichtbaar bij geautoriseerde ontvanger | 209,0 ms | ≤250 ms |
 
 De HTTP-waarde meet het ontvangen antwoord na het uitlezen van JSON; dit is
 geen afzonderlijk geïnstrumenteerde databasecommittijd. Beide zichtbaarheiddoelen
 zijn in deze beschreven lokale omgeving gehaald. Bewijs en ruwe samples staan
-in `artifacts/workspace-chat/results.json`, met 13 desktopscreenshots en
-`artifacts/workspace-chat/run.log` (exit 0).
+in `artifacts/local-final-proof/workspace-chat-read-singleflight-result.json` en
+`workspace-chat-read-singleflight-latency.json`; de log is
+`artifacts/local-final-proof/workspace-chat-read-singleflight-run.log` (exit 0).
+Alle 15 sends hebben HTTP 200 en een onafhankelijk waargenomen canonieke
+SDK-push. Geen sample is opnieuw geprobeerd, verwijderd of als warmup uitgesloten.
+HTTP-, push-, DOM-, focus- en zichtbaarheidmetingen worden ook bij een
+overschrijding vóór de performanceassertions bewaard. De oudere lokale
+248,1- en 248,5-ms-reeksen blijven historisch bewijs; de mislukte hosted metingen worden
+daarmee niet vervangen. Nieuwe hosted CI en acceptatie op de werkelijk actieve
+stagingrelease moeten nog afzonderlijk slagen.
 
-`chat-moderation-ui.ts` is eveneens geslaagd (10 checks): regel toevoegen en
+De voorafgaande volledige run op de gezamenlijke portalbuild faalde echt op
+het ontvangerdoel: lokale p95 12,0 ms, ontvanger-p95 256,3 ms. Alle vijftien sends
+kregen HTTP 200 en een onafhankelijke canonieke SDK-push; de veertien functionele
+checks vóór de performanceassertion slaagden. De vijf daaropvolgende spelchecks
+zijn in deze mislukte run niet uitgevoerd. Bij sample 1 waren de responseheaders
+na 240,455 ms beschikbaar, de SDK-push na 248,692 ms en de ontvanger-DOM na
+256,300 ms. Beide contexts behielden aantoonbaar focus en zichtbaarheid.
+De beperkte marge van de eerdere 248,5-ms-run is daarmee geen definitief bewijs
+voor deze build. Alle pogingen blijven bewaard in
+`artifacts/local-final-proof/workspace-chat-final-latency.json`,
+`workspace-chat-final-result.json`, `workspace-chat-final-failure.png` en
+`workspace-chat-final-run.log` (exit 1); geen sample is opnieuw geprobeerd of
+als warmup verwijderd.
+
+Een afzonderlijke diagnose op dezelfde applicatiebron mat 56 leesbevestigings-
+POSTs naast de 15 sends, vier conceptwrites en acht bootstraps. De verse
+Auth-providercontrole duurde mediaan 138,2 ms en p95 157,1 ms; het verkrijgen
+van databaseverbindingen op de verzendroute duurde opgeteld maximaal 0,223 ms,
+zonder poolwachtrij. De huidige client dedupliceerde leesbevestigingen pas na
+het antwoord, zodat nieuwe renders dezelfde zichtbare cursor opnieuw konden
+versturen terwijl de eerste aanvraag nog liep. De diagnose wijst daarmee op
+onnodige gelijktijdige aanvragen als gerichte verbetering. De afzonderlijke
+diagnoserun met ontvanger-p95 214,2 ms vervangt de eerdere mislukking niet.
+De private meetprobe wijzigde geen applicatiebron; query-uitvoering in de
+gebundelde PostgreSQL-client kon niet afzonderlijk worden geïnstrumenteerd.
+De vijftien serveraanvragen zijn op volgorde aan de clientreeks gekoppeld;
+de browserharness bewaart geen client-UUID voor een afzonderlijke UUID-join.
+Het metadataoverzicht staat in
+`artifacts/local-final-proof/workspace-chat-diagnostic-metadata-summary.json`.
+
+Leesbevestigingen worden nu vóór de eerste await geregistreerd en per account
+en canoniek kanaal samengevoegd. Tijdens één lopende aanvraag blijft alleen de
+hoogste expliciet aangeleverde, werkelijk zichtbare cursor over; die volgt na
+een succesvolle bevestiging. Alleen succesvolle antwoorden schuiven de
+bevestigde cursor op. Fouten starten geen eigen retryloop en wissen geen
+ongelezen berichten. Een accountgeneratie en entry-identiteit voorkomen dat
+een laat antwoord na een accountwissel, ook A→B→A, de nieuwe staat beïnvloedt.
+Iedere daadwerkelijk verstuurde POST behoudt de verse servercontrole; rustige
+beurten, achtergrond/verborgen chat, oude scrollposities en gesloten DM's
+blijven door de bestaande zichtbaarheidvoorwaarden beschermd.
+
+De gerichte echte browserregressie slaagt op dezelfde native build. Een
+succesvolle, reeds door de server verwerkte leesbevestiging wordt vastgehouden;
+herhaalde focus/scroll/render-events en twee nieuw bekeken berichten starten
+geen dubbele aanvraag. Na vrijgave volgt precies één bevestiging van de
+hoogste bekeken cursor. Een onafhankelijk privégesprek blijft ondertussen
+leesbaar. Een vóór serveruitvoering geweigerd antwoord behoudt unread en
+start geen eigen retry; een latere geldige zichtbaarheidgebeurtenis bevestigt
+dezelfde cursor alsnog. Verborgen chat blijft ongelezen totdat hij echt wordt
+getoond. De oorspronkelijke 6→4-controle, rustige beurt met een eigen later
+bericht, gesloten DM/concept, andere kanalen en oudere scrollpositie slagen
+eveneens. Bewijs: `artifacts/local-final-proof/chat-read-single-flight-result.json`
+en `chat-read-single-flight-run.log` (exit 0). De fixturepartij is beëindigd.
+
+`chat-moderation-ui.ts` is eveneens geslaagd (12 checks): regel toevoegen en
 testen, uitschakelen zonder herdeploy, echte namenscan en verplichte hernoeming
 met behoud van account-ID en DP, consequente publieke alias in reeds gecachte
 menselijke en systeemregels, en de veilige huidige naam na de succesvolle
@@ -170,9 +289,47 @@ voor een waarschuwing. Live verwijdering overleeft een ouder vastgehouden antwoo
 een daadwerkelijk onderdrukte realtimeverwijdering wordt na reconnect via de
 duurzame editcursor hersteld. Een gemodereerde optimistic UUID verdwijnt ook
 wanneer alleen sequence 0 bekend is en het HTTP-antwoord nog wordt vastgehouden.
-Een gewone speler krijgt 403 op ownerinstellingen. Bewijs staat in
-`artifacts/chat-moderation-ui/results.json`, `owner-desktop.png` en `run.log`
-(exit 0) in dezelfde artifactmap.
+Een gewone speler krijgt 403 op ownerinstellingen. Een door de owner ingestelde
+slowmode van vijf seconden is zichtbaar op 1280×640 en 390×844. De eerste send
+slaagt; de volgende unieke send krijgt `chat_slow_mode` met een geldige retrytijd,
+blijft als bewerkbaar concept beschikbaar en verschijnt niet bij de ontvanger.
+De oorspronkelijke limieten zijn in de cleanup daadwerkelijk teruggelezen en
+vergeleken. Bewijs staat in
+`artifacts/local-final-proof/final-combined-chat-moderation-ui-result.json`,
+`final-combined-chat-moderation-ui-owner-desktop.png` en
+`final-combined-chat-moderation-ui.log` (exit 0).
+
+`player-visibility.ts` plaatst 2.001 echte accounts boven negentien persoonlijke
+contextfixtures. De oorspronkelijke algemene top-2.000 blijft exact gelijk;
+negen geldige contacten buiten die grens verschijnen aanvullend. Inactieve,
+niet-ingeschreven en ratingloze accounts, verlopen of vreemde kamerlidmaatschappen,
+gesloten of geblokkeerde DM's en geannuleerde verzoeken voegen geen context toe.
+Een verse rename of beëindigd contact wordt bij de volgende read verwerkt.
+Bootstrap houdt canonieke namen voor vrienden, verzoeken, mutes en blocks;
+de publieke subset blijft begrensd. Alle 2.020 Auth-profielen en hun eigen
+resources zijn verwijderd en de databasecontrole bevestigt nul achterblijvers.
+Bewijs: `artifacts/player-visibility-result.json` (acht controles, exit 0).
+
+`workspace-density.ts` is geslaagd met 21 echte kamerleden, twintig vrienden met
+de maximaal toegestane twintig tekens in hun naam en acht canonieke privétabs.
+Op 1280×720, 1366×768 en 1920×1080 blijven beide kolommen en beide rechterrijen
+50/50. Kamerleden, vrienden en geschiedenis scrollen intern; alle echte namen
+en kanaal-ID's blijven aanwezig. Op 320×568, 390×844 en een verkleinde viewport
+van 390×400 blijft één bereikbare composer zichtbaar. Die laatste maat bootst
+minder beschikbare hoogte na en bewijst geen geopend fysiek telefoontoetsenbord.
+De eerste Escape sluit alleen het menu en herstelt de vriendentrigger; de tweede
+sluit het Sheet en herstelt een levende navigatieknop.
+
+Bij 200% CSS-zoom ligt de composeronderkant op 716 px in een viewport van
+1366×768. Het menu past binnen die viewport. End focust de echte laatste actie,
+`Speler melden`; de menuscroll gaat van 0 naar 159,5 terwijl de documentscroll
+0/0 blijft. Tekst en klikdoelen blijven vergroot. De oorspronkelijke fouten in
+composerhoogte, mobiele Escape en menuplaatsing zijn afzonderlijk bewaard.
+Alle 21 fixture-identiteiten en eigen resources zijn verwijderd; de SQLcontrole
+bevestigt nul achterblijvers. Bewijs:
+`artifacts/local-final-proof/density-zoom3-final/results.json`, screenshots en
+`run.log` (tien controles, exit 0). Dit is een CSS-zoomcontrole, geen bewijs van
+een fysieke browserzoomtoets of OS-instelling.
 
 Deze native browsermetingen en mobiele viewportemulatie zijn geen tests op
 fysieke telefoons, een geopend iOS/Android-toetsenbord, OS-/browserzoom of echte
@@ -182,11 +339,20 @@ hun resultaten en release-SHA worden afzonderlijk toegevoegd.
 
 De lokale timingbrowser meet bij oefenen en wedstrijden maximaal **0 CSS px**
 verschuiving bij stoppen en bevestigen, dus **0 van de balkbreedte/-hoogte**.
-Oefeninvoer heeft p95 **0,5 ms**;
-wedstrijdhandlers duren maximaal **0,7 ms** en de eerste frozen frame verschijnt
-binnen **21,5 ms** op beide assen. De maximale afwijking van de gelande SVG-pijlpunt
-van het serverraakpunt is **0,000012 CSS px**. Vertraagde bevestigingen,
+Oefeninvoer heeft op de definitieve gezamenlijke native build p95 **0,6 ms**;
+wedstrijdhandlers duren maximaal **0,5 ms** en de eerste frozen frame verschijnt
+binnen **30,9 ms** op beide assen. De maximale afwijking van de gelande SVG-pijlpunt
+van het serverraakpunt is **0,000014 CSS px**. Vertraagde bevestigingen,
 gelijktijdige chat, oude receipts en reconnect zonder extra pijl zijn geslaagd.
+Drie daadwerkelijk ontvangen flight-snapshots zijn tijdens de vlucht gedupliceerd.
+De eerste grounded frame heeft maximaal 0,000013252 px afwijking; alle drie
+daaropvolgende frames behouden exact dezelfde native SVG-transform. De
+vóór-fixrun op de oude bundle faalde juist op die harde stabiliteitscontrole:
+de al gelande transform wijzigde opnieuw. Deze eerste-paintcontrole wacht
+niet totdat een opnieuw afgespeelde animatie alsnog op het goede punt eindigt.
+De 16 oefenstops en zes wedstrijdstops staan afzonderlijk in
+`artifacts/local-final-proof/final-combined-render-sample-timing-result.json`
+en `final-combined-game-timing-result.json`, met private logs in dezelfde map.
 De oude volledige wedstrijdfixture is naar echte v3-klokkalibratie bijgewerkt:
 27 echte pijlen, dubbel in/uit, spectator, typing guard, impact-only score,
 reloadherstel en eenmalige nul-som-Elo slagen. Dit botbewijs staat los van

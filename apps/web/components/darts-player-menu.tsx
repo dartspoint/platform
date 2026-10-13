@@ -42,6 +42,7 @@ export function PlayerActionMenu({ name:providedName, userId, roomId, channelId,
   const inviteReason=invitationReason(targetId??name);
   const trigger = useRef<HTMLButtonElement>(null);
   const externalAction = useRef(false);
+  const [menuOpen,setMenuOpen]=useState(false);
   const [dialog, setDialog] = useState<"report" | "moderation" | null>(null);
   const [reason, setReason] = useState("");
   const [reportReason, setReportReason] = useState("Onvriendelijk gedrag");
@@ -57,9 +58,9 @@ export function PlayerActionMenu({ name:providedName, userId, roomId, channelId,
   const activeModeration = social.moderation.filter(entry => entry.name === name && entry.room === roomName && entry.kind !== "warn" && entry.until > Date.now());
 
   return <>
-    <DropdownMenu modal={false} onOpenChange={open=>{if(!open)return;setCapabilities({canWarn:false,canMute:false,canRemove:false,canModerateMessage:false});if(targetId&&(channelId||contextId))void api('moderation/capabilities?targetId='+encodeURIComponent(targetId)+(channelId?'&channelId='+encodeURIComponent(channelId):'&roomId='+encodeURIComponent(contextId!))).then(setCapabilities).catch(()=>{});}}>
+    <DropdownMenu open={menuOpen} modal={false} onOpenChange={open=>{setMenuOpen(open);if(!open)return;setCapabilities({canWarn:false,canMute:false,canRemove:false,canModerateMessage:false});if(targetId&&(channelId||contextId))void api('moderation/capabilities?targetId='+encodeURIComponent(targetId)+(channelId?'&channelId='+encodeURIComponent(channelId):'&roomId='+encodeURIComponent(contextId!))).then(setCapabilities).catch(()=>{});}}>
       <DropdownMenuTrigger asChild><button ref={trigger} type="button" className={`dp-player-menu-trigger ${className}`} aria-label={`Acties voor ${name}`}>{children ?? <PlayerName name={name}/>}</button></DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={8} className="dp-player-menu" onCloseAutoFocus={event => { if (dialog || externalAction.current) event.preventDefault(); externalAction.current = false; }}>
+      <DropdownMenuContent data-sheet-nested-menu="true" align="start" sideOffset={8} className="dp-player-menu" onEscapeKeyDown={event=>{event.preventDefault();setMenuOpen(false);}} onCloseAutoFocus={event => { if (dialog || externalAction.current) event.preventDefault(); externalAction.current = false; }}>
         <DropdownMenuLabel className="dp-player-menu-title"><PlayerName name={name}/><small>{self ? "Dit ben jij" : status === "friends" ? "In je vriendenlijst" : status === "incoming" ? "Heeft je een vriendschapsverzoek gestuurd" : status === "outgoing" ? "Vriendschapsverzoek verstuurd" : "Speler in DartsPoint"}</small></DropdownMenuLabel>
         {onProfile && <DropdownMenuItem onSelect={() => runExternal(onProfile)}><UserRound/>Profiel bekijken</DropdownMenuItem>}
         {!self && <>

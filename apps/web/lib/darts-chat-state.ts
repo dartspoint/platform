@@ -4,12 +4,16 @@ import {ApiError,api,mutate,getPlatform,usePlatform,playerId,selfName,subscribeP
 export type ChatMessage={id:number;name:string;text:string;time:string;system?:boolean;messageId?:string;senderId?:string;clientMessageId?:string;status?:'pending'|'failed'|'sent';error?:string;queuedAt?:number;eventId?:string;roomId?:string};
 export type PrivateChatPreview={channelId:string;userId:string;name:string;text:string;time:string;lastId:number;sender:string};
 const EMPTY:ChatMessage[]=[];
-const channels=new Map<string,ChatMessage[]>(),drafts=new Map<string,string>(),ids=new Map<string,string>(),tracked=new Map<string,number>(),readCursors=new Map<string,number>(),scrollPositions=new Map<string,{top:number;bottom:boolean}>(),timers=new Map<string,ReturnType<typeof setTimeout>>();
+const channels=new Map<string,ChatMessage[]>(),drafts=new Map<string,string>(),ids=new Map<string,string>(),tracked=new Map<string,number>(),scrollPositions=new Map<string,{top:number;bottom:boolean}>(),timers=new Map<string,ReturnType<typeof setTimeout>>();
+type ReadAcknowledgment={account:string;epoch:number;requested:number;committed:number;task?:Promise<void>};
+const readAcknowledgments=new Map<string,ReadAcknowledgment>();
 const fetchedCursors=new Map<string,number>(),tombstones=new Map<string,Map<string,number>>();
 const loading=new Map<string,Promise<void>>(),reload=new Set<string>(),fullReload=new Set<string>(),intents=new Map<string,Promise<boolean>>(),recentIntents=new Map<string,{at:number;id:string}>();
-let cacheActor:string|undefined,hydrated=false,version=0,visibilitySignature='';
+let cacheActor:string|undefined,accountEpoch=0,hydrated=false,version=0,visibilitySignature='';
 const listeners=new Set<()=>void>();
-function resetAccount(){const id=getPlatform().actor?.id;if(id===cacheActor)return;cacheActor=id;for(const timer of timers.values())clearTimeout(timer);timers.clear();channels.clear();fetchedCursors.clear();tombstones.clear();drafts.clear();ids.clear();tracked.clear();readCursors.clear();scrollPositions.clear();loading.clear();reload.clear();fullReload.clear();intents.clear();recentIntents.clear();}
+function resetAccount(){const id=getPlatform().actor?.id;if(id===cacheActor)return;cacheActor=id;accountEpoch++;for(const timer of timers.values())clearTimeout(timer);timers.clear();channels.clear();fetchedCursors.clear();tombstones.clear();drafts.clear();ids.clear();tracked.clear();readAcknowledgments.clear();scrollPositions.clear();loading.clear();reload.clear();fullReload.clear();intents.clear();recentIntents.clear();}
+// Observe every account transition, including A -> B -> A while an ACK is pending.
+subscribePlatform(resetAccount);
 function emit(messageChange=true){resetAccount();if(messageChange)version++;listeners.forEach(fn=>fn());}
 export function subscribeChat(fn:()=>void){listeners.add(fn);const stop=subscribePlatform(fn);return ()=>{listeners.delete(fn);stop();};}
 function context(key:string){const parts=key.split(':');return {kind:parts[0],target:parts[0]==='match'?(parts.length===2?parts[1]:parts.at(-2)):parts.slice(1).join(':')};}
@@ -40,7 +44,36 @@ async function load(key:string){
  finally{loading.delete(key);if(reload.delete(key)&&account===getPlatform().actor?.id)void load(key);}})();
  loading.set(key,task);return task;
 }
-export async function markChatRead(key:string,cursor:number){if(!key||!cursor||cursor<=(readCursors.get(key)??0))return;const channelId=await resolve(key);await api('chat/preference',{channelId,readCursor:cursor});readCursors.set(key,cursor);schedulePlatformRefresh();}
+/** Only the visible-message path supplies cursors; never infer a newer one from history. */
+export function markChatRead(key:string,cursor:number):Promise<void>{
+ resetAccount();const account=cacheActor;if(!account||!key||!Number.isSafeInteger(cursor)||cursor<=0)return Promise.resolve();
+ const alias='key:'+key,known=chatChannelId(key),canonical=known?'channel:'+known:undefined;
+ let entry=(canonical?readAcknowledgments.get(canonical):undefined)??readAcknowledgments.get(alias);
+ if(!entry){entry={account,epoch:accountEpoch,requested:0,committed:0};}
+ readAcknowledgments.set(alias,entry);if(canonical)readAcknowledgments.set(canonical,entry);
+ if(cursor<=entry.committed)return Promise.resolve();
+ entry.requested=Math.max(entry.requested,cursor);
+ if(entry.task)return entry.task;
+ // Register the flight before the first await, including asynchronous resolution.
+ const flight=entry,current=()=>flight.account===getPlatform().actor?.id&&flight.epoch===accountEpoch&&readAcknowledgments.get(alias)===flight;
+ const task:Promise<void>=(async()=>{try{
+  const channelId=await resolve(key);if(!current())return;
+  const channelKey='channel:'+channelId,other=readAcknowledgments.get(channelKey);
+  if(other&&other!==flight){readAcknowledgments.set(alias,other);return await markChatRead(key,flight.requested);}
+  readAcknowledgments.set(channelKey,flight);
+  while(current()&&flight.requested>flight.committed){
+   const requested=flight.requested;
+   await api('chat/preference',{channelId,readCursor:requested});
+   if(!current())return;
+   flight.committed=Math.max(flight.committed,requested);schedulePlatformRefresh();
+  }
+ }catch(error){
+  // Failed ACKs consume no unread state and never start their own retry loop.
+  if(current())flight.requested=flight.committed;
+  throw error;
+ }finally{if(current())flight.task=undefined;}})();
+ flight.task=task;return task;
+}
 export function saveChatScroll(key:string,position:{top:number;bottom:boolean}){if(key)scrollPositions.set(key,position);}
 export function getChatScroll(key:string){return scrollPositions.get(key)??{top:0,bottom:true};}
 export function watchChatChannel(key:string){if(!key)return ()=>{};tracked.set(key,(tracked.get(key)??0)+1);void load(key);return ()=>{const n=(tracked.get(key)??1)-1;if(n>0)tracked.set(key,n);else tracked.delete(key);};}

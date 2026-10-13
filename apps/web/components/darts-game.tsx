@@ -1,7 +1,7 @@
 "use client";
 import {timingInput} from "@/lib/use-timing-input";
 
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { ArrowDown, ArrowUp, ArrowRight, ArrowUpRight, RotateCcw } from "lucide-react";
 import { BOARD_GEOMETRY, DART_NUMBERS, dartPoseAt, dartTipPosition, dartTransform, opponentTarget, scoreDart, type DartHit } from "@/lib/darts-rules";
@@ -38,25 +38,30 @@ function DartVisual({ dart, flying, uid, onLand, lessMotion }: { dart: BoardDart
   const flightAtMount = useRef(flying).current;
   const settled = useRef(!flying);
   const visual = useRef<SVGGElement>(null);
+  const latestOnLand = useRef(onLand);
+  latestOnLand.current = onLand;
   const { hit, id } = dart;
-  const { x, y } = dartTipPosition(hit);
-  const finalPose = dartPoseAt(hit, 1);
+  // Equal coordinates in a fresh authoritative snapshot are the same flight.
+  const coordinates = useMemo(() => ({ x: hit.x, y: hit.y }), [hit.x, hit.y]);
+  const { x, y } = dartTipPosition(coordinates);
+  const finalPose = dartPoseAt(coordinates, 1);
   const rotation = finalPose.rotation;
   const duration = .56;
-  const shouldAnimate = flightAtMount && !settled.current && !reducedMotion;
-  const initialPose = dartPoseAt(hit, shouldAnimate ? 0 : 1);
+  const shouldAnimate = flying && flightAtMount && !settled.current && !reducedMotion;
+  const initialPose = dartPoseAt(coordinates, shouldAnimate ? 0 : 1);
   const complete = useCallback(() => {
     if (!flying || settled.current) return;
     settled.current = true;
-    onLand(id);
-  }, [flying, id, onLand]);
-  useEffect(() => {
+    latestOnLand.current(id);
+  }, [flying, id]);
+  useLayoutEffect(() => {
     const draw = (progress: number) => {
-      const pose = dartPoseAt(hit, progress);
+      const pose = dartPoseAt(coordinates, progress);
       visual.current?.setAttribute("transform", dartTransform(pose));
       visual.current?.setAttribute("opacity", String(pose.opacity));
     };
     if (!shouldAnimate) {
+      if (!flying) settled.current = true;
       draw(1);
       if (reducedMotion) complete();
       return;
@@ -69,7 +74,7 @@ function DartVisual({ dart, flying, uid, onLand, lessMotion }: { dart: BoardDart
       onComplete: () => { draw(1); complete(); },
     });
     return () => flight.stop();
-  }, [hit, shouldAnimate, reducedMotion, complete]);
+  }, [coordinates, flying, shouldAnimate, reducedMotion, complete]);
 
   return <g>
     <motion.ellipse cx={x + 7} cy={y + 14} rx="4" ry="19" fill="#000" transform={`rotate(${rotation - 15},${x + 7},${y + 14})`} initial={shouldAnimate ? { opacity: 0 } : false} animate={{ opacity: .3 }} transition={{ delay: shouldAnimate ? duration - .07 : 0, duration: .12 }} />

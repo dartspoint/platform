@@ -28,15 +28,17 @@ export function matchingFilterRules(text:string,scope:FilterScope,rules:FilterRu
  const allowed=eligible.filter(r=>r.allow).flatMap(r=>spans(normalized,r,scope));
  return eligible.filter(r=>!r.allow&&spans(normalized,r,scope).some(([a,b])=>!allowed.some(([x,y])=>a>=x&&b<=y)));
 }
-export async function filterRules(c:PoolClient){return (await c.query('select * from private.content_filter_rules order by category,term,id')).rows.map(r=>({id:r.id,term:r.term,category:r.category,scope:r.scope,matchType:r.match_type,active:r.active,allow:r.allow,description:r.description,aliases:r.aliases,version:Number(r.version)})) as FilterRule[];}
-export async function assertContentAllowed(c:PoolClient,actor:Actor,text:string,scope:FilterScope,context:string){
- const matches=matchingFilterRules(text,scope,await filterRules(c));
+export function filterRulesFromRows(rows:readonly Record<string,any>[]){return rows.map(r=>({id:r.id,term:r.term,category:r.category,scope:r.scope,matchType:r.match_type,active:r.active,allow:r.allow,description:r.description,aliases:r.aliases,version:Number(r.version)})) as FilterRule[];}
+export async function filterRules(c:PoolClient){return filterRulesFromRows((await c.query('select * from private.content_filter_rules order by category,term,id')).rows);}
+export function assertContentAllowedWithRules(actor:Actor,text:string,scope:FilterScope,context:string,rules:FilterRule[]){
+ const matches=matchingFilterRules(text,scope,rules);
  if(matches.length){
   // Operational evidence contains rule IDs and resource IDs, never rejected text or DM content.
   console.info(JSON.stringify({event:'content_filter_rejected',actorId:actor.id,scope,context,ruleIds:matches.map(r=>r.id)}));
   throw new DomainError(scope==='name'?'username_filtered':'message_filtered',400,scope==='name'?'Deze gebruikersnaam is niet toegestaan. Kies een andere naam.':'Je bericht bevat woorden die hier niet zijn toegestaan. Pas je tekst aan.');
  }
 }
+export async function assertContentAllowed(c:PoolClient,actor:Actor,text:string,scope:FilterScope,context:string){assertContentAllowedWithRules(actor,text,scope,context,await filterRules(c));}
 const ruleSchema=z.object({id:uuid.optional(),term:z.string().trim().min(1).max(80),category:z.string().trim().min(1).max(80),scope:z.enum(['chat','name','both']),matchType:z.enum(['word','phrase','name-prefix','exact']),active:z.boolean(),allow:z.boolean(),description:z.string().trim().min(1).max(300),aliases:z.array(z.string().trim().min(1).max(80)).max(20).default([]),version:z.number().int().positive().optional()}).strict();
 const reason=z.string().trim().min(5).max(500);
 const limitSchema=z.object({chatBurstCount:z.number().int().min(1).max(30),chatBurstSeconds:z.number().int().min(1).max(10),chatDuplicateSeconds:z.number().int().min(0).max(30),chatSlowMode:z.number().int().min(0).max(60)}).strict();
