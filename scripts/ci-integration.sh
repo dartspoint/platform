@@ -2,25 +2,103 @@
 set -euo pipefail
 umask 077
 mkdir -p artifacts
-# Hosted runner only: isolated default local provider credentials, never Environment secrets.
-node_modules/.bin/supabase start --exclude studio,imgproxy,edge-runtime,logflare,vector,supavisor >artifacts/supabase-start-private.log 2>&1
+worker_pid=''
+realtime_pid=''
+web_pid=''
+worker_start=''
+realtime_start=''
+web_start=''
+process_identity() {
+  local pid="$1" stat_line
+  local -a stat_fields
+  [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/stat" ]] || return 1
+  IFS= read -r stat_line < "/proc/$pid/stat" || return 1
+  # The comm field may contain spaces or parentheses. All later fields are fixed.
+  read -r -a stat_fields <<< "${stat_line##*) }"
+  [[ "${#stat_fields[@]}" -ge 20 && "${stat_fields[1]}" == "$$" \
+     && "${stat_fields[19]}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "${stat_fields[19]}"
+}
+owned_child_running() {
+  local pid="$1" expected="$2" observed
+  [[ -n "$expected" ]] || return 1
+  observed=$(process_identity "$pid") || return 1
+  [[ "$observed" == "$expected" ]]
+}
+cleanup_owned_services() {
+  result=$?
+  trap - EXIT
+  local index pid start
+  local -a child_pids=("$web_pid" "$realtime_pid" "$worker_pid")
+  local -a child_starts=("$web_start" "$realtime_start" "$worker_start")
+  for index in "${!child_pids[@]}"; do
+    pid="${child_pids[$index]}"; start="${child_starts[$index]}"
+    if owned_child_running "$pid" "$start"; then kill "$pid" 2>/dev/null || true; fi
+  done
+  # Drain only the three native children this script started, then bound shutdown.
+  for _ in {1..50}; do
+    running=false
+    for index in "${!child_pids[@]}"; do
+      pid="${child_pids[$index]}"; start="${child_starts[$index]}"
+      if owned_child_running "$pid" "$start"; then running=true; fi
+    done
+    if [[ "$running" == false ]]; then break; fi
+    sleep 0.1
+  done
+  for index in "${!child_pids[@]}"; do
+    pid="${child_pids[$index]}"; start="${child_starts[$index]}"
+    if [[ -n "$pid" ]]; then
+      if owned_child_running "$pid" "$start"; then kill -KILL "$pid" 2>/dev/null || true; fi
+      wait "$pid" 2>/dev/null || true
+    fi
+  done
+  # Successful CI still needs this database for the following real TLS/restore
+  # step. The workflow's always() cleanup removes it after that step and upload.
+  if [[ "${DARTSPOINT_QA_RUNNER:-false}" == true && "$result" != 0 ]]; then
+    if ! python3 scripts/qa-runner-context.py cleanup; then
+      if [[ "$result" == 0 ]]; then result=1; fi
+    fi
+  fi
+  exit "$result"
+}
+trap cleanup_owned_services EXIT
+# Both routes use disposable local provider credentials, never Environment secrets.
+if [[ "${DARTSPOINT_QA_RUNNER:-false}" == true ]]; then
+  python3 scripts/qa-runner-context.py preclean
+fi
+# CLI 2.109.1 names the unused Storage API service "storage". Auth, PostgreSQL,
+# PostgREST, Kong and mail remain present for the same real acceptance checks.
+node_modules/.bin/supabase start --exclude studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime,storage >artifacts/supabase-start-private.log 2>&1
 python3 scripts/bind-local-services.py
 node scripts/configure-local.mjs
 # Build with the actual local public configuration and exercise the production
 # server. Cold development compilation must not consume a player's turn clock.
 node --env-file=.env.local scripts/build-deploy.mjs >artifacts/acceptance-build-private.log 2>&1
 redis_image=$(python3 -c 'import json; print(json.load(open("ops/image-pins.json"))["REDIS_IMAGE"])')
-docker run -d --name dartspoint-development-redis --publish 127.0.0.1:62479:6379 "$redis_image" redis-server --appendonly yes >/dev/null
+docker run -d --name dartspoint-development-redis \
+  --label io.dartspoint.qa.project=dartspoint-development --label io.dartspoint.qa.resource=redis \
+  --publish 127.0.0.1:62479:6379 "$redis_image" redis-server --appendonly yes >/dev/null
 postgres_image=$(python3 -c 'import json; print(json.load(open("ops/image-pins.json"))["POSTGRES_IMAGE"])')
 docker pull "$postgres_image" >artifacts/restore-image.log 2>&1
-node_modules/.bin/playwright install --with-deps chromium >artifacts/browser-install.log 2>&1
-node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/worker/src/worker.ts >artifacts/worker-private.log 2>&1 &
+if [[ "${DARTSPOINT_QA_RUNNER:-false}" == true ]]; then
+  # The operator installs OS libraries once. A CI job never receives sudo/apt.
+  node_modules/.bin/playwright install chromium >artifacts/browser-install.log 2>&1
+  python3 scripts/qa-runner-context.py browser-check
+else
+  node_modules/.bin/playwright install --with-deps chromium >artifacts/browser-install.log 2>&1
+fi
+# Exercise the same ESM service artifacts copied into the deployment images.
+test -s dist/deploy/worker/server.js
+test -s dist/deploy/realtime/server.js
+node --env-file=.env.local dist/deploy/worker/server.js >artifacts/worker-private.log 2>&1 &
 worker_pid=$!
-node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/realtime/src/server.ts >artifacts/realtime-private.log 2>&1 &
+worker_start=$(process_identity "$worker_pid" || true)
+node --env-file=.env.local dist/deploy/realtime/server.js >artifacts/realtime-private.log 2>&1 &
 realtime_pid=$!
+realtime_start=$(process_identity "$realtime_pid" || true)
 HOSTNAME=127.0.0.1 PORT=4300 node --env-file=.env.local dist/deploy/web/apps/web/server.js >artifacts/web-private.log 2>&1 &
 web_pid=$!
-trap 'kill "$web_pid" "$realtime_pid" "$worker_pid" 2>/dev/null || true' EXIT
+web_start=$(process_identity "$web_pid" || true)
 node --env-file=.env.local scripts/wait-local.mjs
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts create >artifacts/public-launch-probe-create.json
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts check >artifacts/public-launch-probe-check.json

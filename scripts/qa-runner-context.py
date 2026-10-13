@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Fail closed on the dedicated QA account; never use a deployment/root daemon."""
+import grp
+import json
+import os
+import pwd
+import re
+import shutil
+import socket
+import stat
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+QA_HOME = Path('/home/runner-qa')
+WORKSPACE = QA_HOME / 'actions-runner/_work/platform/platform'
+PROJECT = 'dartspoint-development'
+REDIS = PROJECT + '-redis'
+SUPABASE_LABEL = 'com.supabase.cli.project'
+QA_LABEL = 'io.dartspoint.qa.project'
+FORBIDDEN_GROUPS = {'sudo', 'docker', 'runner-staging', 'runner-production', 'dartspoint-staging', 'dartspoint-production'}
+
+
+class Refused(Exception):
+    """Only constant categories are reported, never subprocess diagnostics."""
+
+
+def require(condition, category):
+    if not condition:
+        raise Refused(category)
+
+
+def owned_directory(path, uid, private=False):
+    item = path.lstat()
+    require(stat.S_ISDIR(item.st_mode) and item.st_uid == uid and path.resolve() == path,
+            'qa_directory_invalid')
+    require(not item.st_mode & 0o022, 'qa_directory_writable_by_other')
+    if private:
+        require(not item.st_mode & 0o077, 'qa_directory_not_private')
+
+
+def command(args, timeout=30):
+    result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=timeout)
+    require(result.returncode == 0, 'qa_command_failed')
+    return result.stdout
+
+
+def docker(*args, timeout=30):
+    # Never inherit a Docker context that could redirect a cleanup command.
+    uid = os.getuid()
+    return command(['docker', '--host', f'unix:///run/user/{uid}/docker.sock',
+                    '--config', str(QA_HOME / '.docker'), *args], timeout)
+
+
+def context():
+    require(os.environ.get('DARTSPOINT_QA_RUNNER') == 'true', 'qa_not_enabled')
+    require(os.environ.get('GITHUB_REPOSITORY') == 'dartspoint/platform'
+            and os.environ.get('GITHUB_EVENT_NAME') == 'push'
+            and os.environ.get('GITHUB_REF') in ('refs/heads/main', 'refs/heads/staging'),
+            'qa_untrusted_event')
+    require(os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted'
+            and os.environ.get('RUNNER_OS') == 'Linux' and os.environ.get('RUNNER_ARCH') == 'X64',
+            'qa_runner_platform_invalid')
+    account = pwd.getpwnam('runner-qa')
+    uid = os.getuid()
+    require(uid == os.geteuid() == account.pw_uid and uid >= 1000
+            and uid not in (1001, 1002, 1003, 1004)
+            and os.getgid() == account.pw_gid and account.pw_dir == str(QA_HOME), 'qa_account_invalid')
+    groups = {grp.getgrgid(gid).gr_name for gid in os.getgroups()}
+    require(not groups & FORBIDDEN_GROUPS, 'qa_privileged_group')
+    require(os.environ.get('HOME') == str(QA_HOME), 'qa_home_invalid')
+    require(os.environ.get('GITHUB_WORKSPACE') == str(WORKSPACE)
+            and Path.cwd() == WORKSPACE, 'qa_workspace_invalid')
+    for path in (QA_HOME, QA_HOME / 'actions-runner', QA_HOME / 'actions-runner/_work',
+                 QA_HOME / 'actions-runner/_work/platform', WORKSPACE):
+        owned_directory(path, uid)
+    runtime = Path(f'/run/user/{uid}')
+    owned_directory(runtime, uid, private=True)
+    endpoint = runtime / 'docker.sock'
+    item = endpoint.lstat()
+    require(stat.S_ISSOCK(item.st_mode) and item.st_uid == uid and item.st_gid == account.pw_gid
+            and not item.st_mode & 0o007, 'qa_socket_invalid')
+    require(os.environ.get('DOCKER_HOST') == 'unix://' + str(endpoint)
+            and os.environ.get('XDG_RUNTIME_DIR') == str(runtime), 'qa_docker_endpoint_invalid')
+    require(not any(os.environ.get(key) for key in ('DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH')),
+            'qa_docker_override_refused')
+    # Connecting to a Unix socket requires write permission; read is irrelevant.
+    require(not os.access('/var/run/docker.sock', os.W_OK), 'qa_root_daemon_accessible')
+    require(Path('/sys/fs/cgroup/cgroup.controllers').is_file(), 'qa_cgroup_v2_required')
+    own_cgroup = Path('/proc/self/cgroup').read_text().strip().splitlines()
+    require(len(own_cgroup) == 1 and own_cgroup[0].startswith('0::/')
+            and f'user-{uid}.slice' in own_cgroup[0].split('/'), 'qa_cgroup_scope_invalid')
+    info = json.loads(docker('info', '--format', '{{json .}}'))
+    require('name=rootless' in info.get('SecurityOptions', [])
+            and str(info.get('CgroupVersion')) == '2' and info.get('CgroupDriver') == 'systemd',
+            'qa_rootless_cgroup_required')
+    data = QA_HOME / '.local/share/docker'
+    owned_directory(data, uid)
+    require(info.get('DockerRootDir') == str(data), 'qa_docker_data_root_invalid')
+    configuration = tomllib.loads((WORKSPACE / 'supabase/config.toml').read_text())
+    require(configuration.get('project_id') == PROJECT, 'qa_supabase_project_invalid')
+    return uid
+
+
+def inventory(kind):
+    key = {'container': 'ID', 'volume': 'Name', 'network': 'ID'}[kind]
+    listing = docker(kind, 'ls', *(['--all'] if kind == 'container' else []), '--format', '{{json .}}')
+    items = [json.loads(line) for line in listing.splitlines() if line]
+    require(len(items) <= 200, 'qa_inventory_bound_exceeded')
+    if not items:
+        return []
+    inspected = json.loads(docker(kind, 'inspect', *[item[key] for item in items]))
+    selected = []
+    for item in inspected:
+        name = item['Name'].removeprefix('/')
+        labels = (item.get('Config', {}).get('Labels') if kind == 'container' else item.get('Labels')) or {}
+        # bind-local-services.py has one fixed rollback name if a previous job
+        # was killed between replacing a container and removing its old copy.
+        ending = r'(?:-loopback-old)?' if kind == 'container' else ''
+        supabase_name = bool(re.fullmatch(r'supabase_[a-z0-9_]+_' + PROJECT + ending, name))
+        tagged = labels.get(SUPABASE_LABEL) == PROJECT
+        if supabase_name or tagged:
+            require(supabase_name and tagged, 'qa_supabase_resource_scope_invalid')
+            selected.append((item['Id'] if kind == 'container' else name, 'supabase'))
+        if name == REDIS or labels.get(QA_LABEL) == PROJECT:
+            require(kind == 'container' and name == REDIS and labels.get(QA_LABEL) == PROJECT
+                    and labels.get('io.dartspoint.qa.resource') == 'redis', 'qa_redis_resource_scope_invalid')
+            selected.append((item['Id'], 'redis'))
+    return selected
+
+
+def cleanup():
+    context()
+    # Validate the complete scope BEFORE asking the CLI to delete project volumes.
+    resources = {kind: inventory(kind) for kind in ('container', 'volume', 'network')}
+    cli = WORKSPACE / 'node_modules/.bin/supabase'
+    failures = []
+    if cli.exists():
+        require(cli.resolve().is_relative_to(WORKSPACE / 'node_modules'), 'qa_cli_path_invalid')
+        try:
+            command([str(cli), 'stop', '--no-backup', '--project-id', PROJECT], timeout=120)
+        except Exception:
+            failures.append('qa_supabase_stop_failed')
+    # A failed dependency install can leave no CLI. The same verified, exact
+    # label+name scope also handles partial startup leftovers, never a prune.
+    for kind in ('container', 'volume', 'network'):
+        for resource, _ in inventory(kind):
+            try:
+                docker(kind, 'rm', *(['--force', '--volumes'] if kind == 'container' else []), resource)
+            except Exception:
+                failures.append('qa_resource_removal_failed')
+    require(all(not inventory(kind) for kind in resources), 'qa_cleanup_incomplete')
+    require(not failures, 'qa_cleanup_command_failed')
+
+
+def preclean():
+    cleanup()
+    for port in (4300, 42567, 49443, 49444, 62420, 62421, 62422, 62423, 62424, 62429, 62479):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(('127.0.0.1', port))
+            except OSError:
+                raise Refused('qa_test_port_occupied') from None
+
+
+def browser_check():
+    context()
+    # Pinned Playwright's normal acceptance browser is headless_shell. Check
+    # both downloaded executables without launching Chrome or installing apt packages.
+    script = "const p=require('node:path');const r=require(p.join(p.dirname(require.resolve('playwright-core/package.json')),'lib/server/registry/index.js')).registry;console.log(JSON.stringify(['chromium','chromium-headless-shell'].map(n=>r.findExecutable(n).executablePath())));"
+    paths = json.loads(command(['node', '-e', script]))
+    require(len(paths) == 2, 'qa_browser_inventory_invalid')
+    for value in paths:
+        path = Path(value)
+        require(path.is_absolute() and path.is_file() and path.resolve().is_relative_to(QA_HOME), 'qa_browser_path_invalid')
+        result = command(['ldd', str(path)])
+        require(b'not found' not in result, 'qa_browser_dependencies_missing')
+
+
+def workspace_clean():
+    cleanup()  # Docker cleanup MUST succeed before any workspace deletion.
+    context()
+    # Only this repository's exact, owned runner worktree. Symlinks are unlinked,
+    # never traversed. No caches, runner install, Docker data or other apps.
+    for item in WORKSPACE.iterdir():
+        if item.is_symlink() or not item.is_dir():
+            item.unlink()
+        else:
+            shutil.rmtree(item)
+
+
+def main():
+    operations = {'check': context, 'preclean': preclean, 'cleanup': cleanup,
+                  'browser-check': browser_check, 'workspace-clean': workspace_clean}
+    require(len(sys.argv) == 2 and sys.argv[1] in operations, 'qa_operation_invalid')
+    operations[sys.argv[1]]()
+    print(json.dumps({'event': 'qa_context_operation_complete', 'operation': sys.argv[1]}))
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Refused as error:
+        print(json.dumps({'event': 'qa_context_refused', 'category': str(error)}), file=sys.stderr)
+        sys.exit(1)
+    except Exception:
+        print(json.dumps({'event': 'qa_context_refused', 'category': 'qa_context_unavailable'}), file=sys.stderr)
+        sys.exit(1)

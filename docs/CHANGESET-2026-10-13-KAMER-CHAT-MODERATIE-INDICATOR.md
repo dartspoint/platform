@@ -554,8 +554,9 @@ zijn 71/81/88 ms bij een venster van 54 ms. Iedere afwijzing bewaart de volledig
 state en versie en toont de fout met gecontroleerd herstel; iedere axis en
 vertraging bevat een echte acceptatie. Eerste-frame p95 en maximum zijn
 **45,0 ms**. Deze hosted controle is afzonderlijk van een browsermeting tegen
-de actieve VPS. De opvolgende commit op main en staging bevat browserfixtures
-en deze documentatie; de applicatiebroncode is ongewijzigd ten opzichte van `a74fbf5`.
+de actieve VPS. De toenmalige opvolgende fixturecommit op main en staging
+bevatte browserfixtures en deze documentatie; de applicatiebroncode was in
+die fixturecommit ongewijzigd ten opzichte van `a74fbf5`.
 De metingen hieronder bewijzen de pre-finale release `a74fbf5`; een opvolgende
 release-SHA krijgt eigen verse release- en browseracceptatie in de private
 artifacts. Deze metingen worden niet als bewijs voor een nog ongecontroleerde
@@ -746,7 +747,7 @@ geen nieuwe live stagingacceptatie of fysieke apparaten.
 
 ### Aanvullend latencyonderzoek vóór nieuwe commit
 
-Drie nog niet gepushte appwijzigingen zetten pending/busy en exacte lokale
+Drie toen nog niet gepushte appwijzigingen zetten pending/busy en exacte lokale
 lock vóór direct socket-/native-fetchdispatch; geometrielezingen, logging en
 React-updates volgen. Geselecteerd stop/send-werk is circa **0,3 ms**, maar
 oorspronkelijke native-eventtijd tot afgeronde frozen geometrie blijft voor
@@ -787,8 +788,9 @@ sampleleeftijd niet. `processedAt`, `queueMs`, `dbMs` en send-calltijd zijn
 geen volledige wire-/commit-/presentatietijdlijn; klok-/queuebeperkingen staan
 in het timingdocument. Private failures/profielen blijven in de drie
 proofmappen van **19:50:52, 19:53:49 en 20:03:51 UTC** onder
-`artifacts/local-final-proof`. Git blijft `04eb3f3`, live staging `a74fbf5`;
-nieuwe CI en liveacceptatie volgen nog.
+`artifacts/local-final-proof`. Tijdens die onderzoeksfase was Git nog
+`04eb3f3` en live staging `a74fbf5`; de opvolgende commits en CI-uitkomsten
+staan in de latere secties hieronder.
 
 
 De nieuwe normale lokale policybundel gebruikt dezelfde gewijzigde app met
@@ -874,3 +876,89 @@ Typecheck, bestaande unittests, productiebuild en readiness zijn geslaagd.
 Dit lokale resultaat bewijst geen oorzakelijke vergelijking van twee
 verschillend geplande CI-interacties; nieuwe exacte-SHA-CI en verse live
 stagingcontroles volgen nog.
+
+### Afgeronde CI van 3faea753 en gerichte testomgevingwijziging
+
+De [main-run](https://github.com/dartspoint/platform/actions/runs/38464754401)
+van `3faea75394fae1c9b436f776372131f41e599937` faalt in de bestaande
+verticale floodcontrole: native invoer tot commandhook **5,3 ms**, tot
+eerste frozen geometrie **207,3 ms**, nul freeze-/ACK-afwijking. De echte
+receipt bevat het oorspronkelijke sample van **28 ms binnen 54 ms**.
+De gewone wedstrijdcontrole slaagde eerder in dezelfde run: acht samples,
+p95/max **42,3 ms**. Oefenen slaagde met zestien HTTP-200-samples,
+p95/max **32,1 ms**. Ook de echte HTTPS/SDK/reconnectcontrole slaagde;
+de eindregressie en TLS/restoregate zijn door de floodfailure niet compleet.
+Bewijs: `artifacts/ci-3faea-main/`.
+
+De [staging-run](https://github.com/dartspoint/platform/actions/runs/38464752931)
+van dezelfde commit faalt eerder, bij de vijfde mobiele wedstrijdpoging:
+**65,6 ms**, waarvan **32,5 ms vóór de capturelistener**. De receipt bevat
+**46 ms sampleouderdom binnen 54 ms**, nul freeze-/ACK-afwijking.
+Imagepublicatie en deployment zijn overgeslagen. Staging web en realtime
+toonden bij de nieuwe TLS-controle om 20:43:46 UTC nog de bestaande release
+`a74fbf556b9428841bf7e381593d2719bd27e4fb`; dit is geen acceptatie van 3faea753.
+Bewijs: `artifacts/ci-3faea-staging/` en `artifacts/staging-3faea-final/`.
+
+De floodfailure heeft een **103,5 ms timerpauze** en **226,9 ms RAF-pauze**.
+Timers hervatten vóór de eerste gemeten frozen geometrie, dus één continue
+207-ms-JS-blokkade is niet aangetoond. De twee overlappende 1-Hz-hostintervallen
+meten op twee cores **49,75/96,04% CPU** en **33,66/67,31% CPU-wachtdruk**.
+Er is geen gemeten geheugen-, swap- of cgroupthrottlingtoename. Dit is
+gecorreleerde capaciteitsdruk, geen volledige causale verklaring.
+
+Een afzonderlijke Headless-Shell Performance-opname op de ongewijzigde build,
+met alleen browser/test op twee lokale cores gepind, faalt op **93,8 ms**.
+Daarvan zit **68 ms vóór capture**; de volledige Event-Timing-pointerhandler
+duurt **5,965 ms**, de React-flush **4,383 ms wall/3,137 ms CPU**, layout
+**0,326 ms** en paint **0,302 ms**. Er is geen SVG-bordpaint in dat kritieke
+interval. Dit onderbouwt geen volgende bord- of indicatorherschrijving en
+bewijst de oorzaak van de afzonderlijke CI-failures niet. Geen nieuwe fysieke
+presentatieclaim: RAF/geometrie en Event Timing blijven beperkte waarnemingen.
+Bewijs: `artifacts/local-final-proof/shell-performance-3faea-20261013T205344Z/`.
+
+De volgende gerichte CI-aanpassing start realtime en worker rechtstreeks uit
+hun bestaande `dist/deploy/*/server.js`-productiebundles, zoals de lokale
+acceptatie en deploymentimages al doen. De TypeScript-loader is hierdoor
+niet langer onderdeel van deze runtimes. Tevens worden de twee ongebruikte
+Supabase-services `realtime` en `storage` uitgesloten; dit zijn de geldige
+CLI-2.109.1-servicenamen. Applicatie en suite hebben geen API-consumenten van
+die services. Auth, PostgreSQL, PostgREST, Kong en mail blijven aanwezig.
+Alle **27 Node- en 2 Python-testcommando's**, vaste browser en harde
+50-ms/1-CSS-px-/oorspronkelijke-samplegates blijven gelijk. Dit is een
+testomgevingwijziging; CPU-winst of een geslaagde volgende pipeline is
+hiermee nog niet bewezen. De failures blijven behouden en live deployment
+vereist nieuwe succesvolle exacte-SHA-verificatie.
+
+### Afzonderlijke QA-runner op de bestaande VPS
+
+De nieuwe beheerderinventaris meet vier logische cores, circa 6,3 GiB
+beschikbaar geheugen, 148,6 GB vrije schijf en 92,2–99,0% CPU-idle over vier
+seconden. De twee deploymentrunners zijn idle; uitschakelen ervan levert
+geen aangetoonde CPU-winst op. Er wordt een afzonderlijke `runner-qa` met
+eigen rootless Docker ingericht. Alleen vertrouwde main/staging-pushes
+kunnen na bevestigde installatie via de repositoryvariable
+`DARTSPOINT_QA_ON_VPS=true` op de ene `dartspoint-qa`-runner terechtkomen;
+die jobs draaien daardoor serieel. QA krijgt geen Environmentsecrets,
+appgroepen of algemene sudo. [Beheer en uitschakelen](../ops/QA-RUNNER.md).
+
+De eerste operatorinstallatie bereikte de gecontroleerde rootless-resourceproef
+en registreerde `dartspoint-qa-01`, maar stopte vóór de servicestap. De
+oorspronkelijke metadatareader faalt lokaal aantoonbaar op een UTF-8-BOM
+in `.runner`; de officiële runnerwriter gebruikt `Encoding.UTF8`.
+De gerichte leesfix bevestigt ook op de werkelijke VPS `utf8Bom: true`
+en een passende identiteit. De hervatte installatie slaagt voor UID 1005,
+met werkelijk gecontroleerde containerlimieten en ongewijzigde bestanden
+en main-PID's van Caddy en beide deploymentrunners. GitHub bevestigt één
+online, idle QA-runner. De opt-invariable is daarna geactiveerd. Bij de
+voorbereiding van deze commit is er nog geen groene QA-pipeline of nieuwe
+deployment; die volgen uitsluitend na nieuwe exacte-SHA-verificatie.
+Bewijs: `artifacts/staging-3faea-final/qa-infrastructure-review.json` en
+`qa-registration-bom-local-reproduction.json` in dezelfde private map.
+
+De ongeprofilede lokale bundel met de gerichte runtimewijziging slaagt
+eenmalig en serieel: wedstrijd **8/8**, native eerste-geometrie maximum
+**41,6 ms**; oefenen **16/16 HTTP 200**, maximum **30,1 ms**; workspace
+**21/21** en **15/15** canonieke berichten, flood H/V **19,2/19,2 ms**.
+Die bundel bewijst de lokale applicatiecontrole; de nieuwe QA-account-,
+Docker-, browserdependency- en cleanupcontroles vereisen echte CI.
+Bewijs: `artifacts/local-final-proof/ci-runtime-parity-acceptance-20261013T211037Z/`.

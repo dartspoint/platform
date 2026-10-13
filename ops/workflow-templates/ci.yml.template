@@ -1,4 +1,4 @@
-# Hosted CI never receives staging or production credentials.
+# CI never receives staging or production credentials. QA is a separate account/daemon.
 name: DartsPoint CI
 on:
   workflow_call:
@@ -13,19 +13,33 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Only trusted main/staging pushes opt into the dedicated single QA runner.
+    # Pull requests and production keep their existing hosted verification route.
+    runs-on: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && fromJSON('["self-hosted","Linux","X64","dartspoint-qa"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
+    env:
+      DARTSPOINT_QA_RUNNER: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Verify dedicated QA identity and remove only its prior test stack
+        id: qa_context
+        if: env.DARTSPOINT_QA_RUNNER == 'true'
+        run: python3 scripts/qa-runner-context.py preclean
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.18.0
       - name: Verify in reviewed Node runtime without deployment credentials
         run: |
           NODE_IMAGE=$(python3 -c 'import json; print(json.load(open("ops/image-pins.json"))["NODE_IMAGE"])')
-          docker run --rm --user "$(id -u):$(id -g)" --env NPM_CONFIG_CACHE=/tmp/npm-cache \
+          container_user="$(id -u):$(id -g)"
+          if [[ "$DARTSPOINT_QA_RUNNER" == true ]]; then
+            python3 scripts/qa-runner-context.py check
+            # Root in this verified rootless daemon maps to runner-qa on the host.
+            container_user='0:0'
+          fi
+          docker run --rm --user "$container_user" --env NPM_CONFIG_CACHE=/tmp/npm-cache \
             --volume "$GITHUB_WORKSPACE:/workspace" --workdir /workspace "$NODE_IMAGE" \
             sh -c 'npm ci && npm run typecheck && npm test && node scripts/check-original-rules.mjs && npm run build:deploy'
           python3 ops/scripts/check-ops.py
@@ -42,8 +56,160 @@ jobs:
       - name: Start isolated infrastructure and run acceptance tests
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
-        run: bash scripts/ci-integration.sh
+        run: python3 scripts/capture-test-capacity.py artifacts/test-host-capacity.json -- bash scripts/ci-integration.sh
       - name: Verify real database TLS and encrypted restore
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
         run: python3 tests/integration/deployment-infrastructure.py
+      - name: Prepare audited browser measurements
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, re, stat
+          from pathlib import Path
+          os.umask(0o077)
+          destination = Path('artifacts/ci-safe')
+          reports = {
+              'artifacts/workspace-chat/results.json': 'workspace-chat-results.json',
+              'artifacts/workspace-chat/latency.json': 'workspace-chat-latency.json',
+              'artifacts/game-timing-result.json': 'game-timing-result.json',
+              'artifacts/game-timing-progress.json': 'game-timing-progress.json',
+              'artifacts/render-sample-timing-result.json': 'render-sample-timing-result.json',
+              'artifacts/render-sample-timing-progress.json': 'render-sample-timing-progress.json',
+              'artifacts/render-sample-rejected.json': 'render-sample-rejected.json',
+              'artifacts/https-sdk-progress.json': 'https-sdk-progress.json',
+              'artifacts/https-proxy-result.json': 'https-proxy-result.json',
+          }
+          omitted = {
+              'message', 'body', 'text', 'stack', 'headers', 'authorization',
+              'cookie', 'cookies', 'password', 'passwd', 'secret', 'secrets',
+              'session', 'sessions', 'email', 'emails', 'containersrc',
+          }
+          uuid = re.compile(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}')
+          credential_value = re.compile(r'(?:Bearer\s|(?:postgres|postgresql)://|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)')
+          def safe(value):
+              if isinstance(value, dict):
+                  result = {}
+                  for key, item in value.items():
+                      compact = re.sub(r'[^a-z0-9]', '', key.lower())
+                      if compact in omitted or compact.endswith('url') or 'secret' in compact or 'password' in compact:
+                          continue
+                      if 'token' in compact:
+                          if compact != 'phasetoken' or not isinstance(item, str) or not uuid.fullmatch(item):
+                              continue
+                      result[key] = safe(item)
+                  return result
+              if isinstance(value, list):
+                  return [safe(item) for item in value]
+              if isinstance(value, str) and credential_value.search(value):
+                  return None
+              return value
+          # Capacity reports have an exact metadata schema, independent of the
+          # broader browser-report redaction. No command, PID, path or free text.
+          def capacity_report(data):
+              def number(value):
+                  if value is None:
+                      return None
+                  if type(value) not in (int, float) or not __import__('math').isfinite(value):
+                      raise ValueError('Invalid capacity number')
+                  return value
+              def numbers(value, keys):
+                  if value is None:
+                      return None
+                  if not isinstance(value, dict):
+                      raise ValueError('Invalid capacity object')
+                  return {key: number(value[key]) for key in keys if key in value}
+              def flag(value):
+                  if type(value) is not bool:
+                      raise ValueError('Invalid capacity flag')
+                  return value
+              def timestamp(value):
+                  if value is None:
+                      return None
+                  if not isinstance(value, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z', value):
+                      raise ValueError('Invalid capacity timestamp')
+                  return value
+              def limit(value):
+                  if value is None:
+                      return None
+                  return {'value': number(value['value']), 'unlimited': flag(value['unlimited'])}
+              def cgroup(value):
+                  if value is None:
+                      return None
+                  cpu, memory = value.get('cpu'), value.get('memory')
+                  return {
+                      'version': number(value['version']), 'supported': flag(value['supported']),
+                      'cpu': None if cpu is None else {**numbers(cpu, ('quota_us', 'period_us')), 'unlimited': flag(cpu['unlimited']), 'stats': numbers(cpu['stats'], ('usage_usec', 'user_usec', 'system_usec', 'nr_periods', 'nr_throttled', 'throttled_usec', 'nr_bursts', 'burst_usec'))},
+                      'memory': None if memory is None else {**numbers(memory, ('current_bytes', 'swap_current_bytes')), 'max_bytes': limit(memory['max_bytes']), 'swap_max_bytes': limit(memory['swap_max_bytes']), 'events': numbers(memory['events'], ('low', 'high', 'max', 'oom', 'oom_kill', 'oom_group_kill'))},
+                  }
+              if data['schema_version'] != 1 or data['clock_relationship'] != 'same_host_sequential_monotonic_and_utc_only' or len(data['samples']) > 4096:
+                  raise ValueError('Invalid capacity schema')
+              host, measurement = data['host'], data['measurement']
+              if host['os'] not in ('linux', 'other') or host['architecture'] not in ('x86_64', 'aarch64', 'other'):
+                  raise ValueError('Invalid capacity host')
+              result = {
+                  'schema_version': 1, 'clock_relationship': 'same_host_sequential_monotonic_and_utc_only',
+                  'host': {**numbers(host, ('logical_cpu_count', 'affinity_cpu_count', 'clock_ticks_per_second', 'page_size_bytes')), 'os': host['os'], 'architecture': host['architecture']},
+                  'measurement': {**numbers(measurement, ('started_monotonic_ns', 'ended_monotonic_ns', 'period_seconds', 'max_records', 'max_runtime_seconds', 'sample_count', 'dropped_records', 'child_returncode', 'forwarded_signal')), 'started_utc': timestamp(measurement['started_utc']), 'ended_utc': timestamp(measurement['ended_utc']), 'timed_out': flag(measurement['timed_out']), 'complete': flag(measurement['complete']), 'read_errors': numbers(measurement['read_errors'], ('cpu', 'load', 'memory', 'swap', 'pressure_cpu', 'pressure_memory', 'pressure_io', 'cgroup', 'cgroup_cpu', 'cgroup_memory'))},
+                  'samples': [],
+              }
+              for sample in data['samples']:
+                  cpu = sample['cpu']
+                  result['samples'].append({
+                      **numbers(sample, ('monotonic_ns', 'elapsed_ns')), 'utc': timestamp(sample['utc']),
+                      'cpu': None if cpu is None else {'ticks': numbers(cpu['ticks'], ('user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal')), 'utilization': numbers(cpu['utilization'], ('busy_percent', 'idle_percent', 'iowait_percent', 'steal_percent'))},
+                      'load': numbers(sample['load'], ('one', 'five', 'fifteen', 'runnable', 'total')),
+                      'memory_kib': numbers(sample['memory_kib'], ('total', 'available', 'swap_total', 'swap_free')),
+                      'swap_pages': numbers(sample['swap_pages'], ('in', 'out', 'in_delta', 'out_delta')),
+                      'pressure': {kind: None if sample['pressure'][kind] is None else {scope: numbers(values, ('avg10', 'avg60', 'avg300', 'total')) for scope, values in sample['pressure'][kind].items() if scope in ('some', 'full')} for kind in ('cpu', 'memory', 'io')},
+                      'cgroup': cgroup(sample['cgroup']),
+                  })
+              return result
+          for source, name in reports.items():
+              path = Path(source)
+              if not path.exists():
+                  continue
+              if path.is_symlink() or not stat.S_ISREG(path.stat().st_mode):
+                  raise SystemExit('Safe browser report export refused an unexpected file type')
+              try:
+                  data = json.loads(path.read_text())
+              except (OSError, ValueError):
+                  raise SystemExit('Safe browser report export refused invalid JSON')
+              destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+              target = destination / name
+              target.write_text(json.dumps(safe(data), indent=2, allow_nan=False) + '\n')
+              target.chmod(0o600)
+          capacity = Path('artifacts/test-host-capacity.json')
+          if capacity.exists():
+              if capacity.is_symlink() or not stat.S_ISREG(capacity.stat().st_mode):
+                  raise SystemExit('Safe capacity export refused an unexpected file type')
+              try:
+                  data = capacity_report(json.loads(capacity.read_text()))
+              except (OSError, ValueError, TypeError, KeyError):
+                  raise SystemExit('Safe capacity export refused invalid metadata')
+              destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+              target = destination / 'test-host-capacity.json'
+              target.write_text(json.dumps(data, indent=2, allow_nan=False) + '\n')
+              target.chmod(0o600)
+          PY
+      - name: Preserve safe browser measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dartspoint-browser-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            artifacts/ci-safe/workspace-chat-results.json
+            artifacts/ci-safe/workspace-chat-latency.json
+            artifacts/ci-safe/game-timing-result.json
+            artifacts/ci-safe/game-timing-progress.json
+            artifacts/ci-safe/render-sample-timing-result.json
+            artifacts/ci-safe/render-sample-timing-progress.json
+            artifacts/ci-safe/render-sample-rejected.json
+            artifacts/ci-safe/https-sdk-progress.json
+            artifacts/ci-safe/https-proxy-result.json
+            artifacts/ci-safe/test-host-capacity.json
+      - name: Remove only the verified QA test stack and its repository worktree
+        if: ${{ always() && env.DARTSPOINT_QA_RUNNER == 'true' && steps.qa_context.outcome == 'success' }}
+        run: python3 scripts/qa-runner-context.py workspace-clean

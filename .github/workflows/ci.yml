@@ -1,4 +1,4 @@
-# Hosted CI never receives staging or production credentials.
+# CI never receives staging or production credentials. QA is a separate account/daemon.
 name: DartsPoint CI
 on:
   workflow_call:
@@ -13,19 +13,33 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
-    runs-on: ubuntu-24.04
+    # Only trusted main/staging pushes opt into the dedicated single QA runner.
+    # Pull requests and production keep their existing hosted verification route.
+    runs-on: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && fromJSON('["self-hosted","Linux","X64","dartspoint-qa"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
+    env:
+      DARTSPOINT_QA_RUNNER: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Verify dedicated QA identity and remove only its prior test stack
+        id: qa_context
+        if: env.DARTSPOINT_QA_RUNNER == 'true'
+        run: python3 scripts/qa-runner-context.py preclean
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.18.0
       - name: Verify in reviewed Node runtime without deployment credentials
         run: |
           NODE_IMAGE=$(python3 -c 'import json; print(json.load(open("ops/image-pins.json"))["NODE_IMAGE"])')
-          docker run --rm --user "$(id -u):$(id -g)" --env NPM_CONFIG_CACHE=/tmp/npm-cache \
+          container_user="$(id -u):$(id -g)"
+          if [[ "$DARTSPOINT_QA_RUNNER" == true ]]; then
+            python3 scripts/qa-runner-context.py check
+            # Root in this verified rootless daemon maps to runner-qa on the host.
+            container_user='0:0'
+          fi
+          docker run --rm --user "$container_user" --env NPM_CONFIG_CACHE=/tmp/npm-cache \
             --volume "$GITHUB_WORKSPACE:/workspace" --workdir /workspace "$NODE_IMAGE" \
             sh -c 'npm ci && npm run typecheck && npm test && node scripts/check-original-rules.mjs && npm run build:deploy'
           python3 ops/scripts/check-ops.py
@@ -196,3 +210,6 @@ jobs:
             artifacts/ci-safe/https-sdk-progress.json
             artifacts/ci-safe/https-proxy-result.json
             artifacts/ci-safe/test-host-capacity.json
+      - name: Remove only the verified QA test stack and its repository worktree
+        if: ${{ always() && env.DARTSPOINT_QA_RUNNER == 'true' && steps.qa_context.outcome == 'success' }}
+        run: python3 scripts/qa-runner-context.py workspace-clean
