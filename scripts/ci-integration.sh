@@ -8,6 +8,7 @@ web_pid=''
 worker_start=''
 realtime_start=''
 web_start=''
+normal_game_reached=false
 process_identity() {
   local pid="$1" stat_line
   local -a stat_fields
@@ -31,6 +32,18 @@ cleanup_owned_services() {
   local index pid start
   local -a child_pids=("$web_pid" "$realtime_pid" "$worker_pid")
   local -a child_starts=("$web_start" "$realtime_start" "$worker_start")
+  # Separate opt-in diagnostics run after the normal suite stops, while the
+  # three exact native children and disposable database are still available.
+  if [[ "${DARTSPOINT_QA_INPUT_DIAGNOSTIC:-false}" == true \
+        && "${DARTSPOINT_QA_RUNNER:-false}" == true && "$normal_game_reached" == true ]] \
+      && owned_child_running "$web_pid" "$web_start" \
+      && owned_child_running "$realtime_pid" "$realtime_start" \
+      && owned_child_running "$worker_pid" "$worker_start"; then
+    if ! DARTSPOINT_QA_INPUT_NORMAL_EXIT_CODE="$result" DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED=true \
+      python3 scripts/qa-input-diagnostic.py; then
+      if [[ "$result" == 0 ]]; then result=1; fi
+    fi
+  fi
   for index in "${!child_pids[@]}"; do
     pid="${child_pids[$index]}"; start="${child_starts[$index]}"
     if owned_child_running "$pid" "$start"; then kill "$pid" 2>/dev/null || true; fi
@@ -126,6 +139,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/owner
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/load.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/mail.ts
 # Preserve independent throwing evidence before the broader workspace checks.
+normal_game_reached=true
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/game-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/render-sample-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/visual.ts

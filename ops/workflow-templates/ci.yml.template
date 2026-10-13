@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 30
     env:
       DARTSPOINT_QA_RUNNER: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && 'true' || 'false' }}
+      DARTSPOINT_QA_INPUT_DIAGNOSTIC: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && 'true' || 'false' }}
+      DARTSPOINT_QA_INPUT_PROFILE_PUBLIC_KEY_BASE64: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DARTSPOINT_QA_INPUT_PROFILE_PUBLIC_KEY_BASE64 || '' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -210,6 +212,14 @@ jobs:
             artifacts/ci-safe/https-sdk-progress.json
             artifacts/ci-safe/https-proxy-result.json
             artifacts/ci-safe/test-host-capacity.json
+      - name: Preserve encrypted private QA input diagnostics
+        if: ${{ always() && env.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dartspoint-qa-input-private-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 1
+          if-no-files-found: ignore
+          path: artifacts/qa-input-diagnostic/encrypted/*.enc
       - name: Remove only the verified QA test stack and its repository worktree
         if: ${{ always() && env.DARTSPOINT_QA_RUNNER == 'true' && steps.qa_context.outcome == 'success' }}
         run: python3 scripts/qa-runner-context.py workspace-clean
