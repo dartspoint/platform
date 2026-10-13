@@ -142,7 +142,89 @@ Deze meetwaarden staan in
 `artifacts/local-final-proof/final-combined-render-sample-timing-result.json`
 en `final-combined-game-timing-result.json`; de actuele stagingmeting staat
 afzonderlijk bij de exacte gedeployde release in de changeset.
-Deze waarden betreffen de lokale build, niet de nog te meten stagingrelease.
+Deze waarden betreffen de lokale build en staan los van de afzonderlijke VPS-metingen.
+
+De latere native wedstrijdcontrole bewaart acht echte stoppogingen, alle acht
+exact geaccepteerd: beide assen bij ieder cohort van 100/300/1000 ms vertraagde
+inkomende bevestigingen, plus werkelijk verlies/herstel van een receipt.
+Handlermaximum is 0,5 ms; eerste frozen frame p95 en maximum zijn 26,2 ms.
+Freeze en ACK verschuiven 0 CSS px. De vier daadwerkelijke impactcontroles,
+inclusief de pijl na reconnect, behouden de eerste grounded SVG-tip en drie
+volgende transforms; maximale tipafwijking is 0,00001199 CSS px. Iedere poging
+blijft behouden en ieder cohort vereist minstens één exacte acceptatie.
+Bewijs: `artifacts/local-final-proof/outcome-aware-game-timing-{result,progress,private.log}`.
+
+De nieuwe workspace-floodcontrole gebruikt dezelfde harde werpgates. Een
+hosted fixture kon haar chatverzoek afronden vóór de native input; deze
+daadwerkelijke test-overlapfout is opgelost door een echte browserfetch in de
+capturefase van diezelfde pointer-/Enter-input te starten. De gewone
+werphandler volgt zonder await, routehold, responsevertraging of klokaanpassing.
+De latency begint vóór die fetch; het extra capturewerk wordt dus meegemeten.
+Drie echte nieuwe chatberichten vullen de bestaande 3/2-secondenlimiet; het
+vierde verzoek geeft daadwerkelijk 429 en overlapt de echte werphandler.
+De volledige native regressie accepteerde beide eerste stops exact: handler
+1,0/1,9 ms, eerste frozen frame 21,3/23,2 ms, freeze en ACK 0 CSS px, dezelfde
+indicator- en bordnodes. Originele sampleleeftijden zijn 13/19 ms binnen 54 ms.
+Dit bewijs staat in
+`artifacts/local-final-proof/workspace-chat-native-input-flood-20261013T175726Z/results.json`.
+Er is geen werpvenster verruimd en er zijn geen pogingen opnieuw gemeten of verwijderd.
+
+De volledig geslaagde hosted stagingpipeline
+[38439425675](https://github.com/dartspoint/platform/actions/runs/38439425675)
+van `a74fbf556b9428841bf7e381593d2719bd27e4fb` bevat elf wedstrijdpogingen tegen
+geïsoleerde hosted infrastructuur. Acht stops zijn exact geaccepteerd; drie
+claims van 71/81/88 ms oud vallen aantoonbaar buiten hun originele venster van
+54 ms. Zij geven expliciet `invalid_render_sample`, een zichtbare fout,
+volledig ongewijzigde state/version en gecontroleerd herstel. Iedere
+axis/vertraging behoudt minstens één werkelijke acceptatie. Eerste-frame p95
+en maximum over alle elf pogingen zijn 45,0 ms. Dit is geen live VPS-browsertest;
+die heeft afzonderlijk bewijs tegen de exacte actieve staging-SHA.
+
+De éénmalige volledige live wedstrijdcontrole op
+`a74fbf556b9428841bf7e381593d2719bd27e4fb` accepteert 8/8 stops exact, met nul
+afwijzingen of uitgesloten pogingen. Beide assen bij ieder 100/300/1000-ms-cohort
+bevatten een echte acceptatie. Freeze en ACK verschuiven 0 CSS px; handlermaximum
+is 0,6 ms en eerste frozen frame p95/maximum 29,4 ms. De vier eerste grounded
+impacts wijken maximaal 0,00000544 CSS px af en behouden hun transform in drie
+volgende frames na werkelijk gedupliceerde flightsnapshots. Het verlies en
+herstel van de originele UUID maakt geen extra pijl; de normale opgave slaagt.
+Web en realtime geven vóór de acceptatie dezelfde exacte release-SHA; het
+oorspronkelijke bronmanifest matcht de gebruikte wedstrijdharness. Bewijs staat in
+`artifacts/staging-a74-final/sequence-game-{result,progress,summary,acceptance}.json`
+en de private modelog. De eerste smoke-401 blijft bewaard; de oorzaak is niet
+vastgesteld. De latere gerichte identiteitscontrole en normale smoke slagen.
+De eerste live oefenpoging geeft `409 invalid_render_sample`, zonder afgeronde
+oefensamples of geslaagde acceptance. Haar oorspronkelijke serveringress en
+afwijsoorzaak zijn nog onbekend; de oorspronkelijke failure blijft behouden.
+Er is afzonderlijk een fixturetransportverschil vastgesteld: `route.fetch`
+verstuurde de stop via een nieuwe Node HTTPS/proxy/CONNECT/TLS-verbinding,
+terwijl de via `route.continue` gekalibreerde ping de Chromiumverbinding
+gebruikte. Dat is geen bewezen verklaring voor deze 409. Een geautoriseerde
+nieuwe oefenfixture gebruikt native browserfetch met dezelfde originele UUID
+en echte response, zonder de werpgrenzen te wijzigen. Haar bronhash en bewijs
+worden afzonderlijk van het oorspronkelijke release-manifest vastgelegd.
+De éénmalige live controle met deze gewijzigde oefenfixture slaagt op dezelfde
+actieve `a74fbf5`-app: zestien stops met echte HTTP 200, acht desktop en acht
+mobiel, zonder uitgesloten pogingen. Freeze, pending, ACK en fractie verschuiven
+0 CSS px. Handler-p95/maximum zijn 0,5 ms; eerste frozen frame p95/maximum zijn
+15,1 ms. Acht grounded pijlen wijken maximaal 0,000016005 CSS px af. De
+cold-readyguard vóór drie challenges slaagt. Een aparte geïnjecteerde
+160-ms-hoofdthreadpauze levert 409, de exacte timingfout, volledig ongewijzigde
+authoritative state, een zichtbare fout en gecontroleerd herstel op; zij
+vervangt of verwijdert geen gewone sample.
+
+Bewijs: `artifacts/staging-a74-final/native-practice-{result,progress,summary,acceptance}.json`.
+Het nieuwe `native-practice-source-manifest.json` onderscheidt de gewijzigde
+oefenfixture (SHA-256 `b750e103ef6871e005b7b389bb4a9fd398a1faccea40a534484bffd884521791`)
+van de oorspronkelijke release: de wrapper en wedstrijdfixture matchen a74,
+en alle applicatiebronnen zijn ongewijzigd. De preflight bevestigt dezelfde
+exacte release op web en realtime. De oorzaak van de eerste oefen-409 blijft
+onbekend. De afsluitende controle van de volledige pre-finale reeks bevestigt
+web en realtime met HTTP 200 en exact dezelfde a74-release, ongewijzigde
+applicatiebroncode en nog overeenkomende gebruikte manifesthashes. Het
+gecombineerde bewijs staat in
+`artifacts/staging-a74-final/final-stage-proof.json`. Deze browsermetingen
+bewijzen geen fysieke schermfrequentie, telefoontoetsenbord of menselijke touchlatency.
 
 De aanvullende updatebrowser bewaart alle 30 native invoerpogingen met
 100/300/1000 ms vertraging van uitsluitend de ontvangen response. Iedere

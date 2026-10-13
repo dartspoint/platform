@@ -163,16 +163,16 @@ De production-app en productiedatabase worden niet gedeployd of gemigreerd.
 
 | Gebied | Gerichte verificatie | Uitvoering |
 |---|---|---|
-| Desktop/mobile/één chat | `workspace-chat.ts`, bestaande visual/interface/update-tests | Nieuwe native browseracceptatie geslaagd: 19 checks en 15 chatsamples; bestaande visual/interface/update-regressies ook geslaagd |
+| Desktop/mobile/één chat | `workspace-chat.ts`, bestaande visual/interface/update-tests | Laatste native browseracceptatie geslaagd: 21 checks en 15 chatsamples; bestaande visual/interface/update-regressies ook geslaagd |
 | Volle panelen/zoom/menu/toetsenbord | `workspace-density.ts` | Tien controles geslaagd op de definitieve portalbuild; drie desktopmaten, drie mobiele maten en 200% CSS-zoom |
 | Bezoeken/quota/filter/rechten/invites | `chat-moderation.ts`, bestaande services/update-tests | Echte lokale Auth/PostgreSQL/Redis; doeltests en bestaande services/update-tests geslaagd |
 | Ownerbeheer/rename/slowmode | `chat-moderation-ui.ts` | Geslaagd: 12 checks met echte development-owner en afzonderlijk playerfixture; oorspronkelijke instellingen hersteld |
 | Spelers buiten directorylimiet | `player-visibility.ts` | Acht echte databasecontroles geslaagd met 2.020 eigen Auth-profielen; alle fixtures verwijderd |
 | Leesbevestigingen/unread | `chat-read.ts` | Native browser geslaagd: maximaal één lopende kamerwrite, hoogste zichtbare cursor, onafhankelijk privégesprek, fout/retry en verborgen chat |
 | Timingcontract/retry/legacy | unit `render-sample-timing.test.ts`, integration `render-sample-timing.ts` | Unit en echte databasechecks geslaagd |
-| Werkelijke DOM/flight/reconnect | `render-sample-timing.ts`, `game-timing.ts` | Lokale native build geslaagd: 16 oefenstops en zes wedstrijdstops, beide assen; staging volgt afzonderlijk |
+| Werkelijke DOM/flight/reconnect | `render-sample-timing.ts`, `game-timing.ts` | Native en hosted geslaagd; live pre-finale staging op `a74fbf5`: acht exacte wedstrijdstops en zestien exacte oefenstops |
 | Bron/operations | source parity, 39 operationele checks | Geslaagd; oorspronkelijke publieke assets/fonts behouden |
-| Stagingidentiteit | `tests/staging/browser-fixture.ts`, `acceptance.ts` | Twee afzonderlijke niet-staff QA-accounts met echte providerverificatie; TLS smoke tegen voorafgaande release geslaagd |
+| Stagingidentiteit | `tests/staging/browser-fixture.ts`, `acceptance.ts` | Pre-finale smoke, wedstrijd, oefenen en chat op exacte release `a74fbf5` geslaagd voor twee afzonderlijke niet-staff QA-accounts; finale web/realtime-readiness geeft HTTP 200 en dezelfde SHA |
 
 De stagingfixture wordt eenmalig als beheerder op de VPS uitgevoerd: echte
 Auth-identiteiten en sessies blijven servergegenereerd; alleen een RSA/AES-GCM
@@ -185,7 +185,7 @@ Hij heeft geen publieke loginbypass, productierol of runtimebeheerendpoint.
 ### Definitieve lokale workspace- en moderatiebrowseracceptatie
 
 `workspace-chat.ts` is geslaagd tegen de gebouwde native web/realtime/worker
-met echte lokale Auth, PostgreSQL en Redis. De 19 checks omvatten de vaste
+met echte lokale Auth, PostgreSQL en Redis. De 21 checks omvatten de vaste
 desktopindeling op 1280×720, 1366×768 en 1920×1080 in lobby, kamer, oefenen en
 wedstrijd, het breakpoint aan beide zijden van 1024 pixels en één bereikbare
 mobiele chat/composer op 320×568 en 390×844. Ook geslaagd: één join per bezoek,
@@ -194,8 +194,9 @@ concepten, geweigerde tekst, behouden berichtvolgorde bij een oudere historyresp
 en focusherstel, gesloten profiel zonder pointerlock, stabiele DM-identiteit bij
 hernoemen en hergebruik van de oude naam, herstel na persoonlijke mute,
 geautoriseerde realtimeprojecties, tabvolgorde en blijvende selectie,
-gezaghebbende bezetstatus, een geweigerde flood zonder bordremount en de echte
-spectator-handoff vanuit oefenen. De QA-partij is via een geautoriseerde opgave
+gezaghebbende bezetstatus, een geopend uitnodigingsdialoog dat op een werkelijk
+bezette ontvanger reageert, echte pointer-/toetsenbordstops tijdens een geweigerde
+flood zonder bordremount en de spectator-handoff vanuit oefenen. De QA-partij is via een geautoriseerde opgave
 beëindigd; er bleef geen actieve spelerreservering achter.
 
 De definitieve geslaagde meetreeks op de gegroepeerde verzendroute met
@@ -209,25 +210,26 @@ persoonlijke Colyseus-inbox.
 
 | Meetpunt vanaf verzenden | p95 | Projectdoel |
 |---|---:|---:|
-| Eigen optimistic bericht zichtbaar | 9,2 ms | ≤50 ms |
-| HTTP-responseheaders ontvangen | 190,5 ms | Afzonderlijk gemeten |
-| HTTP-ontvangstbevestiging van het opgeslagen bericht | 204,4 ms | Afzonderlijk gemeten |
-| Persoonlijke realtimepush ontvangen | 200,4 ms | Afzonderlijk gemeten |
-| Bericht zichtbaar bij geautoriseerde ontvanger | 209,0 ms | ≤250 ms |
+| Eigen optimistic bericht zichtbaar | 24,7 ms | ≤50 ms, verplicht |
+| HTTP-responseheaders ontvangen | 219,2 ms | Afzonderlijk gemeten |
+| HTTP-ontvangstbevestiging van het opgeslagen bericht | 226,4 ms | Afzonderlijk gemeten |
+| Persoonlijke realtimepush ontvangen | 229,0 ms | Afzonderlijk gemeten |
+| Bericht zichtbaar bij geautoriseerde ontvanger | 237,1 ms | ≤250 ms, gerapporteerd streefdoel |
 
 De HTTP-waarde meet het ontvangen antwoord na het uitlezen van JSON; dit is
 geen afzonderlijk geïnstrumenteerde databasecommittijd. Beide zichtbaarheiddoelen
 zijn in deze beschreven lokale omgeving gehaald. Bewijs en ruwe samples staan
-in `artifacts/local-final-proof/workspace-chat-read-singleflight-result.json` en
-`workspace-chat-read-singleflight-latency.json`; de log is
-`artifacts/local-final-proof/workspace-chat-read-singleflight-run.log` (exit 0).
+in `artifacts/local-final-proof/workspace-chat-native-input-flood-20261013T175726Z/`
+als `results.json`, `latency.json` en `run.log` (exit 0). De eerdere
+single-flightreeks met 9,2/209,0 ms blijft afzonderlijk bewaard in
+`artifacts/local-final-proof/workspace-chat-read-singleflight-{result,latency}.json`.
 Alle 15 sends hebben HTTP 200 en een onafhankelijk waargenomen canonieke
 SDK-push. Geen sample is opnieuw geprobeerd, verwijderd of als warmup uitgesloten.
 HTTP-, push-, DOM-, focus- en zichtbaarheidmetingen worden ook bij een
 overschrijding vóór de performanceassertions bewaard. De oudere lokale
 248,1- en 248,5-ms-reeksen blijven historisch bewijs; de mislukte hosted metingen worden
-daarmee niet vervangen. Nieuwe hosted CI en acceptatie op de werkelijk actieve
-stagingrelease moeten nog afzonderlijk slagen.
+daarmee niet vervangen. De geslaagde hosted stagingpipeline en acceptatie op de
+werkelijk actieve stagingrelease worden afzonderlijk hieronder vastgelegd.
 
 De voorafgaande volledige run op de gezamenlijke portalbuild faalde echt op
 het ontvangerdoel: lokale p95 12,0 ms, ontvanger-p95 256,3 ms. Alle vijftien sends
@@ -247,7 +249,7 @@ Een afzonderlijke diagnose op dezelfde applicatiebron mat 56 leesbevestigings-
 POSTs naast de 15 sends, vier conceptwrites en acht bootstraps. De verse
 Auth-providercontrole duurde mediaan 138,2 ms en p95 157,1 ms; het verkrijgen
 van databaseverbindingen op de verzendroute duurde opgeteld maximaal 0,223 ms,
-zonder poolwachtrij. De huidige client dedupliceerde leesbevestigingen pas na
+zonder poolwachtrij. De toenmalige client dedupliceerde leesbevestigingen pas na
 het antwoord, zodat nieuwe renders dezelfde zichtbare cursor opnieuw konden
 versturen terwijl de eerste aanvraag nog liep. De diagnose wijst daarmee op
 onnodige gelijktijdige aanvragen als gerichte verbetering. De afzonderlijke
@@ -255,7 +257,9 @@ diagnoserun met ontvanger-p95 214,2 ms vervangt de eerdere mislukking niet.
 De private meetprobe wijzigde geen applicatiebron; query-uitvoering in de
 gebundelde PostgreSQL-client kon niet afzonderlijk worden geïnstrumenteerd.
 De vijftien serveraanvragen zijn op volgorde aan de clientreeks gekoppeld;
-de browserharness bewaart geen client-UUID voor een afzonderlijke UUID-join.
+de toenmalige browserharness bewaarde geen client-UUID voor een afzonderlijke UUID-join.
+De huidige workspaceharness bewaart de echte opgeslagen `client_message_id`
+wel bij ieder van haar vijftien raw samples.
 Het metadataoverzicht staat in
 `artifacts/local-final-proof/workspace-chat-diagnostic-metadata-summary.json`.
 
@@ -337,8 +341,8 @@ een fysieke browserzoomtoets of OS-instelling.
 Deze native browsermetingen en mobiele viewportemulatie zijn geen tests op
 fysieke telefoons, een geopend iOS/Android-toetsenbord, OS-/browserzoom of echte
 60/120/144 Hz-schermen. De lokale regressies zijn geslaagd; acceptatie
-van de daadwerkelijk gedeployde stagingrelease is nog open;
-hun resultaten en release-SHA worden afzonderlijk toegevoegd.
+van de daadwerkelijk gedeployde stagingrelease staat afzonderlijk hieronder;
+de live wedstrijdcontrole slaagt, oefenen en chat moeten nog volgen.
 
 De lokale timingbrowser meet bij oefenen en wedstrijden maximaal **0 CSS px**
 verschuiving bij stoppen en bevestigen, dus **0 van de balkbreedte/-hoogte**.
@@ -421,8 +425,8 @@ geïnjecteerde vertraging en viewport/toetsenbordformaat zijn geen fysieke
 60/120/144 Hz-, iOS-toetsenbord-, touch- of camerametingen; dergelijke hardware
 is niet beschikbaar op deze VPS.
 
-De hosted controles van `ee5db493c21a3013e51f18ee254a24e1fb62edb6` zijn nog
-niet geslaagd. [Main-run 38433432900](https://github.com/dartspoint/platform/actions/runs/38433432900)
+De eerdere hosted controles van `ee5db493c21a3013e51f18ee254a24e1fb62edb6`
+mislukten. [Main-run 38433432900](https://github.com/dartspoint/platform/actions/runs/38433432900)
 haalde chat-p95 15,8 ms lokaal en 227,8 ms bij de ontvanger, maar faalde daarna
 op een wedstrijdmeter die tijdens de wachttest 5,656 CSS px bewoog. Die run
 bevatte geen originele ingress of stopfoutcode; een te oude sample is daardoor
@@ -435,8 +439,8 @@ blijft bewaard.
 faalde op chat-p95 537,5 ms bij de ontvanger; lokale p95 was 14,2 ms. Alle
 vijftien berichten hadden HTTP 200, canonieke SDK-ontvangst en aantoonbare
 focus/zichtbaarheid. Image-publicatie en deployment zijn overgeslagen: de
-actieve stagingrelease is nog `4a23cf6f4f3b1ea4861556702d9b276ee8b00031`.
-Deze twee hosted fouten worden afzonderlijk onderzocht. De lokale geslaagde
+actieve stagingrelease bleef toen `4a23cf6f4f3b1ea4861556702d9b276ee8b00031`.
+De oorspronkelijke oorzaak van de eerste meterbeweging is niet vastgesteld. De lokale geslaagde
 metingen vervangen geen hosted of gedeployde acceptatie, en geheugen- of
 CPU-tekort is zonder gecorreleerde meting niet als oorzaak vastgesteld.
 
@@ -510,3 +514,141 @@ Iedere poging blijft in de meetreeks, iedere vertraging/axis moet minstens één
 werkelijk geaccepteerde stop bevatten en alle werpgrenzen blijven hard. Een
 stagingweigering zonder betrouwbare oorspronkelijke ingress wordt niet als
 geslaagde boundarycontrole aangemerkt.
+
+### Laatste native floodcontrole en hosted stagingpipeline
+
+De main-CI van `a74fbf556b9428841bf7e381593d2719bd27e4fb`,
+[run 38439425208](https://github.com/dartspoint/platform/actions/runs/38439425208),
+faalde op een werkelijk ontbrekende overlap in de nieuwe floodfixture: het
+chatverzoek was al afgerond voordat Playwright de werpinput uitvoerde.
+Dat bewijst geen werpfout in de applicatie. Alleen de workspacefixture is
+gecorrigeerd: drie echte berichten van de werpende actor vullen de bestaande
+3/2-secondenlimiet. De vierde echte cookie-geauthenticeerde browserfetch start
+synchroon in de capturefase van dezelfde pointer-/Enter-input, vóór de gewone
+React-werphandler. Er is geen routehold, vertraagde response of aangepaste klok.
+De oorspronkelijke capturetijd blijft het begin van de handler-/framemeting,
+zodat het werk voor fetch ook meetelt. De echte `trace.inputAt` en start/einde
+van fetch gebruiken dezelfde browserklok en bewijzen de overlap.
+
+De éénmalige volledige native regressie van die fix slaagt: **21/21 checks**,
+alle vijftien oorspronkelijke chatsamples en beide eerste floodstops. De
+pointerhandler duurt **1,0 ms**, de Enter-handler **1,9 ms**; de eerste frozen
+frames verschijnen na **21,3/23,2 ms**. Freeze en ACK verschuiven **0 CSS px**,
+met dezelfde indicator- en bordnodes. De onveranderlijke originele ingress
+bevestigt sampleleeftijden van **13/19 ms** binnen **54 ms**. Beide echte
+chatverzoeken geven `429 chat_burst_limited` en lopen tijdens hun werphandler
+nog; hun duur is 168,1/172,2 ms. Er is geen herstelpoging of extra testrun
+gebruikt. Normale opgave en SDK-cleanup zijn geslaagd. Alle ruwe samples,
+werkelijke UUID's en vroege floodtijdstippen staan in
+`artifacts/local-final-proof/workspace-chat-native-input-flood-20261013T175726Z/`.
+
+De afzonderlijke
+[stagingpipeline 38439425675](https://github.com/dartspoint/platform/actions/runs/38439425675)
+van `a74fbf556b9428841bf7e381593d2719bd27e4fb` is volledig geslaagd, inclusief
+image-publicatie en gecontroleerde deployment. De hosted wedstrijdcontrole
+tegen haar geïsoleerde infrastructuur bewaart **11 pogingen: acht exact
+geaccepteerd en drie expliciet afgewezen**. Hun originele sampleleeftijden
+zijn 71/81/88 ms bij een venster van 54 ms. Iedere afwijzing bewaart de volledige
+state en versie en toont de fout met gecontroleerd herstel; iedere axis en
+vertraging bevat een echte acceptatie. Eerste-frame p95 en maximum zijn
+**45,0 ms**. Deze hosted controle is afzonderlijk van een browsermeting tegen
+de actieve VPS. De opvolgende commit op main en staging bevat browserfixtures
+en deze documentatie; de applicatiebroncode is ongewijzigd ten opzichte van `a74fbf5`.
+De metingen hieronder bewijzen de pre-finale release `a74fbf5`; een opvolgende
+release-SHA krijgt eigen verse release- en browseracceptatie in de private
+artifacts. Deze metingen worden niet als bewijs voor een nog ongecontroleerde
+opvolgende release aangemerkt.
+
+### Werkelijke staging-VPS: pre-finale volledige acceptatie
+
+De live acceptatie gebruikt exact
+`a74fbf556b9428841bf7e381593d2719bd27e4fb` op web én realtime, via geverifieerd
+TLS en de tijdelijke Tailscale CONNECT-proxy. De oorspronkelijke drie
+harnessbronhashes voor smoke en wedstrijd matchen deze release. De eerste smoke-aanvraag faalde met 401 vóór bootstrap en vóór
+een werptest; de oorspronkelijke oorzaak is niet vastgesteld en deze failure
+blijft behouden. De afzonderlijke gerichte diagnose controleerde beide echte
+spelers met provider, cookie en bearer en gaf succesvolle antwoorden, zonder
+databasewijziging of sessierefresh in die diagnose. Daarna slaagt de normale
+smokecontrole met beide eigen spelers. Bewijs:
+`artifacts/staging-a74-final/source-manifest.json`, `sequence-preflight.json`,
+`smoke-failure.json`, `auth-diagnostic-result.json` en
+`sequence-smoke-acceptance.json`, met hun private logs.
+
+De éénmalige volledige live wedstrijdcontrole slaagt met **8/8 exact
+geaccepteerde stops**, nul afwijzingen en nul uitgesloten pogingen. Alle zes
+axis-/vertragingcohorten van 100/300/1000 ms bevatten een echte acceptatie.
+Freeze en ACK verschuiven **0 CSS px**; handlermaximum is **0,6 ms** en de
+eerste frozen frame p95/maximum **29,4 ms**. Alle vier grounded impacts hebben
+maximaal **0,00000544 CSS px** afwijking en behouden hun SVG-transform in drie
+volgende frames na werkelijk gedupliceerde flightsnapshots. Verlies/herstel
+van de originele command-UUID geeft geen extra pijl; de fixture eindigt via
+normale opgave. Bewijs: `sequence-game-result.json`,
+`sequence-game-progress.json`, `sequence-game-summary.json` en
+`sequence-game-acceptance.json` onder `artifacts/staging-a74-final/`, plus
+`sequence-game-private.log`. De acceptance koppelt de geslaagde childtest aan
+de gecontroleerde actieve SHA.
+
+De eerste live oefencontrole stopte bij haar eerste horizontale poging met
+`409 invalid_render_sample`; er zijn nul afgeronde oefensamples en geen
+geslaagd acceptancebestand. De oorspronkelijke serveringress en afwijsoorzaak
+zijn nog niet vastgesteld. Deze failure blijft behouden in
+`sequence-practice-rejected.json`, `sequence-practice-failure-summary.json` en
+de private modelog. De lokale Playwright-stack toont wel een concreet verschil
+in de fixturetransporten: `route.fetch` verstuurt de stop opnieuw via Node HTTPS
+met een nieuwe proxyverbinding, CONNECT en TLS, terwijl de kalibratieping via
+`route.continue` de Chromiumverbinding gebruikt. Dat verschil bewijst niet de
+oorzaak van deze 409. Een afzonderlijk geautoriseerde fixturecorrectie gebruikt
+de echte browserfetch voor uitgaande vertraging en behoudt de originele UUID,
+response en alle werpgrenzen. De actieve applicatie blijft dezelfde release.
+
+De éénmalige volledige live controle met die gecorrigeerde oefenfixture slaagt:
+**16/16 stops met HTTP 200**, acht op 1366×768 en acht op 390×844, zonder
+uitgesloten pogingen. Freeze, pending, ACK en genormaliseerde fractie verschuiven
+**0 CSS px**. Handler-p95 en maximum zijn **0,5 ms**; eerste-frame-p95 en maximum
+zijn **15,1 ms**. Acht echte grounded pijlen wijken maximaal **0,000016005 CSS px**
+af. De cold-readyguard vóór drie challenges slaagt. Een afzonderlijke
+geïnjecteerde hoofdthreadpauze van 160 ms geeft `409 invalid_render_sample`,
+volledig ongewijzigde authoritative state, een zichtbare fout en gecontroleerd
+herstel naar een bewegende meter. Deze controle staat apart van de zestien
+gewone samples. Alle gewone samples gebruiken de echte browserresponse en
+blijven pending tot de werkelijk uitgestelde levering aan de app.
+
+Bewijs: `native-practice-{result,progress,summary,acceptance}.json` en de private
+modelog onder `artifacts/staging-a74-final/`. Het afzonderlijke
+`native-practice-source-manifest.json` markeert de oefenfixture terecht als
+gewijzigd ten opzichte van de release (`practiceHarnessMatchesRelease: false`),
+met SHA-256 `b750e103ef6871e005b7b389bb4a9fd398a1faccea40a534484bffd884521791`.
+De wrapper en wedstrijdfixture matchen nog de oorspronkelijke release;
+applicatie-, package-, migratie-, ops- en scriptbronnen zijn ongewijzigd.
+`native-practice-preflight.json` bevestigt voor web en realtime HTTP 200 en
+exacte release `a74fbf5`. De oorspronkelijke mislukte oefenpoging wordt door
+dit nieuwe transportbewijs niet retrospectief verklaard of verwijderd.
+
+De volledige live chatcontrole slaagt met **15/15 oorspronkelijke berichten**,
+allemaal echte HTTP 200 en een correcte canonieke persoonlijke SDK-push.
+Eigen optimistic DOM-p95 is **8,4 ms**, binnen de harde grens van 50 ms.
+Ontvanger-DOM-p95 is **693,8 ms**: het gerapporteerde 250-ms-streefdoel is
+hier **niet gehaald**. Dit blijft volgens de expliciete gebruikersprioriteit
+een informatieve meting; er is geen hogere limiet ingesteld, optimalisatieronde,
+herhaling of sampleverwijdering gebruikt. Beide headless browsercontexts
+melden feitelijk focus en zichtbaarheid, zodat ook deze meting geen
+achtergrondontvanger bewijst. Tracing en screenshots staan tijdens de meting
+uit. Alle ruwe samples en hun werkelijke canonieke UUID's staan in
+`final-chat-latency.json`, met `final-chat-summary.json`,
+`final-chat-acceptance.json` en de private modelog onder dezelfde bewijsmap.
+
+De afsluitende readinesscontrole geeft voor web én realtime HTTP 200 en exact
+dezelfde actieve release `a74fbf5`; de gebruikte manifesthashes zijn nog
+gelijk en de applicatiebroncode is nog ongewijzigd ten opzichte van die release.
+`artifacts/staging-a74-final/final-stage-proof.json` koppelt de geslaagde
+smoke-, wedstrijd-, oefen- en chatacceptatie aan hun afzonderlijke meetwaarden
+en afsluitende controle. De eerste smoke-401 en oefen-409 blijven bewaard met
+onbekende oorspronkelijke oorzaak. Deze volledige reeks bewijst de pre-finale
+release a74 en geen fysieke apparaten.
+
+De opvolgende release krijgt opnieuw eigen geverifieerde release- en
+browseracceptatie. Haar gereserveerde private eindlocatie is
+`artifacts/staging-final-proof/release-result.json`; die toekomstige release
+wordt hier niet als geslaagd aangemerkt. Ongewijzigde applicatiebroncode bewijst
+geen byte-identieke Dockerimages: een nieuwe release-SHA en build-ID kunnen
+de gebouwde uitvoer wijzigen.

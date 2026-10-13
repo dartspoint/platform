@@ -31,30 +31,34 @@ async function readyFloodStop(page:Page,axis:'horizontal'|'vertical'){
  await page.waitForFunction(({selector,property,before})=>(document.querySelector(selector) as HTMLElement)?.style.getPropertyValue(property)!==before,{selector,property,before},{polling:'raf'});
  return button;
 }
-async function stopDuringFlood(page:Page,sender:Page,channelId:string,axis:'horizontal'|'vertical',matchId:string,actorId:string){
+async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'vertical',matchId:string,actorId:string){
  await page.bringToFront();const button=await readyFloodStop(page,axis);if(axis==='vertical')await button.focus();
  assert.equal(await page.evaluate(()=>document.hasFocus()&&document.visibilityState==='visible'),true,'Flood timing has real foreground focus');
  const baseline=await get(page,'match/'+matchId);assert.equal(baseline.lifecycle,'playing');assert.equal(baseline.state.phase,axis);assert.equal(baseline.seat,baseline.state.turn);
- await page.evaluate(()=>{performance.clearMarks('dp-local-stop');(window as any).__floodFirst=undefined;(window as any).__floodInput=undefined;});
- const attempt:any={axis,input:axis==='horizontal'?'pointer':'keyboard',httpStatus:null,httpCode:null};report.floodTiming.push(attempt);
- const floodStartedAt=epochNow(),flood=sender.request.post(origin+'/api/platform/chat/send',{data:{channelId,clientMessageId:randomUUID(),body:'Flood during '+axis+' '+runId}}).then(async response=>{attempt.floodCompletedAt=epochNow();attempt.httpStatus=response.status();attempt.httpCode=(await response.json()).code;},error=>{attempt.floodError=error instanceof Error?error.message:String(error);return {error};});
- attempt.floodStartedAt=floodStartedAt;
+ const attemptIndex=report.floodTiming.length,clientMessageId=randomUUID(),attempt:any={axis,input:axis==='horizontal'?'pointer':'keyboard',clientMessageId,httpStatus:null,httpCode:null,seeds:[]};report.floodTiming.push(attempt);
+ // Read the authoritative baseline before filling the real 3/2s budget. The
+ // fourth request starts inside this same actor's actual native input capture.
+ await pause(2100);await Promise.all([0,1,2].map(async i=>{const clientMessageId=randomUUID(),body='Game chat '+runId+' '+(attemptIndex?attemptIndex+' ':'')+i;await post(page,'chat/send',{channelId,clientMessageId,body});attempt.seeds.push({clientMessageId,completedAt:epochNow()});}));
+ await readyFloodStop(page,axis);
+ await page.evaluate(input=>{const w=window as any;performance.clearMarks('dp-local-stop');w.__floodFirst=undefined;w.__floodInput=undefined;w.__floodRequest=undefined;w.__floodRequestPromise=undefined;w.__floodPrepared={clientMessageId:input.clientMessageId,body:JSON.stringify(input)};},{channelId,clientMessageId,body:'Flood during '+axis+' '+runId});
  // Native pointer/keyboard dispatch captures the drawn geometry before the
  // handler and one real RAF opportunity. No screenshot or tracing runs here.
  if(axis==='horizontal')await button.click();else await button.press('Enter');
  await page.waitForFunction(()=>!!(window as any).__floodFirst);
- const local=await page.evaluate(()=>({input:(window as any).__floodInput,first:(window as any).__floodFirst,mark:performance.getEntriesByName('dp-local-stop').at(-1)?.toJSON(),trace:(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark)?.detail}));
- Object.assign(attempt,{inputEpoch:local.input?.epoch,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
+ const local=await page.evaluate(()=>({timeOrigin:performance.timeOrigin,input:(window as any).__floodInput,first:(window as any).__floodFirst,flood:(window as any).__floodRequest,mark:performance.getEntriesByName('dp-local-stop').at(-1)?.toJSON(),trace:(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark)?.detail}));
+ Object.assign(attempt,{captureEpoch:local.input?.epoch,inputEpoch:local.trace?local.timeOrigin+local.trace.inputAt:undefined,floodStartedAt:local.flood?.floodStartedAt,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
  assert.ok(local.trace,'A genuine flood stop captures its rendered v3 sample');
  Object.assign(attempt,{handlerMs:local.mark!.startTime-local.input.at,firstFrameMs:local.first.at-local.input.at,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
+ console.log(JSON.stringify({event:'workspace_flood_stop_attempt',axis,clientMessageId,commandId:local.trace.commandId,captureEpoch:attempt.captureEpoch,inputEpoch:attempt.inputEpoch,floodStartedAt:attempt.floodStartedAt,handlerMs:attempt.handlerMs,firstFrameMs:attempt.firstFrameMs}));
  await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
  const receipt=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
  attempt.receipt=receipt;
  const acknowledged=await page.evaluate(axis=>{const w=window as any,element=document.querySelector(axis==='horizontal'?'.dp-meter-row .dp-meter-indicator':'.dp-meter-track-vertical .dp-meter-indicator')!,r=element.getBoundingClientRect();return {indicator:axis==='horizontal'?r.left+r.width/2:r.top+r.height/2,sameNode:element===w.__floodMeters[axis],sameBoard:document.querySelector('.dp-board-stage')===w.__boardBefore};},axis);
  Object.assign(attempt,{acknowledged,ackJumpPx:Math.abs(acknowledged.indicator-local.input.geometry.indicator),ackJumpFraction:Math.abs(acknowledged.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
- const floodFailure=await flood;if(floodFailure)throw floodFailure.error;
+ const flood=await page.evaluate(async()=>{const w=window as any;await w.__floodRequestPromise;return w.__floodRequest;});assert.ok(flood,'The native input started its genuine browser request');Object.assign(attempt,flood);assert.equal(attempt.floodError,undefined,'The real concurrent browser request completes');
+ console.log(JSON.stringify({event:'workspace_flood_http_complete',axis,clientMessageId,commandId:local.trace.commandId,floodStartedAt:attempt.floodStartedAt,inputEpoch:attempt.inputEpoch,floodCompletedAt:attempt.floodCompletedAt,httpStatus:attempt.httpStatus,httpCode:attempt.httpCode}));
  assert.equal(attempt.httpStatus,429,'Concurrent new-message flood is actually refused');assert.equal(attempt.httpCode,'chat_burst_limited');
- assert.ok(local.input.epoch>=floodStartedAt&&local.input.epoch<=attempt.floodCompletedAt,'Actual stop input overlaps the still-pending flood request');
+ assert.ok(attempt.inputEpoch>=attempt.floodStartedAt&&attempt.inputEpoch<=attempt.floodCompletedAt,'Actual stop handler overlaps the still-pending real browser flood request');
  // Classify against the immutable original database ingress, after the actual
  // frame/ACK measurement. Local/CI only; no staging database introspection.
  assert.equal(process.env.APP_ENV,'development');assert.equal(new URL(origin).hostname,'127.0.0.1');
@@ -169,15 +173,25 @@ try{
  const own=await get(a.page,'bootstrap');assert.equal(own.players.find((p:any)=>p.id===a.id).playing,true);report.checks.authoritativeBusy=true;
  // Chat updates and a refused flood cannot remount the running game surface.
  report.floodTiming=[];
- await a.page.evaluate(()=>{const w=window as any;w.__boardBefore=document.querySelector('.dp-board-stage');w.__floodMeters={horizontal:document.querySelector('.dp-meter-row .dp-meter-indicator'),vertical:document.querySelector('.dp-meter-track-vertical .dp-meter-indicator')};const capture=(event:Event)=>{const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at:performance.now(),epoch:performance.timeOrigin+performance.now(),geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};requestAnimationFrame(()=>{const r=element.getBoundingClientRect();w.__floodFirst={at:performance.now(),indicator:horizontal?r.left+r.width/2:r.top+r.height/2};});};w.__floodCapture=capture;window.addEventListener('pointerdown',capture,true);window.addEventListener('keydown',capture,true);});
- await expect(a.page.getByRole('button',{name:'Stop horizontale indicator',exact:true})).toBeEnabled();await pause(2100);await Promise.all([0,1,2].map(i=>post(b.page,'chat/send',{channelId:roomChannel,clientMessageId:randomUUID(),body:'Game chat '+runId+' '+i})));
+ await a.page.evaluate(()=>{
+  const w=window as any;w.__boardBefore=document.querySelector('.dp-board-stage');w.__floodMeters={horizontal:document.querySelector('.dp-meter-row .dp-meter-indicator'),vertical:document.querySelector('.dp-meter-track-vertical .dp-meter-indicator')};
+  const capture=(event:Event)=>{
+   const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;
+   const at=performance.now(),prepared=w.__floodPrepared;if(!prepared)return;w.__floodPrepared=undefined;
+   // Start real fetch in this input's capture phase, before the actual React
+   // stop handler. No route hold, delayed response or cross-process clock.
+   const request={clientMessageId:prepared.clientMessageId,floodStartedAt:performance.timeOrigin+performance.now(),httpStatus:null,httpCode:null} as any;w.__floodRequest=request;
+   w.__floodRequestPromise=fetch('/api/platform/chat/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:prepared.body}).then(async response=>{const data=await response.json();Object.assign(request,{floodCompletedAt:performance.timeOrigin+performance.now(),httpStatus:response.status,httpCode:data.code});},error=>{Object.assign(request,{floodCompletedAt:performance.timeOrigin+performance.now(),floodError:error instanceof Error?error.name:'request-error'});});
+   const horizontal=button.getAttribute('aria-label')!.includes('horizontale'),element=w.__floodMeters[horizontal?'horizontal':'vertical'],indicator=element.getBoundingClientRect(),track=element.parentElement.getBoundingClientRect();w.__floodInput={at,epoch:performance.timeOrigin+at,geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};
+   requestAnimationFrame(()=>{const r=element.getBoundingClientRect();w.__floodFirst={at:performance.now(),indicator:horizontal?r.left+r.width/2:r.top+r.height/2};});
+  };w.__floodCapture=capture;window.addEventListener('pointerdown',capture,true);window.addEventListener('keydown',capture,true);
+ });
  const floodReceipts=[];
  for(const axis of ['horizontal','vertical'] as const){let receipt:any;
   // One explicitly rejected, unchanged stop may be followed by one new
   // controlled action. Every attempt remains in the report; no luck reruns.
   for(let action=0;action<2;action++){
-   if(axis==='vertical'||action>0){await pause(2100);await Promise.all([0,1,2].map(i=>post(b.page,'chat/send',{channelId:roomChannel,clientMessageId:randomUUID(),body:'Game chat '+axis+' actie '+action+' '+i+' '+runId})));}
-   receipt=await stopDuringFlood(a.page,b.page,roomChannel,axis,match,a.id);if(receipt)break;
+   receipt=await stopDuringFlood(a.page,roomChannel,axis,match,a.id);if(receipt)break;
   }
   assert.ok(receipt,'Each flood axis requires an actual accepted exact-sample stop');floodReceipts.push(receipt);
  }
