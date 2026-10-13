@@ -55,6 +55,6 @@ Environment `staging` krijgt variabele `LANDING_ORIGIN=https://binnenkort.dartsp
 
 DNS: A-record `binnenkort` → `178.105.113.148`. Verwijder een conflicterend AAAA-record totdat IPv6-routing is geverifieerd. Na de DNS-wijziging vraagt bestaande Caddy automatisch het certificaat aan. Staging-app en realtime houden hun Tailscale-bronrestrictie.
 
-Private export binnen de worker: `node scripts/launch-export.mjs`; optioneel `--issue-unsubscribe-links` maakt/roteert persoonlijke afmeldtokens voor een handmatig voorbereide export. Sla de uitvoer uitsluitend in een privébestand (umask 077) op. Er is geen publieke export, automatische mailing of verzonnen bevestigingsmail.
+Private export binnen de worker: `node scripts/launch-export.mjs`; optioneel `--issue-unsubscribe-links` maakt persoonlijke afmeldtokens; eerder uitgegeven links blijven geldig en alleen hashes staan in de database voor een handmatig voorbereide export. Sla de uitvoer uitsluitend in een privébestand (umask 077) op. Er is geen publieke export, automatische mailing of verzonnen bevestigingsmail.
 
 De staging-deployment voert na migratie een gereserveerde `validation.invalid`-probe uit: normalisatieduplicaat, webrestart, dezelfde rij teruglezen en een nieuwe echte Restic-backup/restore inclusief private aanmeldtabel. De probe wordt daarna verwijderd; bewijs staat privé in `launch-evidence.json` en `backup-evidence.json`. Productiedeploys voeren deze probe niet uit.

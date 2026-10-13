@@ -1,7 +1,7 @@
 import {createHash,randomBytes} from 'node:crypto';
 import {isIP} from 'node:net';
 import {z} from 'zod';
-import {db,rateLimit} from './db';
+import {db,transaction,rateLimit} from './db';
 import {DomainError,requireThat,isValidationError} from '../../contracts/src/index';
 
 export const LAUNCH_CONSENT_VERSION='2026-10-13-v1';
@@ -15,9 +15,15 @@ export async function launchSignup(input:unknown,source:string){
 }
 export async function launchUnsubscribe(input:unknown){
  const {token}=launchUnsubscribeSchema.parse(input);
- await db().query('delete from private.launch_subscriptions where unsubscribe_hash=$1',[unsubscribeHash(token)]);
+ await db().query('delete from private.launch_subscriptions where unsubscribe_hash=$1 or id in(select subscription_id from private.launch_unsubscribe_tokens where token_hash=$1)',[unsubscribeHash(token)]);
  return {ok:true};
 }
+/** Every privately issued link remains usable until deletion; never persist plaintext. */
+export async function exportLaunchSubscriptions(withLinks=false){return transaction(async c=>{
+ const result=await c.query('select id,email,subscribed_at,source,consent_version from private.launch_subscriptions order by subscribed_at'+(withLinks?' for update':''));
+ for(const row of result.rows)if(withLinks){const token=randomBytes(32).toString('base64url');await c.query('insert into private.launch_unsubscribe_tokens(subscription_id,token_hash) select id,unsubscribe_hash from private.launch_subscriptions where id=$1 on conflict do nothing',[row.id]);await c.query('update private.launch_subscriptions set unsubscribe_hash=$2 where id=$1',[row.id,unsubscribeHash(token)]);row.unsubscribeUrl=process.env.LANDING_ORIGIN+'/?afmelden='+token;}
+ return result.rows;
+});}
 async function boundedJson(request:Request){
  requireThat(request.headers.get('content-type')?.split(';')[0].trim()==='application/json','json_required',415);
  const length=request.headers.get('content-length');requireThat(!length||/^\d+$/.test(length)&&Number(length)<=4096,'request_too_large',413);

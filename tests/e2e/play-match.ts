@@ -35,8 +35,8 @@ export async function fullMatch(a:any,b:any,id:string){
   const scheduled=Math.round(times[0]-arrivalLag);
   await pause(scheduled-Date.now());const result=await send(room,state,'dart.stop_'+axis);
   // The real receipt gives the server's input timestamp. Compensate the bot's
-  // timer/transport/database delay rather than assuming a zero-latency command.
-  arrivalSamples.push(Math.max(0,result.next.state.phaseStartedAt-scheduled));
+  // transport delay at the admitted ingress moment; database processing is not input lag.
+  arrivalSamples.push(Math.max(0,(result.next.timing?.admittedAt??result.next.state.phaseStartedAt)-scheduled));
   if(arrivalSamples.length>7)arrivalSamples.shift();
   const ordered=[...arrivalSamples].sort((a,b)=>a-b);arrivalLag=ordered[Math.floor(ordered.length/2)];
   return result;
