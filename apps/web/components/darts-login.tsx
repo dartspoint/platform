@@ -127,14 +127,14 @@ export function DartsAuthFlow({ intent = "login" }: { intent?: "login" | "regist
               {error && <p className="dp-login-error" id="dp-auth-error" role="alert">{error}</p>}
               <button type="submit" className="dp-login-primary">Bevestig mijn spelersnaam <ArrowRight size={18}/></button>
             </form>
-            <p className="dp-auth-name-note">Je begint als normale speler met <strong>1500 Elo</strong>. Je spelersnaam blijft wit bij de normale rol. Je rating blijft wit totdat je geplaatst bent.</p>
+            <p className="dp-auth-name-note">Je begint als normale speler met <strong>1500 DP</strong>. Je spelersnaam blijft wit bij de normale rol. Je rating blijft wit totdat je geplaatst bent.</p>
             <button type="button" className="dp-register-edit" onClick={changeEmail}><ArrowLeft size={14}/> Ander e-mailadres gebruiken</button>
           </>}
           {step === "ready" && profile && <>
             <span className="dp-auth-verified"><CheckCircle2 size={15}/> {returning ? "Je spelersprofiel is herkend" : "Je spelersprofiel staat klaar"}</span>
             <h1 ref={readyHeading} tabIndex={-1} id="dp-auth-title">{returning ? <>Welkom terug<span>.</span></> : <>Dit is jouw<br/>startpunt<span>.</span></>}</h1>
             <p className="dp-login-intro">{returning ? "Je spelersnaam staat al vast. Na je code kun je direct verder." : "De volgende keer wordt je spelersnaam na de code automatisch herkend."}</p>
-            <div className="dp-register-profile"><span className="dp-register-avatar" aria-hidden="true">{profile.username.slice(0, 2).toUpperCase()}</span><div><strong>{profile.username}</strong><span>{profile.role === "player" ? "Speler" : profile.role.toUpperCase()}</span></div><span className="dp-register-rating">{Math.round(profile.rating)}<small>ELO</small></span></div>
+            <div className="dp-register-profile"><span className="dp-register-avatar" aria-hidden="true">{profile.username.slice(0, 2).toUpperCase()}</span><div><strong>{profile.username}</strong><span>{profile.role === "player" ? "Speler" : profile.role.toUpperCase()}</span></div><span className="dp-register-rating">{Math.round(profile.rating)}<small>DP</small></span></div>
             <p className="dp-register-rating-note">Je rating groeit mee met je gerankte wedstrijden. Je profiel heeft geen beheerrechten.</p>
             <button type="button" className="dp-login-primary" onClick={enterDemo} disabled={busy}>{busy ? "De lobby openen…" : "Open de lobby"}<ArrowRight size={18}/></button>
             <p className="dp-auth-sample-note">Je bent klaar voor je volgende dartavond. Kies een kamer en schuif aan.</p>

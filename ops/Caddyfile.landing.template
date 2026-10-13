@@ -1,0 +1,24 @@
+# Separate public hostname only after explicit LANDING_HOST confirmation.
+# Render the placeholder; do not duplicate or replace a production host block.
+__LANDING_HOST__ {
+    header X-Content-Type-Options nosniff
+    header Referrer-Policy no-referrer
+    @page {
+        method GET HEAD
+        path /
+    }
+    handle @page {
+        rewrite * /landing/index.html
+        reverse_proxy 127.0.0.1:3001
+    }
+    @form {
+        method POST
+        path /api/launch-signups /api/launch-unsubscribe
+    }
+    handle @form {
+        reverse_proxy 127.0.0.1:3001
+    }
+    handle {
+        respond 404
+    }
+}

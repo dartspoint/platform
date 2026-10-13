@@ -1,0 +1,26 @@
+DartsPoint — Codex-opdracht en vaste ontwerpbron
+13 oktober 2026
+
+START
+Open START-HIER-CODEX.txt en geef Codex de volledige opdracht in de echte platformrepository. Alle wijzigingen, werkafspraken en acceptatiecriteria staan daarin. Vraag Codex dit uit te voeren, niet alleen samen te vatten.
+
+INHOUD
+START-HIER-CODEX.txt
+  Volledige opdracht: landing op staging, opslag van e-mailadressen in de bestaande stagingdatabase, mobiele pagina's en kamerchat, oefenen binnen kamer, ongelezen berichten, DP-benaming, profielen, kamerbeheer, actielogboek en inputlatentie.
+
+landing/index.html
+  Bijgewerkte zelfstandige landingspagina met originele assets en juiste Facebook-, Instagram- en TikTok-links. X heeft nog geen bestemming. Visueel direct te openen. Bij eigen hosting moeten de aanmeld- EN afmeldendpoint op de bestaande stagingbackend worden aangesloten, zoals beschreven in de opdracht.
+
+reference/sites-ui/
+  Bevroren ontwerpbron uit de bestaande Sites-platformcheckout: app, components, lib en public. UI-referentie, GEEN vervangende werkende productiebackend en geen compleet zelfstandig installatieproject. De bestaande echte Auth-, database-, realtime- en scoringscode blijft behouden. De nieuwe gedragsregels in de opdracht gaan vóór de oude 60%-chatpanelen in deze referentie.
+
+BRONKAART.txt
+  Vindplaatsen van waargenomen problemen in de aangeleverde platformsnapshot en relevante referentiebestanden. De actuele VPS-code kan inmiddels gewijzigd zijn.
+
+MANIFEST.json
+  Broncommits, scope en SHA-256-controlesommen van de bestanden in dit pakket. Gebruik dit om exact dezelfde referentie te behouden tijdens vervolgsessies.
+
+STATUS
+De sociale links zijn in het Sites-voorbeeld bijgewerkt. De verdere platform- en VPS-wijzigingen zijn een opdracht aan Codex; ze zijn niet al uitgevoerd door het maken van dit pakket.
+
+De gepubliceerde Sites-landingspagina is een apart voorbeeld met eigen opslag. Voor echte staging is expliciet de bestaande PostgreSQL-database vereist. DNS-configuratie is nog niet gewijzigd. De publieke landingshost moet vóór activering bekend zijn; een bestaande productiehost mag niet op basis van een aanname worden omgeleid.

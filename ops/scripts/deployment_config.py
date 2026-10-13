@@ -15,7 +15,7 @@ SECRETS = ('SUPABASE_SECRET_KEY', 'DATABASE_URL',
            'RESEND_API_KEY', 'INTERNAL_DEPLOY_TOKEN', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY')
 PRIVATE_FIELDS = SECRETS + ('MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL')
 VARIABLES = PUBLIC + ('MAIL_FROM', 'MAIL_REPLY_TO', 'RESTIC_REPOSITORY', 'AWS_DEFAULT_REGION')
-OPTIONAL = ('DATABASE_CA_CERT_BASE64',)
+OPTIONAL = ('DATABASE_CA_CERT_BASE64', 'LANDING_ORIGIN')
 
 def environment(value):
     if value not in ('staging', 'production'): raise ValueError('Invalid environment')
@@ -103,6 +103,13 @@ def validate_values(env, values):
     if ca:
         try: ssl.PEM_cert_to_DER_cert(base64.b64decode(scalar(ca), validate=True).decode('ascii'))
         except Exception: raise ValueError('Invalid database CA certificate')
+    landing = values['LANDING_ORIGIN']
+    if landing:
+        try:
+            p = urlsplit(scalar(landing))
+            valid = env == 'staging' and p.scheme == 'https' and re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.dartspoint\.nl', p.hostname or '') and p.hostname not in ('staging.dartspoint.nl','realtime.staging.dartspoint.nl') and p.port is None and p.username is None and p.password is None and not p.path and not p.query and not p.fragment
+        except Exception: valid = False
+        if not valid: raise ValueError('LANDING_ORIGIN must be a separate explicit staging landing HTTPS origin')
     return values
 
 def validate_manifest(m, env, pins):

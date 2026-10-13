@@ -1,0 +1,14 @@
+.dp-role-owner{--role-color:#7cb8ff}
+.dp-role-admin{--role-color:#ffad6b}
+.dp-role-vip{--role-color:#e9c66f}
+.dp-role-player{--role-color:#edf4f0}
+.dp-player-name{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;vertical-align:middle;color:var(--role-color,#edf4f0)!important;font:inherit;line-height:inherit}
+.dp-player-name-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-player-name.dp-match-score-name{display:inline-flex}
+.dp-player-name .dp-vip-crown{width:13px;height:13px;flex:0 0 13px;color:inherit;fill:color-mix(in srgb,currentColor 15%,transparent)}
+.dp-avatar[class*="dp-role-"]{color:var(--role-color,#edf4f0)}
+.dp-rating-value{font-variant-numeric:tabular-nums;font-weight:600}
+.rating-white{color:#edf4f0!important}
+.rating-green{color:#76d9a4!important}
+.rating-amber{color:#e6be69!important}
+.rating-red{color:#ed8580!important}

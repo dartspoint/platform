@@ -88,6 +88,23 @@ def verify_backup(root, release):
         raise RuntimeError("Backup freshness / restore evidence gate failed")
     (release / "backup-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
 
+def verify_launch_storage(root, release):
+    if meta(release)['environment'] != 'staging': return
+    created = json.loads(compose(release, 'exec', '-T', 'worker', 'node', 'scripts/verify-launch-storage.mjs', 'create'))
+    try:
+        compose(release, 'restart', '--no-deps', 'web')
+        health(release)
+        recovered = json.loads(compose(release, 'exec', '-T', 'worker', 'node', 'scripts/verify-launch-storage.mjs', 'check'))
+        if created != recovered or created.get('ok') is not True:
+            raise RuntimeError('Signup did not survive web restart')
+        verify_backup(root, release)
+        counts = json.loads((release/'backup-evidence.json').read_text())['verifiedCounts']
+        if counts.get('launchSubscriptions', 0) < 1 or counts.get('badLaunchTokens') != 0 or counts.get('launchPrivateAccessVerified') is not True:
+            raise RuntimeError('Signup backup/restore isolation failed')
+        (release/'launch-evidence.json').write_text(json.dumps({'ok': True, 'release': meta(release)['sha'], 'duplicateNormalizedEmailOnce': True, 'survivesWebRestart': True, 'offsiteRestoreVerified': True, 'anonymousAccessDenied': True})+'\n')
+    finally:
+        compose(release, 'exec', '-T', 'worker', 'node', 'scripts/verify-launch-storage.mjs', 'remove')
+
 def verify_images(release):
     manifest = meta(release)
     # Digest references plus OCI revision/environment labels bind each actual pulled image.
@@ -145,6 +162,7 @@ def execute(release, rollback=False, drain_timeout=1200, locked=False):
             replaced = True
             compose(release, "up", "-d", "--no-deps", "web", "realtime", "worker")
             health(release)
+            if not rollback: verify_launch_storage(root, release)
             activate_link(root, release)
             committed = True
             control(release, "resume")

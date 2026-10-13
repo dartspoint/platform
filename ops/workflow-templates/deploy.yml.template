@@ -30,6 +30,7 @@ jobs:
         env:
           DEPLOY_ENV: ${{ github.ref_name }}
           DATABASE_CA_CERT_BASE64: ${{ vars.DATABASE_CA_CERT_BASE64 }}
+          LANDING_ORIGIN: ${{ vars.LANDING_ORIGIN }}
           NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_REALTIME_URL: ${{ vars.NEXT_PUBLIC_REALTIME_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
@@ -119,6 +120,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_MANIFEST: ${{ runner.temp }}/dartspoint-release/release.json
           DATABASE_CA_CERT_BASE64: ${{ vars.DATABASE_CA_CERT_BASE64 }}
+          LANDING_ORIGIN: ${{ vars.LANDING_ORIGIN }}
           NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_REALTIME_URL: ${{ vars.NEXT_PUBLIC_REALTIME_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}

@@ -44,7 +44,7 @@ export function validateTournamentSettings(settings: TournamentSettings) {
   requireThat([301, 501, 701].includes(settings.startScore), "Kies 301, 501 of 701.");
   for (const count of [settings.bestOf, settings.finalBestOf]) requireThat(Number.isInteger(count) && count >= 1 && count <= 21 && count % 2 === 1, "Best of moet een oneven aantal tussen 1 en 21 zijn.");
   requireThat(["elo", "random", "manual"].includes(settings.seeding), "Ongeldige plaatsingsmethode.");
-  requireThat(Number.isFinite(settings.minRating) && Number.isFinite(settings.maxRating) && settings.minRating >= 0 && settings.maxRating <= 5000 && settings.minRating <= settings.maxRating, "Controleer de minimale en maximale Elo-rating.");
+  requireThat(Number.isFinite(settings.minRating) && Number.isFinite(settings.maxRating) && settings.minRating >= 0 && settings.maxRating <= 5000 && settings.minRating <= settings.maxRating, "Controleer de minimale en maximale DP-rating.");
   requireThat(Number.isInteger(settings.minMatches) && settings.minMatches >= 0 && settings.minMatches <= 10000, "Het minimale aantal wedstrijden is ongeldig.");
   requireThat(typeof settings.room === "string" && settings.room.trim().length > 0 && settings.room.length <= 80, "Vul een kamernaam van maximaal 80 tekens in.");
   const dates = [settings.registrationOpens, settings.registrationCloses, settings.checkInOpens, settings.checkInCloses, settings.startsAt];
@@ -57,8 +57,8 @@ export function validateTournamentSettings(settings: TournamentSettings) {
 }
 export function eligibilityReasons(tournament: Tournament, participant: TournamentParticipant) {
   const s = tournament.settings; const reasons: string[] = [];
-  if (participant.rating < s.minRating) reasons.push(`Minimaal ${s.minRating} Elo`);
-  if (participant.rating > s.maxRating) reasons.push(`Maximaal ${s.maxRating} Elo`);
+  if (participant.rating < s.minRating) reasons.push(`Minimaal ${s.minRating} DP`);
+  if (participant.rating > s.maxRating) reasons.push(`Maximaal ${s.maxRating} DP`);
   if (participant.played < s.minMatches) reasons.push(`Minimaal ${s.minMatches} gespeelde wedstrijden`);
   if (s.vipOnly && !["vip", "owner", "admin"].includes(participant.role)) reasons.push("Alleen VIP-leden en teamleden");
   if (s.requireRules && !participant.rulesAccepted) reasons.push("Spelregels nog niet geaccepteerd");

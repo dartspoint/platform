@@ -11,7 +11,7 @@ Status: **productieontwerp en bouwopdracht**, geen claim dat de Sites-demo al ec
 | `lib/darts-game-state.ts` | Pijlvlucht, scorechip, beurtstatistieken, feedback | Presentatiemodel behouden; animatiecallback mag geen officiële score bepalen |
 | `components/darts-game.tsx` | Horizontale/verticale timingbalken, grote gooiknop, bord, scoretabel, checkoutstrip | Bewegingsparameters en lockmomenten van Colyseus ontvangen |
 | `app/api/fair-play/route.ts` | Demo-validatie, volgordenummer, identieke retry, server berekent punten | **Geen productie-ranked endpoint:** het accepteert nog clientcoördinaten `x/y` en speelt tegen een bot |
-| `lib/darts-elo.ts` | Elo 1500, K=32, plaatsingsperiode, kleurbanden | Eenmaal per voltooide ranked wedstrijd in een PostgreSQL-transactie |
+| `lib/darts-elo.ts` | DP 1500, K=32, plaatsingsperiode, kleurbanden | Eenmaal per voltooide ranked wedstrijd in een PostgreSQL-transactie |
 | `lib/darts-tournament-model.ts`, `darts-tournament-planning.ts` | Bracketgrafiek, dubbele eliminatie, finale-reset, borden | Autorisatie, duurzame planning, transacties, herstel en no-shows toevoegen |
 | `lib/darts-divisions-model.ts` | Seizoenen, round-robin, divisieladder, promotie/degradatie | Duurzaam opslaan en aan echte wedstrijden koppelen |
 
@@ -21,7 +21,7 @@ De bestaande `eligibleForRating: false` van de fair-play-demo is terecht. Noem c
 
 - **Next.js** levert alle bestaande schermen, publieke pagina's, accountflow en gewone HTTP-API's.
 - **Colyseus** is de enige autoriteit voor live aanwezigheid, spelcommando's, wedstrijdstaat en realtime chatdistributie.
-- **PostgreSQL via Supabase** bewaart accounts/profielen, rollen, sociale relaties, berichten, wedstrijdlogboeken, Elo en competities.
+- **PostgreSQL via Supabase** bewaart accounts/profielen, rollen, sociale relaties, berichten, wedstrijdlogboeken, DP en competities.
 - **Redis** bevat vluchtige aanwezigheid, rate limits en interne realtimecoördinatie. PostgreSQL blijft de bron voor resultaten, rechten en herstel. Redisverlies mag geen uitslagen wissen.
 - **Supabase Auth** verzorgt e-mail-OTP en sessies. Gebruik Supabase Realtime niet als tweede spelbus naast Colyseus.
 - Eén Colyseus-proces voor V1; één wedstrijd heeft één schrijver. Meer processen pas na routing-, lease- en belastingstests. RedisPresence en RedisDriver bereiden dit voor, maar verhuizen een actieve kamer niet automatisch naar een ander proces.
@@ -88,7 +88,7 @@ Alle writes hebben `{ protocolVersion, commandId, expectedStateVersion, matchId 
 | `match.resync` | Laatst ontvangen versie/event-ID | Snapshot plus ontbrekende gecommitteerde events sturen |
 | `chat.send` | Channel-ID, message-ID, tekst | Lidmaatschap, beleid, sanitatie, rate limit, opslag en distributie |
 
-**Verboden officiële clientvelden:** score, treble/doublelabel, winnaar, nieuwe Elo, zelfgekozen `x/y`, definitieve `elapsedMs`, leg-/setscore. De client geeft uitsluitend acties door. Onbekende velden afwijzen in writepayloads; geen spread van willekeurige clientobjecten naar domeinstaat.
+**Verboden officiële clientvelden:** score, treble/doublelabel, winnaar, nieuwe DP, zelfgekozen `x/y`, definitieve `elapsedMs`, leg-/setscore. De client geeft uitsluitend acties door. Onbekende velden afwijzen in writepayloads; geen spread van willekeurige clientobjecten naar domeinstaat.
 
 ### Behouden gevoel, andere autoriteit
 
@@ -102,13 +102,15 @@ coordinate = (p - 0.5) * 2.28
 
 De server bepaalt phaseEpoch en periode. De client tekent alleen een interpolatie met `requestAnimationFrame`; er hoeft geen netwerkpakket per beeldframe te worden verstuurd. Wanneer de beurt begint gaan de indicatoren automatisch lopen zoals in de gekozen UI. Na horizontale lock start de verticale phase. De tweede klik bepaalt de worp. Volgende phase/volgende dart krijgt een nieuw phase-token zodat een vertraagd dubbelklikpakket geen nieuwe worp kan beïnvloeden.
 
-### Latentiebeleid voor V1 — expliciet, meetbaar
+### Latentiebeleid — geversioneerde servermeting (13 oktober 2026)
 
-**Voorgesteld beleid: serverontvangsttijd is beslissend, zonder client-timestampcompensatie.** Dat is eenvoudig controleerbaar en voorkomt terugdateren naar een gunstiger positie. Kloksynchronisatie gebruikt periodieke ping/echo's en een gefilterde offset/RTT-schatting uitsluitend voor de weergave. De browserklok is nooit scoreautoriteit. Toon tijdens een lopend lockverzoek een korte pendingtoestand; de uiteindelijk vastgezette indicator is de door de server bevestigde positie.
+Nieuwe wedstrijden en oefensessies gebruiken `bounded-latency-v2`. WS/HTTP-ingress legt de serverontvangsttijd vast vóór de commandowachtrij, authenticatie en databasewacht. `private.command_ingress` bewaart dit onveranderlijk met payloadhash, command-ID en timingversie. Een identieke retry of procesherstel gebruikt het oorspronkelijke moment. Oude lopende wedstrijden zonder deze versie gebruiken `receive-v1` zonder compensatie.
 
-Dit beleid kan bij hoge latentie merkbaar minder prettig zijn. Voor ranked admission is daarom een voorstel: gedurende vijf seconden meten, maximaal 180 ms mediane RTT en 60 ms p95-afwijking; boven de grens waarschuwen en geen nieuwe ranked partij starten. Dit zijn **te ijken startwaarden**, geen bewezen infrastructuurcapaciteit. Onderbreek een gestarte partij niet automatisch op basis van één trage ping. Log RTT, jitter en serverontvangsttijd zonder private tokens. Test 20/80/180/350 ms plus packet loss. Indien compensatie later wordt toegevoegd: alleen begrensde serverafgeleide compensatie, geversioneerd per match en opnieuw getest; nooit vertrouwen op door de client aangeleverde klikmomenten.
+Alleen serveruitgegeven, eenmalige challenges bepalen RTT. Na minimaal drie geldige samples (0–1000 ms) geldt de helft van het onderste kwartiel van de laatste twaalf samples, maximaal 90 ms. De toegelaten stop is `max(phaseStart, lastAcceptedAt, receivedAt - compensation)`; ontvangst vóór de phase/laatste stop of in de toekomst wordt afgewezen. De browser levert geen tijdstip, score of coördinaat aan. Een vertraagd echo kan binnen deze expliciete grens invloed hebben; dit is begrensde compensatie en geen bewijs van de werkelijke fysieke klikpositie.
 
-Ook een servergestuurd timingspel in de browser kan door een bot worden bediend. Claims als “cheatproof” zijn onjuist. Rate limits, herkenbare automatiseringspatronen, herhaalde tegenstanders, onmogelijke inputcadans en moderatoronderzoek zijn aanvullende middelen; legitieme perfecte worpen alleen zijn geen bewijs van fraude.
+De browser bevriest de actieve meter synchroon op primary `pointerdown` of een toegestane toets, vóór React, transport, audio of haptics. Een phase-token voorkomt dubbele input, compatibility-clicks en repeats. Een monotone klok met gefilterde serveroffset deelt dezelfde driehoekfunctie met de server (2200/2500 ms, ±1,14). Beide assen blijven vast tijdens vlucht; de server schrijft de score pas bij impact. Een eventuele correctie blijft zichtbaar en wordt gemeten.
+
+Snapshots lopen buiten de commandowachtrij, met één publicatie tegelijk en één batch met actuele toegang/session-/sanctiecontroles. De commandowachtrij heeft maximaal zestien ingangen per room. De bestaande schrijverlease, fence, rowlocks en idempotente resultaattransacties blijven verplicht. Meet handler, frame, ingress, queue, pool/lock/database en ontvangst/render/correctie afzonderlijk; emulatie is geen claim over fysieke telefoons of 120 Hz.
 
 ## 6. Vlucht, impact, scorechip en één waarheid
 
@@ -121,7 +123,7 @@ Ook een servergestuurd timingspel in de browser kan door een bot worden bediend.
 
 De vluchtduur is een geversioneerde presentatieparameter, afgestemd op de bestaande animatie. Een verminderde-beweginginstelling mag de animatie inkorten/vervangen, maar verandert de officiële impacttijd niet. `onAnimationComplete` bevestigt uitsluitend presentatie, nooit score, beurt of winnaar. Stop een tab, sluit een telefoon of laat de clientcallback ontbreken: serveruitslag blijft correct. Bij procescrash tussen commit en impact moet herstel dezelfde pending dart exact eenmaal afwerken.
 
-## 7. Spelregels en Elo
+## 7. Spelregels en DP
 
 ### Regels
 
@@ -132,7 +134,7 @@ De vluchtduur is een geversioneerde presentatieparameter, afgestemd op de bestaa
 - Starter beurt/leg/set volgt de bestaande gedeelde engine. Sla de initiële, servergekozen starter op; geen herloten door verversen.
 - Undo bestaat alleen bij lokaal oefenen/casual bot waar dat expliciet is toegestaan. Geen client-undo in multiplayer of ranked. Beheercorrecties zijn aparte geaudite transacties met gevolgencontrole.
 
-### Elo exact overnemen
+### DP exact overnemen
 
 ```text
 E_A = 1 / (1 + 10^((R_B - R_A)/400))
@@ -143,9 +145,9 @@ R'_A = R_A + ΔA; R'_B = R_B + ΔB
 
 Start 1500. Niet afronden bij opslag; afronden alleen voor weergave. Eén zero-sumwijziging voor de **volledige** ranked wedstrijd, nooit per pijl, leg of set. Bestaand prototypebeleid is wit zolang minder dan tien ranked wedstrijden of minder dan vijf verschillende tegenstanders; daarna rood bij afgeronde rating <1450, geel 1450–1549, groen ≥1550. Behoud deze gekozen bandbreedte rond 1500; verander dit niet stilzwijgend terug naar elke fractie onder/boven 1500. Nicknamekleur is onafhankelijk: owner blauw, admin oranje, VIP goud met kroon, gewone speler wit.
 
-Praktijk, bots en casual geven geen Elo. **Voorgesteld productiebeleid:** een gespeelde ranked wedstrijd en opgave/disconnectverlies nadat de wedstrijd werkelijk is gestart tellen mee; bye en no-show vóór de start niet. Dubbele absentie, infrastructuurstoring en geannuleerde wedstrijd geven geen Elo. Vastleggen onder `rating_policy_version`; terugtrekken vlak voor verlies mag Elo niet ontwijken. Handmatige uitzonderingen vereisen eigenaarbesluit, reden, audit en correctieboekingen.
+Praktijk, bots en casual geven geen DP. **Voorgesteld productiebeleid:** een gespeelde ranked wedstrijd en opgave/disconnectverlies nadat de wedstrijd werkelijk is gestart tellen mee; bye en no-show vóór de start niet. Dubbele absentie, infrastructuurstoring en geannuleerde wedstrijd geven geen DP. Vastleggen onder `rating_policy_version`; terugtrekken vlak voor verlies mag DP niet ontwijken. Handmatige uitzonderingen vereisen eigenaarbesluit, reden, audit en correctieboekingen.
 
-Finalisatie is één database-transactie: lock match + beide ratingrijen in vaste ID-volgorde; controle geldige eindstaat en uniek finalisatie-ID; schrijf resultaat + twee ledgerregels + aantallen/tegenstanders + competitievoortgang/outbox. Bij retry dezelfde uitkomst teruggeven. Gelijktijdige finale-events of workerrestart mogen geen tweede Elo-effect hebben. Dwing maximaal één actieve competitieve wedstrijd per account af.
+Finalisatie is één database-transactie: lock match + beide ratingrijen in vaste ID-volgorde; controle geldige eindstaat en uniek finalisatie-ID; schrijf resultaat + twee ledgerregels + aantallen/tegenstanders + competitievoortgang/outbox. Bij retry dezelfde uitkomst teruggeven. Gelijktijdige finale-events of workerrestart mogen geen tweede DP-effect hebben. Dwing maximaal één actieve competitieve wedstrijd per account af.
 
 ## 8. Reconnect, no-shows en procesherstel
 
@@ -156,10 +158,10 @@ Finalisatie is één database-transactie: lock match + beide ratingrijen in vast
 | Tijdelijke netwerkuitval | `onDrop` reserveert spelersstoel via `allowReconnection`; spel pauzeert na eventuele al gecommitteerde impact. Hersteltijd en oorzaak zichtbaar |
 | Herstel binnen budget | Identiteit/schorsing opnieuw controleren; snapshot + eventcursor; fase hervatten met bevroren resterende tijd, geen nieuw willekeurig doel |
 | Hersteltijd verstreken bij één speler | Server-gecommitteerde opgave/niet-teruggekeerd; tegenstander wint volgens policy, audit met tijdlijn |
-| Beide spelers weg | Geen willekeurige winnaar. Na budget `abandoned`/review, geen Elo; organisator beslist competitievervolg |
+| Beide spelers weg | Geen willekeurige winnaar. Na budget `abandoned`/review, geen DP; organisator beslist competitievervolg |
 | Beurttijd verstreken | Resterende pijlen als misses afhandelen, bezoek sluiten, waarschuwing. Voorgesteld: twee opeenvolgende timeouts leveren opgave op; succesvolle eigen beurt reset deze teller |
 | Geen check-in | Niet in bracket opnemen; wachtlijst alleen vóór bracketlock gecontroleerd opschuiven |
-| Eén speler niet klaar voor toegewezen match | Deadline, herinnering, daarna no-show-walkover met reden; geen Elo vóór start |
+| Eén speler niet klaar voor toegewezen match | Deadline, herinnering, daarna no-show-walkover met reden; geen DP vóór start |
 | Beide spelers no-show | Geen automatische winnaar; organisator beslist dubbele diskwalificatie/doorschuiving. Geen verzonnen 3–0 uitslag |
 | Expliciete opgave | Bevestigingsdialoog en serveractie; socket sluiten alleen is niet dezelfde bewuste actie |
 | Server-/database-uitval | Systeempauze, geen no-showstraf. Hervat uit duurzaam log of markeer ongeldig met reden |
@@ -178,15 +180,15 @@ Het bijgeleverde operationscontract concretiseert dit met uitsluitend loopback-t
 **Toernooivormen:** knock-out en dubbele eliminatie. **Seizoenen met divisies:** een aparte competitie/spelvorm. **Automatische bordplanning:** een optie, geen derde toernooivorm.
 
 - DartsPoint is V1-organisator. Alleen bevoegde beheerders publiceren events en beheren deelname. Publieke pagina toont alleen gepubliceerde velden.
-- Registratie, regels akkoord, Elo/minimumwedstrijden, VIP-only, eventuele goedkeuring, wachtlijst, check-in en seeding blijven afzonderlijke stappen.
-- Bracket is een gerichte acyclische grafiek met expliciete winner-/loserbronnen. Een onbesliste bron is geen bye. Byes hebben geen gegooide darts, geen Elo en geen verzonnen wedstrijdstatistieken.
+- Registratie, regels akkoord, DP/minimumwedstrijden, VIP-only, eventuele goedkeuring, wachtlijst, check-in en seeding blijven afzonderlijke stappen.
+- Bracket is een gerichte acyclische grafiek met expliciete winner-/loserbronnen. Een onbesliste bron is geen bye. Byes hebben geen gegooide darts, geen DP en geen verzonnen wedstrijdstatistieken.
 - Dubbele eliminatie: winners- en losersbracket; tweede nederlaag elimineert. Wint de ongeslagen finalist de eerste finale, klaar. Wint de finalist uit het losersbracket, volgt een resetfinale. Champion pas na geldige afhandeling.
 - Een uitslagcorrectie die downstreamwedstrijden raakt mag niet stilzwijgend gespeelde wedstrijden wissen. Vóór downstreamstart kan het systeem opnieuw opbouwen; na downstreamstart is een expliciet correctieplan met organisatorbevestiging en audit vereist. De huidige lokale helper wist downstream; dat moet voor productie aangescherpt worden.
 - Planner selecteert alleen startklare matches met bekende spelers, voldane rusttijd, geldige deelname en geen andere actieve reservering. Hij lockt beschikbare borden en spelers transactioneel. Eén bord → maximaal één toegewezen/lopende wedstrijd; één speler → maximaal één competitieve reservering. Conflicterende twee workerprocessen mogen niet dubbel boeken.
 - Bordinstelling bestaande prototype: 1–16, rust 0–900 s, automatisch/handmatig. Bewaar deterministische wachtvolgorde en bied auditbare handmatige prioriteit; laat matches niet oneindig verhongeren.
 - Seizoen: één divisie per speler per seizoen, round-robin, eventuele bye/rustweek, wekelijkse deadlines. Stand: 3 punten bij winst, daarna legsaldo, legs voor, onderling resultaat bij precies twee gelijkstaande spelers; daarna gedeelde rang. Alfabetische weergave is geen sportieve tie-break.
-- Promotie/degradatie gebruikt de getoonde divisie-eindstand, nooit de Elo-ladder. Gelijke stand op de grens blokkeert automatische verplaatsing en vraagt beslissingswedstrijd/organisatorbesluit. Afsluiten met open fixtures vereist reden en expliciete afhandeling.
-- Terugtrekking in een seizoen: kies en publiceer vóór start een policy (aanbevolen V1: gespeelde uitslagen blijven, toekomstige fixtures worden administratieve walkovers zonder Elo). Bewaar eigen resultaatsoort zodat fictieve legs niet als gegooide scores/statistieken meetellen.
+- Promotie/degradatie gebruikt de getoonde divisie-eindstand, nooit de DP-ladder. Gelijke stand op de grens blokkeert automatische verplaatsing en vraagt beslissingswedstrijd/organisatorbesluit. Afsluiten met open fixtures vereist reden en expliciete afhandeling.
+- Terugtrekking in een seizoen: kies en publiceer vóór start een policy (aanbevolen V1: gespeelde uitslagen blijven, toekomstige fixtures worden administratieve walkovers zonder DP). Bewaar eigen resultaatsoort zodat fictieve legs niet als gegooide scores/statistieken meetellen.
 
 ## 10. Sociale laag en chat
 
@@ -194,7 +196,7 @@ Het bijgeleverde operationscontract concretiseert dit met uitsluitend loopback-t
 - Privéchat: serverlidmaatschap van exact twee accounts, beleid iedereen/vrienden/niemand voor **nieuwe** gesprekken, blokkade in beide richtingen voorkomt nieuwe verzending. Bestaande historie blijft voor de deelnemers leesbaar volgens bewaarbeleid.
 - Persoonlijke mute: verbergt notificaties/weergave voor één ontvanger; geeft de ander geen globale sanctie. Kamermute beperkt schrijven in die kamer. Platformmute beperkt alle toepasselijke chats. Schorsing ontneemt spel- en realtime-entree. Dit zijn verschillende rechten.
 - Berichten sluiten sluit een tab, niet het gesprek of zijn historie. Geen nieuwe tab forceren bij binnenkomend bericht; toon ongelezen badge/inbox. Concept en tabvoorkeur horen bij de gebruiker, nooit in gedeelde roomstaat.
-- Chatvolgorde in wedstrijd: **spelchat, kamerchat, privéchats**. Lobby: alleen privé-inbox. Desktop behoudt bestaande indeling; mobiel opent dezelfde 60%-drawer met zicht op het actieve bord.
+- Chatvolgorde in wedstrijd: **spelchat, kamerchat, privéchats**. Lobby: alleen privé-inbox. Desktop behoudt bestaande indeling; mobiel opent tijdens een actieve wedstrijd dezelfde 60%-drawer met zicht op het actieve bord.
 - De kamerchat is alleen beschikbaar aan huidige kamerleden; bestaande kamergeschiedenis is geen publieke REST-feed. Matchchat aan deelnemers en toegelaten toeschouwers; na afloop read-only voor gerechtigde geschiedenisgebruikers. Privéchathistorie nooit aan andere kamerleden of standaard alle admins ontsluiten.
 - Moderator mag een gemeld bericht en strikt noodzakelijke context bekijken via een geaudite case. Geen algemene “lees alle privéchats”-knop als impliciet adminrecht.
 - Berichten eerst duurzaam opslaan, daarna event met message-ID en channelcursor. Clientdeduplicatie op ID; ontbrekende events via gepagineerde historie. Plain text renderen, geen HTML; maximale lengte, serverrate limits en redactionevents met tombstone.
@@ -210,13 +212,13 @@ Het bijgeleverde operationscontract concretiseert dit met uitsluitend loopback-t
 7. Reconnect tijdens horizontaal, verticaal, vlucht, checkout en matchfinalisatie; sluit/heropen mobiel; slechts één spelerstoel.
 8. Kill proces vóór dartcommit, na commit vóór impact, en na resultcommit vóór outboxsend. Iedere gecommitteerde dart/resultaat wordt exact eenmaal zichtbaar.
 9. 301 dubbel-in, bust na openen, BULL finish, ongeldige singlefinish, sets/legs en wisselende starter zijn gedeeld getest.
-10. Ranked finale retry/crash verwerkt Elo éénmaal; casual/bot/no-show/bye nooit. Twee spelers blijven samen dezelfde ratingtotale som houden.
+10. Ranked finale retry/crash verwerkt DP éénmaal; casual/bot/no-show/bye nooit. Twee spelers blijven samen dezelfde ratingtotale som houden.
 11. Fifty-seat concurrent-join test: persoon 51 wordt geweigerd, spectator telt mee, tweede tab telt niet dubbel.
 12. Ban/mute tijdens join, reconnect en send werkt direct; token met oude rol geeft geen beheerrecht.
 13. Toernooideelnemer mag alleen eigen toegewezen match spelen; onbekende/uitgeschreven speler uitsluitend toeschouwen als toegang toegestaan is.
 14. Twee schedulers tegelijk kunnen nooit hetzelfde bord of dezelfde speler reserveren. Beide paden van de resetfinale slagen.
 15. Lobby toont geen kamerchat; privégesprek sluiten bewaart geschiedenis en gesloten tab; vriendenpagina blijft zonder inbox.
-16. Een drain/deploy veroorzaakt geen fictieve no-show, verlies of dubbele Elo. Minimaal één hersteltest vanaf backup vóór productie.
+16. Een drain/deploy veroorzaakt geen fictieve no-show, verlies of dubbele DP. Minimaal één hersteltest vanaf backup vóór productie.
 
 ## Bronnen en versiecontrole
 
@@ -232,3 +234,7 @@ De technische architectuur en alle als voorstel gemarkeerde policies hierboven z
 - https://docs.colyseus.io/getting-started/react — SDK-aansluiting in React.
 - https://supabase.com/docs/guides/auth/jwts — tokenverificatie en JWKS.
 - https://supabase.com/docs/guides/database/postgres/row-level-security — toegangsregels en secret-keygrenzen.
+
+### Kamercontext en berichtentellers (13 oktober 2026)
+
+Zonder partij volgt op een bevestigde kamerjoin de volledige kamerchat. Zonder kamer toont `/spelen` de kamerkeuze. Oefenen vereist actuele kamerrechten en geen actieve partij. Privégesprekken blijven onafhankelijk bewaard. De persoonlijke geauthenticeerde Colyseus-room levert bericht-ID/kanaal-ID-notificaties; Redis transporteert geen berichttekst. Tellers komen uit leesbare PostgreSQL-berichten boven de bestaande kanaalcursor, zonder eigen/geblokkeerde/persoonlijk gemute/redacted berichten. Gesloten privégesprekken blijven meetellen. Leesstatus vereist zichtbare, gefocuste chat met nieuwste bericht in beeld, en loopt niet tijdens een rustige beurt of bij oudere scrollpositie.

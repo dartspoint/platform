@@ -1,0 +1,9 @@
+export const designs = [
+  { id: "arena", number: "01", name: "Arena", label: "Het complete speelveld", description: "Je wedstrijd in het hart. De kamer altijd dichtbij. Een vertrouwde lobby, opnieuw ontworpen.", signature: "Gelaagd · Gebalanceerd · Alles in beeld", color: "#e94745", accent: "De allrounder", layout: "Sidebar, centrale oche en een brede spelerstabel." },
+  { id: "broadcast", number: "02", name: "Broadcast", label: "Elke leg een hoofdwedstrijd", description: "Een groot podium, krachtige scores en het gevoel van de laatste wedstrijd van de avond.", signature: "Cinematisch · Gedurfd · Live", color: "#ff4b42", accent: "De showstopper", layout: "Een breed scorebord boven een meeslepend speelveld." },
+  { id: "club", number: "03", name: "Club", label: "Jouw vaste plek", description: "Vrienden aan de bar, een vrije oche en nog één potje. De community geeft de avond kleur.", signature: "Warm · Sociaal · Persoonlijk", color: "#58ba83", accent: "De ontmoetingsplek", layout: "Een warme clubindeling met vrienden en chat vooraan." },
+  { id: "focus", number: "04", name: "Focus", label: "Alleen jij. De volgende dart.", description: "Rust, ruimte en precies genoeg informatie. Een heldere interface die je in het spel houdt.", signature: "Minimalistisch · Ruimtelijk · Precies", color: "#42b987", accent: "De purist", layout: "Een open canvas, groot dartbord en compacte zijpanelen." },
+  { id: "league", number: "05", name: "League", label: "Speel voor je plek", description: "De spanning van de ladder, het ritme van een toernooi. Alles wat een competitieve avond nodig heeft.", signature: "Competitief · Gestructureerd · Scherp", color: "#e94745", accent: "De uitdager", layout: "Wedstrijd, spelers en competitie in één commandocentrum." },
+] as const;
+export type DesignId = typeof designs[number]["id"];
+export function getDesign(id: string) { return designs.find(d => d.id === id); }

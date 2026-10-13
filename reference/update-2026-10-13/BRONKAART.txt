@@ -1,0 +1,67 @@
+DARTSPOINT — BRONKAART
+
+De platformsnapshot is de door de gebruiker op 12 oktober 2026 aangeleverde platform-main.zip. Dit is geen verificatie van de huidige live VPS-release. Controleer bij implementatie steeds de actuele repository en de gedeployde commit.
+
+LANDING EN DEPLOYMENT
+apps/web/public/landing/index.html                  Voorgestelde locatie, via bestaande webimagebuild.
+apps/web/app/api/launch-signups/route.ts             Voorgestelde nieuwe POST-route.
+apps/web/app/api/launch-unsubscribe/route.ts         Voorgestelde afmeldroute.
+apps/web/app/api/platform/[...path]/route.ts         Huidige auth, write-validatie en requestconventies.
+packages/data/src/db.ts                             Bestaande databaseverbinding.
+supabase/migrations/                                Nieuwe expand-only migratie, oude checksums behouden.
+ops/README.md                                      Bestaande deployment-/backupwerkwijze.
+ops/Caddyfile.staging                               Snapshot web 3001, realtime 2568, beperkte toegang.
+ops/Caddyfile.production                            Bestaand productiehostblok; niet blind wijzigen.
+ops/scripts/deployment_config.py                    Strikte environment-/origincontracten.
+ops/scripts/prepare-release.py, deploy.py            Releasevoorbereiding en uitvoering.
+scripts/build-deploy.mjs                            Neemt apps/web/public op in webimage.
+.github/workflows/deploy.yml                        Bestaande branch-/build-/deploygates.
+
+MOBIEL, KAMERS, CHAT, PROFIEL EN MENU
+apps/web/components/darts-lobby.tsx                 Lobby-, vrienden-/berichtenflow, enterGame(), zichtbare counters.
+apps/web/components/darts-lobby.css                 Onder andere 60%-chat-sheet en scrollhoogtes.
+apps/web/components/darts-app.tsx                   Room-first flow, chooseRoom(), Chat/Meer, Kamerbeheer.
+apps/web/components/darts-play-shell.css            Onder andere 60%-social/chat-sheet.
+apps/web/components/darts-community.tsx/.css        ChatPanel, mark-read, gedeeld ProfileView en hero/padding.
+apps/web/lib/darts-chat-state.ts                    Echte chatadapter, private tabs/drafts, polling en readcursor.
+apps/web/lib/platform-client.tsx                    Bootstrap en room heartbeat.
+packages/data/src/community.ts                     joinRoom, roomAccess, channelAccess, memberships.
+packages/data/src/projections.ts                   Bootstrapkanalen, unread en rechtenprojectie.
+apps/web/app/oefenen/page.tsx                       Auth-gate, maar snapshot mist room-membership-gate.
+packages/data/src/practice.ts                       Ook server-side room-context voor oefenen nodig.
+apps/web/lib/darts-social.ts                        Niet op moderatornamen of comma-strings autoriseren.
+apps/web/components/darts-player-menu.tsx           Zelfde gedeelde room-capabilities gebruiken.
+packages/data/src/admin.ts                         Bestaande gezaghebbende beheerrechten behouden.
+
+WAARGENOMEN FUNCTIONELE GATEN
+- enterGame() voert echte room join uit; chooseRoom() in snapshot wijzigt alleen de UI.
+- Private channels hebben readcursors; kamer-/matchreadstatus is niet op dezelfde manier compleet.
+- cursor minus last_read_cursor telt ook eigen en eventueel verborgen berichten.
+- ChatPanel kan gelezen markeren zonder daadwerkelijke document-/paneelzichtbaarheid.
+- Afzonderlijke polling van chat en bootstrap vraagt aandacht bij realtimeverbeteringen.
+- Kamerbeheer wordt in menu's breder getoond dan de backend toestaat.
+
+DP EN AUDIT
+apps/web/components/player-identity.tsx             Labels, uitleg en toegankelijkheidsteksten.
+apps/web/components/admin/darts-admin.tsx           Recent, audit, export; vier samengevoegde feeds.
+apps/web/components/admin/*                        Overige zichtbare rankinglabels/uitleg.
+packages/data/src/projections.ts                   Ruwe auditcodes, UUID-subject, JSON-detail.
+apps/web/lib/darts-admin-operations.ts              Adapter levert platform.audit.
+apps/web/lib/darts-admin-settings.ts                Adapter levert platform.audit.
+apps/web/lib/darts-divisions-store.ts               Klassementspunten niet verwarren met rating.
+apps/web/lib/darts-tournament-store.ts              Auditbron is in deze snapshot dezelfde feed.
+
+Gebruik de bestandsnamen als vindhulp, niet als bewijs dat paden in een latere HEAD nog identiek zijn. Zoek in de actuele repo met rg. Preserveer globale admin = Platformbeheerder, los van toegewezen Kamerbeheerder.
+
+WERPTIMING
+apps/web/lib/use-server-game.ts                     Meter blijft lopen tijdens sending; onvoorwaardelijke y-meter; naïeve clock offset.
+apps/web/components/darts-game.tsx                  Hoofdspel gebruikt deze serverhook.
+apps/web/components/darts-competition-game.tsx      Competities gebruiken de gedeelde serverhook.
+apps/web/components/darts-practice.tsx              Apart oefenpad met vergelijkbare response-afhankelijkheid.
+packages/data/src/matches.ts                       Rekent in snapshot na DB/locks met verwerkingstijd.
+packages/data/src/practice.ts                      Zelfde verwerkings-timingprobleem bij oefenen.
+apps/realtime/src/server.ts                        Seriële queue voor commands en periodieke publish.
+packages/contracts/src/index.ts                    Strikt commandcontract; geen willekeurige client-x/y/tijd accepteren.
+docs/04-COLYSEUS-SPEL-EN-DATA.md                    Voorgesteld ontvangsttijdbeleid; begrensde serverafgeleide compensatie toegestaan met versie/tests.
+
+Deze codebevindingen verklaren plausibele oorzaken van de gerapporteerde vertraging, maar bevatten geen gemeten p95 of bewijs van de actuele live release. Codex moet de huidige fout reproduceren en vóór/na meten.

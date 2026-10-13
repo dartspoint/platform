@@ -33,6 +33,8 @@ def backup(release):
         named=lambda operation:pgargs[:-1]+['--name',names[operation],pgargs[-1]]
         version=command(named('version')+['psql','-X','-qAt','-v','ON_ERROR_STOP=1','-c','show server_version_num'],pg).decode().strip()
         if not version.isdigit() or int(version)//10000!=17:raise RuntimeError('External database must match tested PostgreSQL major 17')
+        has_launch=command(named('version')+['psql','-X','-qAt','-c',"select to_regclass('private.launch_subscriptions') is not null"],pg).decode().strip()=='t'
+        if has_launch: snapshot_sql=snapshot_sql.replace("'migrations',(select count(*) from dartspoint_migrations.applied)","'migrations',(select count(*) from dartspoint_migrations.applied),'launchSubscriptions',(select count(*) from private.launch_subscriptions)")
         exporter=subprocess.Popen(named('snapshot')[:-1]+['-i',pgargs[-1],'psql','-X','-qAt','-v','ON_ERROR_STOP=1'],env=pg,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
         try:
             exporter.stdin.write('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n'+snapshot_sql+'\n');exporter.stdin.flush()

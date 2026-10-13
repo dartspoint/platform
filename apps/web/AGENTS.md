@@ -7,3 +7,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+De actuele gedragswijzigingen en bewijschecklist staan in
+`docs/CHANGESET-2026-10-13-LANDING-MOBIEL-CHAT-TIMING.md` (vanaf de repositoryroot).
+De vaste opdracht/ontwerpbron staat in `reference/update-2026-10-13/`.
+Gebruik deze uitsluitend als visuele bron; behoud echte Auth, persistence en serverautoriteit.

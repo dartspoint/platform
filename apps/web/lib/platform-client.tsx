@@ -1,9 +1,11 @@
 "use client";
 import {useEffect,useState,useSyncExternalStore,type ReactNode} from 'react';
+import {Client} from '@colyseus/sdk';
+import {browserAuth} from './supabase-client';
 import {toast} from 'sonner';
 import {IncomingInvites} from '@/components/darts-incoming-invites';
-export type PlatformSnapshot={personalRecords:any;practice:any;actor:any;players:any[];rooms:any[];preferences:any;social:any;channels:any[];invites:any[];matches:any[];tournaments:any[];seasons:any[];notifications:any[];records:any[];badges:any[];admin:any;settings:any;audit:any[];draining:boolean};
-export const EMPTY_PLATFORM:PlatformSnapshot={personalRecords:null,practice:null,actor:null,players:[],rooms:[],preferences:{},social:{friends:[],friendRequests:[],muted:[],blocked:[],moderation:[],reports:[],queues:{}},channels:[],invites:[],matches:[],tournaments:[],seasons:[],notifications:[],records:[],badges:[],admin:null,settings:null,audit:[],draining:true};
+export type PlatformSnapshot={personalRecords:any;practice:any;actor:any;players:any[];rooms:any[];preferences:any;social:any;channels:any[];chatChannels:any[];invites:any[];matches:any[];tournaments:any[];seasons:any[];notifications:any[];records:any[];badges:any[];admin:any;settings:any;audit:any[];draining:boolean};
+export const EMPTY_PLATFORM:PlatformSnapshot={personalRecords:null,practice:null,actor:null,players:[],rooms:[],preferences:{},social:{friends:[],friendRequests:[],muted:[],blocked:[],moderation:[],reports:[],queues:{}},channels:[],chatChannels:[],invites:[],matches:[],tournaments:[],seasons:[],notifications:[],records:[],badges:[],admin:null,settings:null,audit:[],draining:true};
 let snapshot=EMPTY_PLATFORM;const listeners=new Set<()=>void>();
 export function getPlatform(){return snapshot;}
 export function subscribePlatform(fn:()=>void){listeners.add(fn);return ()=>{listeners.delete(fn);};}
@@ -22,6 +24,18 @@ export function refreshPlatform(){return refreshing??=api<PlatformSnapshot>('boo
 export async function mutate<T=any>(path:string,input:unknown):Promise<T>{try{const data=await api<T>(path,input);await refreshPlatform();return data;}catch(e){toast.error(e instanceof Error?e.message:'De actie kon niet worden uitgevoerd.');throw e;}}
 export function PlatformProvider({initial,children}:{initial:PlatformSnapshot;children:ReactNode}){
  const [ready,setReady]=useState(false);
+ useEffect(()=>{
+  let disposed=false,room:any,retry:ReturnType<typeof setTimeout>,refresh:ReturnType<typeof setTimeout>,renew:ReturnType<typeof setInterval>;
+  async function connect(){try{
+   const {data}=await browserAuth().auth.getSession();if(disposed||!data.session)return;
+   const next=await new Client(process.env.NEXT_PUBLIC_REALTIME_URL!).joinOrCreate('personal',{userId:initial.actor.id,token:data.session.access_token});
+   if(disposed){void next.leave();return;}room=next;
+   next.onMessage('chat.changed',(event:any)=>{window.dispatchEvent(new CustomEvent('dartspoint:chat-changed',{detail:event}));clearTimeout(refresh);refresh=setTimeout(()=>{void refreshPlatform().catch(()=>{});},120);});
+   next.onLeave(()=>{if(!disposed)retry=setTimeout(connect,2000);});
+   clearInterval(renew);renew=setInterval(()=>{void browserAuth().auth.getSession().then(({data})=>{if(data.session)next.send('authenticate',{token:data.session.access_token});});},60000);
+  }catch{if(!disposed)retry=setTimeout(connect,5000);}}
+  void connect();return ()=>{disposed=true;clearTimeout(retry);clearTimeout(refresh);clearInterval(renew);void room?.leave();};
+ },[initial.actor.id]);
  useEffect(()=>{snapshot=initial;listeners.forEach(fn=>fn());setReady(true);const poll=setInterval(()=>{void refreshPlatform().catch(e=>{if(e instanceof ApiError&&[401,403].includes(e.status))window.location.assign('/inloggen');});},3000);const pulse=setInterval(()=>{void api('heartbeat',{}).catch(()=>{});},20000);return ()=>{clearInterval(poll);clearInterval(pulse);snapshot=EMPTY_PLATFORM;};},[initial]);
  return ready?<>{children}<IncomingInvites/></>:<main className="dp-entry-loading" role="status" style={{minHeight:'100dvh',display:'grid',placeItems:'center',color:'#9fbcaa'}}>DartsPoint wordt geopend…</main>;
 }

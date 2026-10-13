@@ -21,9 +21,9 @@ def prepare(manifest, values, root):
               'DATABASE_ROLE':'dartspoint_app',
               'REDIS_URL':'redis://redis:6379/0'}
     auth = {'NEXT_PUBLIC_SUPABASE_URL':values['NEXT_PUBLIC_SUPABASE_URL'], 'SUPABASE_SECRET_KEY':values['SUPABASE_SECRET_KEY']}
-    write_env(release/'web.env', {**common, **auth, **manifest['public'], 'REALTIME_HEALTH_URL':'http://realtime:2567'})
+    write_env(release/'web.env', {**common, **auth, **manifest['public'], 'LANDING_ORIGIN':values['LANDING_ORIGIN'], 'TRUST_PROXY':'caddy', 'REALTIME_HEALTH_URL':'http://realtime:2567'})
     write_env(release/'realtime.env', {**common, **auth, 'NEXT_PUBLIC_APP_URL':values['NEXT_PUBLIC_APP_URL'], 'BIND_HOST':'0.0.0.0', 'INTERNAL_DEPLOY_TOKEN':values['INTERNAL_DEPLOY_TOKEN']})
-    write_env(release/'worker.env', {**common, **auth, **{k:values[k] for k in ('NEXT_PUBLIC_APP_URL','RESEND_API_KEY','MAIL_FROM','MAIL_REPLY_TO')}})
+    write_env(release/'worker.env', {**common, **auth, **{k:values[k] for k in ('NEXT_PUBLIC_APP_URL','RESEND_API_KEY','MAIL_FROM','MAIL_REPLY_TO','LANDING_ORIGIN')}})
     write_env(release/'migration.env', {'NODE_ENV':'production','APP_ENV':env,'DEPLOY_ENV':env,'MIGRATION_DATABASE_URL':values['DATABASE_URL'],'DATABASE_CA_CERT_BASE64':values['DATABASE_CA_CERT_BASE64']})
     backup = {k:values[k] for k in ('RESTIC_REPOSITORY','RESTIC_PASSWORD','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_DEFAULT_REGION','DATABASE_CA_CERT_BASE64')}
     backup['BACKUP_DATABASE_URL'] = values['DATABASE_URL']

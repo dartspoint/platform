@@ -1,9 +1,12 @@
 import {randomUUID,createHash} from 'node:crypto';
+import {meterPosition,admittedMoment,TIMING_VERSION} from '../../game-core/src/timing';
+import {registerIngress,type TrustedIngress} from './timing';
+export {meterPosition} from '../../game-core/src/timing';
 import {z} from 'zod';
 import type {PoolClient} from 'pg';
 import {db,transaction,draining,rateLimit,outbox,audit} from './db';
 import {assertSessionActive,actorById,type Actor} from './auth';
-import {roomAccess,blocked,target} from './community';
+import {roomAccess,blocked,target,ensureChannelReadState} from './community';
 import {commandSchema,requireThat,uuid,DomainError} from '../../contracts/src/index';
 import {initialGameState,dartsGameReducer,type GameState} from '../../game-core/src/darts-game-state';
 import {normalizeGameRules,type GameRules} from '../../game-core/src/darts-match-rules';
@@ -12,14 +15,9 @@ import {calculateElo} from '../../game-core/src/darts-elo';
 
 export const FLIGHT_MS=560;
 export const RECONNECT_MS=120000;
-export type ServerGame=GameState & {phaseToken:string;phaseStartedAt:number;turnStartedAt:number;lockedX:number|null;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};
-export function meterPosition(at:number,phaseStartedAt:number,axis:'horizontal'|'vertical'){
- const period=axis==='horizontal'?2200:2500;
- const phase=(((at-phaseStartedAt)/period+.25)%1+1)%1;
- return (1-Math.abs(phase*2-1))*2.28-1.14;
-}
+export type ServerGame=GameState & {phaseToken:string;phaseStartedAt:number;turnStartedAt:number;lockedX:number|null;lockedY?:number|null;lastAcceptedAt?:number;timingVersion?:'receive-v1'|typeof TIMING_VERSION;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};
 const rulesSchema=z.object({startScore:z.union([z.literal(301),z.literal(501),z.literal(701)]),bestOf:z.number().int().min(1).max(21).refine(n=>n%2===1),format:z.enum(['legs','sets']),bestOfSets:z.number().int().min(1).max(7).refine(n=>n%2===1),doubleIn:z.boolean().optional(),doubleOut:z.literal(true).optional()}).strict().transform(r=>normalizeGameRules({...r,doubleIn:r.startScore===301,doubleOut:true}));
-function initialServerGame(id:string,names:[string,string],rules:GameRules,starter:0|1=0):ServerGame{return {...initialGameState(starter,id,0,rules),phase:'horizontal',phaseToken:randomUUID(),phaseStartedAt:0,turnStartedAt:0,lockedX:null,impactAt:null,ready:[false,false],names};}
+function initialServerGame(id:string,names:[string,string],rules:GameRules,starter:0|1=0):ServerGame{return {...initialGameState(starter,id,0,rules),phase:'horizontal',phaseToken:randomUUID(),phaseStartedAt:0,turnStartedAt:0,lockedX:null,lockedY:null,lastAcceptedAt:0,timingVersion:TIMING_VERSION,impactAt:null,ready:[false,false],names};}
 export async function admission(c:PoolClient){await c.query('select * from private.admission_lock where id=1 for update');requireThat(!await draining(),'maintenance',503,'Er is onderhoud. Bestaande partijen kunnen doorgaan.');}
 export async function createMatch(c:PoolClient,a:Actor,b:string,roomId:string,rules:GameRules,mode:'casual'|'ranked'|'tournament'|'division',competition?:unknown,starterUserId?:string){
  await admission(c);const room=await roomAccess(c,a,roomId,true);const opponent=await actorById(b,Date.now()+3600000);
@@ -32,7 +30,8 @@ export async function createMatch(c:PoolClient,a:Actor,b:string,roomId:string,ru
  try {for(const userId of [a.id,b].sort())await c.query('insert into active_player_reservations(user_id,match_id) values($1,$2)',[userId,id]);}
  catch(e){if((e as {code:string}).code==='23505')throw new DomainError('player_already_reserved',409);throw e;}
  await c.query('insert into match_players(match_id,user_id,seat) values($1,$2,0),($1,$3,1)',[id,a.id,b]);
- await c.query("insert into channels(kind,match_id) values('match',$1)",[id]);return {matchId:id};
+ const channel=(await c.query("insert into channels(kind,match_id) values('match',$1) returning id",[id])).rows[0];
+ await ensureChannelReadState(c,a.id,channel.id);await ensureChannelReadState(c,b,channel.id);return {matchId:id};
 }
 export async function invite(actor:Actor,input:unknown,starterUserId?:string){
  const p=z.object({targetId:uuid,roomId:uuid,rules:rulesSchema,ranked:z.boolean()}).strict().parse(input);
@@ -70,6 +69,26 @@ export async function acquireMatch(id:string,writerId:string){return transaction
  const r=await c.query("update matches set writer_id=$2,writer_fence=writer_fence+1,lease_until=now()+interval '30 seconds' where id=$1 and (writer_id=$2 or lease_until is null or lease_until<=now()) returning writer_fence",[id,writerId]);
  requireThat(r.rowCount,'writer_busy',409);return Number(r.rows[0].writer_fence);
 });}
+export async function matchAccessBatch(actors:readonly Actor[],id:string){
+ return transaction(async c=>{
+  const m=(await c.query('select m.*,r.status room_status,r.min_rating,r.max_rating from matches m join community_rooms r on r.id=m.room_id where m.id=$1',[id])).rows[0];
+  requireThat(m,'match_not_found',404);
+  const rows=(await c.query(`select p.id,p.session_version,mp.seat,mp.reconnect_used_ms,mp.disconnected_at,
+   (r.rating between $3 and $4) rating_allowed,
+   ($5<>'private' or exists(select 1 from user_roles ur where ur.user_id=p.id and ur.role in('admin','owner') and ur.revoked_at is null) or exists(select 1 from room_access ra where ra.user_id=p.id and ra.room_id=$2)) room_allowed,
+   not exists(select 1 from sanctions s where s.target_id=p.id and (s.room_id is null and s.kind='suspend' or s.room_id=$2 and s.kind in('remove','suspend')) and s.revoked_at is null and s.starts_at<=now() and s.ends_at>now()) sanctions_allowed,
+   array(select rs.session_id from private.revoked_sessions rs where rs.session_id=any($6::uuid[]) and rs.user_id=p.id) revoked_sessions,
+   (mp.seat is not null or exists(select 1 from room_memberships rm where rm.user_id=p.id and rm.room_id=$2 and rm.lease_until>now())) membership_allowed
+   from profiles p join player_ratings r on r.user_id=p.id left join match_players mp on mp.user_id=p.id and mp.match_id=$7
+   where p.id=any($1::uuid[]) and p.status='active' and p.onboarded_at is not null`,[actors.map(a=>a.id),m.room_id,m.min_rating,m.max_rating,m.room_status,actors.flatMap(a=>a.sessionId?[a.sessionId]:[]),id])).rows;
+  const now=Date.now(),budget=(m.competition?.reconnectSeconds??RECONNECT_MS/1000)*1000;
+  return new Map(actors.flatMap(actor=>{
+   const p=rows.find(r=>r.id===actor.id);
+   if(!p||actor.expiresAt<=now||p.session_version!==actor.sessionVersion||!p.rating_allowed||!p.room_allowed||!p.sanctions_allowed||(actor.sessionId&&p.revoked_sessions.includes(actor.sessionId))||!p.membership_allowed)return [];
+   return [[actor.id,{matchId:id,roomId:m.room_id,state:m.state as ServerGame,stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:p.seat??null,gameNumber:Number(m.game_number),serverAt:now,remainingReconnectMs:Math.max(0,budget-Number(p.reconnect_used_ms??0)-(p.disconnected_at?now-new Date(p.disconnected_at).getTime():0))}]] as const;
+  }));
+ });
+}
 export async function renewMatch(id:string,writerId:string,fence:number){const r=await db().query("update matches set lease_until=now()+interval '30 seconds' where id=$1 and writer_id=$2 and writer_fence=$3",[id,writerId,fence]);return !!r.rowCount;}
 export async function persist(c:PoolClient,m:any,state:ServerGame,kind:string,actorId:string|null){
  const nextVersion=Number(m.state_version)+1;
@@ -110,12 +129,17 @@ export async function finishMatch(c:PoolClient,m:any,state:ServerGame,kind:'play
  await c.query('delete from active_player_reservations where match_id=$1',[m.id]);
  await outbox(c,'result:'+m.id,'match-result',null,{matchId:m.id,competition:m.competition,kind,winnerId,score:state.totalLegs});
 }
-export async function matchCommand(actor:Actor,input:unknown,writerId:string,fence:number){
+export async function matchCommand(actor:Actor,input:unknown,writerId:string,fence:number,ingress:TrustedIngress={receivedAt:Date.now()}){
+ const handlerStarted=performance.now();
  const p=commandSchema.parse(input);const hash=createHash('sha256').update(JSON.stringify(p)).digest('hex');
  await rateLimit('command:'+actor.id,120,60);
  await assertSessionActive(actor);const fresh=await actorById(actor.id,actor.expiresAt);requireThat(fresh.sessionVersion===actor.sessionVersion&&actor.expiresAt>Date.now(),'session_expired',401);
+ const timingPolicy=(await db().query("select state->>'timingVersion' version from matches where id=$1",[p.matchId])).rows[0];requireThat(timingPolicy,'match_not_found',404);
+ const registered=await registerIngress('match',actor,p.commandId,p,ingress,timingPolicy.version===TIMING_VERSION?TIMING_VERSION:'receive-v1');
+ const authMs=performance.now()-handlerStarted;const transactionRequested=performance.now();
  return transaction(async c=>{
-  const m=(await c.query('select * from matches where id=$1 for update',[p.matchId])).rows[0];requireThat(m,'match_not_found',404);
+  const transactionEntered=performance.now(),lockStarted=performance.now();
+  const m=(await c.query('select * from matches where id=$1 for update',[p.matchId])).rows[0];requireThat(m,'match_not_found',404);const lockMs=performance.now()-lockStarted;
   const prior=(await c.query('select * from private.match_commands where match_id=$1 and actor_id=$2 and command_id=$3',[m.id,actor.id,p.commandId])).rows[0];
   if(prior){requireThat(prior.payload_hash===hash,'idempotency_conflict',409);return prior.receipt;}
   requireThat(m.writer_id===writerId&&Number(m.writer_fence)===fence&&new Date(m.lease_until).getTime()>Date.now(),'stale_writer',409);
@@ -136,19 +160,22 @@ export async function matchCommand(actor:Actor,input:unknown,writerId:string,fen
     requireThat(!state.pendingDart,'impact_pending',409);state={...state,...dartsGameReducer(state,{type:'forfeit',player:seat}),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:null,impactAt:null,ready:state.ready,names:state.names};await finishMatch(c,m,state,'forfeit',state.winner);
    }else{
     requireThat(state.turn===seat,'not_your_turn',403);requireThat(p.phaseToken===state.phaseToken,'stale_phase',409);
+    let admittedAt:number;try{admittedAt=admittedMoment(registered.receivedAt,state.timingVersion===TIMING_VERSION?registered.latencyMs:0,state.phaseStartedAt,state.lastAcceptedAt??0,now);}catch{throw new DomainError('invalid_timing',409);}
+    state={...state,lastAcceptedAt:admittedAt};
     if(p.type==='dart.stop_horizontal'){
-     requireThat(state.phase==='horizontal','wrong_phase',409);state={...state,phase:'vertical',lockedX:meterPosition(now,state.phaseStartedAt,'horizontal'),phaseStartedAt:now,phaseToken:randomUUID()};
+     requireThat(state.phase==='horizontal','wrong_phase',409);state={...state,phase:'vertical',lockedX:meterPosition(state.lastAcceptedAt!,state.phaseStartedAt,'horizontal'),lockedY:null,phaseStartedAt:now,phaseToken:randomUUID()};
     }else{
      requireThat(p.type==='dart.stop_vertical'&&state.phase==='vertical'&&state.lockedX!==null,'wrong_phase',409);
-     const hit=scoreDart(state.lockedX,meterPosition(now,state.phaseStartedAt,'vertical'));
+     const lockedY=meterPosition(state.lastAcceptedAt!,state.phaseStartedAt,'vertical');const hit=scoreDart(state.lockedX,lockedY);
      const id=Number(m.state_version)+1;
-     state={...state,...dartsGameReducer(state,{type:'launch',dart:{id,hit,opponentName:state.names[1]}}),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:state.lockedX,impactAt:now+FLIGHT_MS,ready:state.ready,names:state.names};
+     state={...state,...dartsGameReducer(state,{type:'launch',dart:{id,hit,opponentName:state.names[1]}}),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:state.lockedX,lockedY,impactAt:now+FLIGHT_MS,ready:state.ready,names:state.names};
      await c.query('insert into match_darts(match_id,dart_id,player_id,hit,impact_at) values($1,$2,$3,$4,$5)',[m.id,id,actor.id,JSON.stringify(hit),new Date(now+FLIGHT_MS)]);
     }
    }
   }
-  const receipt=await persist(c,m,state,p.type,actor.id);
-  await c.query('insert into private.match_commands(match_id,actor_id,command_id,payload_hash,receipt) values($1,$2,$3,$4,$5)',[m.id,actor.id,p.commandId,hash,JSON.stringify(receipt)]);return receipt;
+  const persisted=await persist(c,m,state,p.type,actor.id);
+  const receipt={...persisted,timing:{receivedAt:registered.receivedAt,admittedAt:state.lastAcceptedAt??now,processedAt:now,timingVersion:state.timingVersion??'receive-v1',queueMs:Math.max(0,Date.now()-registered.receivedAt-(performance.now()-handlerStarted)),authMs,poolMs:transactionEntered-transactionRequested,lockMs,dbMs:performance.now()-transactionEntered}};
+  await c.query('insert into private.match_commands(match_id,actor_id,command_id,payload_hash,receipt,received_at,admitted_at,timing_version) values($1,$2,$3,$4,$5,$6,$7,$8)',[m.id,actor.id,p.commandId,hash,JSON.stringify(receipt),new Date(registered.receivedAt),new Date(state.lastAcceptedAt??now),state.timingVersion??'receive-v1']);return receipt;
  });
 }
 export async function settleImpacts(){

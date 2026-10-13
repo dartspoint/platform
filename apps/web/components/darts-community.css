@@ -346,3 +346,15 @@
 @media(max-width:640px){.chat-tab-close{min-width:44px;width:44px;height:44px}.chat-tabs .chat-private-tab-wrap>.chat-private-tab{max-width:160px}.chat-empty-state h3{font-size:18px}.chat-empty-state p{font-size:13px}}
 
 @media(max-width:640px){.chat-panel .chat-tabs{height:48px!important}.chat-private-tab-wrap{min-height:48px}}
+
+/* 13 October: shared profile padding, numeric unread badges and viewport chats. */
+.dp-unread-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:19px;height:19px;padding:0 4px;border-radius:999px;background:#df4d4d;color:#fff;font-size:10px;line-height:1;font-variant-numeric:tabular-nums;font-weight:700}
+.profile-view{--profile-padding:24px;padding:0 var(--profile-padding) 24px;min-width:0}
+.profile-view .profile-cover{margin-inline:calc(-1 * var(--profile-padding));border-radius:14px 14px 0 0}
+.profile-view .profile-identity{padding-inline:0;flex-wrap:wrap;gap:10px}
+.profile-view .profile-identity h2{overflow-wrap:anywhere}
+.profile-view .profile-stats-grid,.profile-view .profile-badges,.profile-view .profile-form{min-width:0}
+.profile-dialog[data-slot=dialog-content]{padding:0;overflow-y:auto}
+.chat-tabs [data-slot=tabs-trigger]{gap:6px}
+.chat-messages{overscroll-behavior:contain;overflow-anchor:none}
+@media(max-width:640px){.profile-view{--profile-padding:16px}.profile-view .profile-rating{margin-left:auto}.profile-view .profile-identity>div{min-width:110px}.profile-section-title{flex-wrap:wrap}}

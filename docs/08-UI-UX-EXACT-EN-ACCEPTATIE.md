@@ -16,7 +16,7 @@ De nieuwe e-mail/OTP/naamkeuzeflow in dit pakket gaat boven oudere ontwerpdocume
 2. Leg de ongewijzigde referentie vast in de developmentomgeving en commit die als duidelijke uitgangsversie. Start een echte browser voor screenshots zodra dat op de VPS mogelijk is.
 3. Bewaar assets, componentmarkup, importvolgorde van CSS, lettertypes, iconen, motion-instellingen, breakpoints en route-interacties. Migreer eerst alleen de Sites-runtime naar de gekozen Next.js-runtime.
 4. Maak de eerste productiebuild met fixturedata. Vergelijk de visuele basis vóór een backendadapter wordt vervangen.
-5. Koppel per domein getypeerde adapters: auth → profielen/rooms → sociale data/chat → Colyseus → resultaten/Elo → events/divisies → beheer. Houd de gerenderde gegevensvorm gelijk.
+5. Koppel per domein getypeerde adapters: auth → profielen/rooms → sociale data/chat → Colyseus → resultaten/DP → events/divisies → beheer. Houd de gerenderde gegevensvorm gelijk.
 6. Vervang demo-actor `Nick` door de werkelijke geauthenticeerde identiteit. Verwijder demoacties doelgericht en behoud de gewone bediening.
 7. Voeg goede lege, laad-, fout-, offline- en ontbrekende-rechtenstaten toe in dezelfde stijl. Geen extra debuglabels in de productflow.
 8. Vergelijk na iedere samenhangende integratiestap dezelfde referentiescènes op dezelfde viewport. Behandel onbedoelde layoutafwijking als regressie, niet als een verbetering.
@@ -34,7 +34,7 @@ Een nieuwe mapstructuur is toegestaan wanneer nodig voor gedeelde domeinlogica o
 | Interfacefont | Manrope Variable uit lokaal gebundelde fontsource-bestanden. |
 | Score-/displayfont | Barlow Condensed; bestaande gewichten behouden; cijfers tabulair. |
 | Rolkleuren | Owner blauw, admin oranje, VIP goud + kroon, speler wit. Exacte waarden in `player-identity.css`. |
-| Elo | Afzonderlijke `[rating]`, wit/rood/geel/groen en toegankelijke uitleg. Geen rol-/ratingverstrengeling. |
+| DP | Afzonderlijke `[rating]`, wit/rood/geel/groen en toegankelijke uitleg. Geen rol-/ratingverstrengeling. |
 | Hero | `public/marketing/afterhours-hero.webp`, bestaande compositie 1672×941. Geen nieuw sfeerbeeld nodig. |
 | Deelafbeelding | `public/marketing/dartspoint-share.png` en SVG. |
 | PWA | `manifest.webmanifest`, `icons/icon-192.png`, `icons/icon-512.png`, favicon. |
@@ -56,9 +56,9 @@ Bronnen: `darts-app.tsx`, `darts-desktop.css`, `darts-play-shell.css`, `darts-pl
 
 ### 4.2 Mobiel en tablet
 
-De spelpagina vult de **zichtbare** viewport, inclusief dynamische browserbalken en safe areas. Header blijft zichtbaar. Ondernavigatie: **Spelen, Kamer, Chat, Ladder, Profiel**. Er komen geen grote begroeting, extra spelkop, slogan of losse spelerslijst boven/onder het bord terug.
+De spelpagina vult de **zichtbare** viewport, inclusief dynamische browserbalken en safe areas. Header blijft zichtbaar. Ondernavigatie tijdens een partij: **Spelen, Kamer, Chat, Ladder, Meer**; zonder partij wordt Spelen **Oefenen**. Profiel staat onder Meer. Er komen geen grote begroeting, extra spelkop, slogan of losse spelerslijst boven/onder het bord terug.
 
-Kamer en Chat schuiven vanaf onder tot 60% hoogte. Het actieve bord blijft zichtbaar erboven. Het Kamer-paneel opent op de huidige spelerslijst; terugpijl brengt naar kamerkeuze met aantallen/maximaal. Chat heeft tabvolgorde Spelchat, Kamerchat en privégesprekken. De ondernavigatie blijft logisch bereikbaar; composer blijft boven het mobiele toetsenbord.
+Tijdens een actieve partij schuiven Kamer en Chat vanaf onder tot 60% hoogte; buiten een partij vullen vrienden/berichten en kamerchat de bruikbare viewport. Het actieve bord blijft zichtbaar erboven. Het Kamer-paneel opent op de huidige spelerslijst; terugpijl brengt naar kamerkeuze met aantallen/maximaal. Chat heeft tabvolgorde Spelchat, Kamerchat en privégesprekken. De ondernavigatie blijft logisch bereikbaar; composer blijft boven het mobiele toetsenbord.
 
 Landscape met geringe hoogte heeft eigen compacte regels; de bron zet vanaf 640 breed en maximaal 540 hoog de scorezone naast het bord. Niet forceren tot een onbruikbare verkleinde portraitindeling. Gebruik containerqueries/minmax/min-height:0 zoals in de bron. De gekozen indeling bij 1099 en 1100 px moet bewust omschakelen, zonder dubbele navigatie of verdwenen chat.
 
@@ -115,7 +115,7 @@ E-mailacceptatie: HTML en text hebben dezelfde code/bedoeling; donkere DartsPoin
 - De drie spotlightkaarten hebben dezelfde rustige containerhoogte; wisselen veroorzaakt geen contentverschuiving. Pauze en handmatige knoppen werken ook zonder hover.
 - Gameplaypreview gebruikt het echte bord. 301 demonstreert een openingsdubbel; 501/701 passende puntentelling. Niet alleen het label wisselen terwijl de score fout blijft.
 - Upcoming-events tonen werkelijke planning of een duidelijke lege/datum-volgtstaat. Klik leidt via login terug naar dat event; geen onbeperkte externe `next`-redirect.
-- Laddertabs ondersteunen pijltjes, Home/End, focus en `aria-selected`; tabellen hebben semantische headers. Elo en divisiepunten worden niet verwisseld.
+- Laddertabs ondersteunen pijltjes, Home/End, focus en `aria-selected`; tabellen hebben semantische headers. DP en divisiepunten worden niet verwisseld.
 - CTA's naar registratie/login werken overal: header, hero, gameplay, event, footer. Geen `href="#"`-dummy of alleen optische knop.
 - Publieke tekst is servergerenderd en bruikbaar zonder de carrousel; één H1, logische H2/H3, alternatieve tekst alleen voor betekenisvolle beelden.
 - Canonical, sitemap, Open Graph, robots en structured data verwijzen naar de geconfigureerde productionorigin, uiteindelijk `https://dartspoint.nl`.
@@ -151,7 +151,7 @@ Maak op de development-VPS screenshots van de **ongewijzigde bron** en van de ge
 | M01 | Marketing bovenkant: volledige hero, header, CTA en spotlight 1. |
 | M02 | Mobiel menu open; focus op eerste menuoptie. |
 | M03 | Gameplaypreview 301; score klopt met openingsdubbel. |
-| M04 | Toernooikaarten, Elo-tab en ieder divisietab. |
+| M04 | Toernooikaarten, DP-tab en ieder divisietab. |
 | A01 | E-mailformulier; fout en verzenden. |
 | A02 | OTP-invoer, fout/expired/resend en open mobiel toetsenbord. |
 | A03 | Eerste gebruikersnaam; beschikbare en bezette naam. |
@@ -165,8 +165,8 @@ Maak op de development-VPS screenshots van de **ongewijzigde bron** en van de ge
 | G05 | Finishbaar 170/3 en daarna gewijzigde route; onfinishbare score. |
 | G06 | Bust, volgende speler, dubbel-in nog niet geopend en setsformat. |
 | G07 | 180, winnende dubbel, eindkaart/revanche. |
-| G08 | Mobiel Kamer-paneel 60%; terug naar kamerlijst. |
-| G09 | Mobiel Chat-paneel 60%; Spelchat/Kamerchat/privé, toetsenbord open. |
+| G08 | Tijdens actieve wedstrijd: Kamer-paneel 60%; zonder partij: volledige kamerchat en terug naar kamerlijst. |
+| G09 | Tijdens actieve wedstrijd: Chat-paneel 60%; daarbuiten: volledige conversatie. Kamerchat/privé, spelchat alleen met match; toetsenbord open. |
 | G10 | Linkshandige spelindeling, reduced-motion, reconnectscherm. |
 | T01 | Toernooikamer met borden, bracket, wachtre­denen, kijker. |
 | T02 | Double-elimination finales vóór en na vereiste tweede finale. |
@@ -213,7 +213,7 @@ Als in dit pakket geen gerenderde browserscreenshots zijn meegeleverd, zijn deze
 - GAME-07: route 170 met drie darts geldig, 169 niet; direct D20 bij 40; BULL bij 50; geen route met onvoldoende darts.
 - GAME-08: forged player-ID, score, turn, sequence, timing en repeated command worden geweigerd of idempotent beantwoord.
 - GAME-09: reconnect vóór deadline herstelt dezelfde stoel/bevestigde dart; deadlineoverschrijding verwerkt maximaal één geldig eindresultaat.
-- GAME-10: serverrestart/netwerkbreuk op ieder moment (voor input, vlucht, impact, derde dart, finish) leidt niet tot dubbele score/Elo of verloren definitieve uitslag.
+- GAME-10: serverrestart/netwerkbreuk op ieder moment (voor input, vlucht, impact, derde dart, finish) leidt niet tot dubbele score/DP of verloren definitieve uitslag.
 - GAME-11: focus in composer/modal + Spatie veroorzaakt geen worp; touch/muis/spatie gebruiken dezelfde opdracht.
 
 ### ELO — uitslag en plaatsing
@@ -221,7 +221,7 @@ Als in dit pakket geen gerenderde browserscreenshots zijn meegeleverd, zijn deze
 - ELO-01: gelijk 1500/1500 resulteert +16/−16; ongelijke ratings gebruiken beide oorspronkelijke getallen.
 - ELO-02: één wedstrijd-ID telt eenmaal; retry geeft hetzelfde resultaat, conflicterende winner faalt.
 - ELO-03: 9 wedstrijden/5 tegenstanders nog wit; 10/4 nog wit; 10/5 gekleurd. Roundinggrens 1449,6 wordt getoond als geel 1450.
-- ELO-04: 1450–1549 geel; 1550 groen; practice/casual/bot en administratieve niet-gespeelde walkover geen Elo.
+- ELO-04: 1450–1549 geel; 1550 groen; practice/casual/bot en administratieve niet-gespeelde walkover geen DP.
 - ELO-05: volledige match telt eenmaal, niet ieder set/leg; correctie heeft audit/compensatie, behoudt historische integriteit.
 
 ### COMPETITION — organisatie
@@ -244,7 +244,7 @@ Als in dit pakket geen gerenderde browserscreenshots zijn meegeleverd, zijn deze
 - ADM-03: admin kan owner/gelijkbevoegde staff niet zonder expliciet recht sanctioneren; ownerbootstrap geen clientkeuze.
 - ADM-04: mute/expiry/revoke en globale schorsing werken in bestaande sockets én nieuwe requests.
 - ADM-05: gesloten kamer laat bestaande games intact, weigert nieuwe instroom; verwijderen alleen leeg+gesloten.
-- ADM-06: instellingwijziging is geversioneerd/geauditeerd; Elo-concept activeert niet; oude events houden eigen regels.
+- ADM-06: instellingwijziging is geversioneerd/geauditeerd; DP-concept activeert niet; oude events houden eigen regels.
 - ADM-07: CSV-export bevat precies geselecteerde auditrecords en veilig escaped velden; geen secrets/OTP/mailcredentials.
 
 ## 12. PWA-, offline- en multi-deviceacceptatie
@@ -257,7 +257,7 @@ Cross-play betekent hier dezelfde serverwedstrijd vanuit desktop, tablet en tele
 
 ## 13. Technische verificatie en rapportage
 
-De bron bevat gerichte scripts voor geometrie, checkouts, Elo, game-state, matchformats, fair-play, vrienden, privétabs, admin, toernooien, divisies, competitieregels, public catalog en demo-auth. Hergebruik de purelogica-tests. Pas alleen de transport-/storageafhankelijke fixtures aan voor de nieuwe server; verwijder niet eerst falende businesscases.
+De bron bevat gerichte scripts voor geometrie, checkouts, DP, game-state, matchformats, fair-play, vrienden, privétabs, admin, toernooien, divisies, competitieregels, public catalog en demo-auth. Hergebruik de purelogica-tests. Pas alleen de transport-/storageafhankelijke fixtures aan voor de nieuwe server; verwijder niet eerst falende businesscases.
 
 Voer op de bevroren implementatie uit:
 
@@ -270,10 +270,18 @@ Voer op de bevroren implementatie uit:
 
 Rapport per testset: datum, bron-SHA, doel-SHA, omgeving, browser/apparaat, scenario's, geslaagd/gefaald/niet uitgevoerd, bewijsbestand en bekende beperking. Geen algemene claim ‘volledig getest’ als mailprovider, apparaat of externe dienst nog niet aangesloten was. Een placeholder, zichtbare demoactie of non-authoritative clientscore is een resterend implementatiepunt, geen geslaagde productiecheck.
 
-Minimale releaseblokkades: niet-geverifieerde login, verkeerde owner, clientrechten manipuleerbaar, private datalek, bord/scoregeometrieverschil, dubbele score/Elo, verloren definitieve uitslag, dubbel geboekt bord/speler, onbruikbare mobiele composer/OTP, ontbrekende viewportknop, niet werkende deployment of ontbrekend herstel van persistente gegevens.
+Minimale releaseblokkades: niet-geverifieerde login, verkeerde owner, clientrechten manipuleerbaar, private datalek, bord/scoregeometrieverschil, dubbele score/DP, verloren definitieve uitslag, dubbel geboekt bord/speler, onbruikbare mobiele composer/OTP, ontbrekende viewportknop, niet werkende deployment of ontbrekend herstel van persistente gegevens.
 
 ## 14. Review aan de gebruiker
 
 Lever na implementatie een werkende staging-URL met e-maillogin en eerste owneraccount, plus een bondig overzicht van bewezen functies en resterende externe configuratie. Toon screenshots op telefoon en desktop naast de oorspronkelijke referentie voor UI-goedkeuring. Vraag niet om de algemene ontwerpkeuze opnieuw: de keuze is Afterhours en de bron is bindend.
 
 Een afwijking die technisch noodzakelijk is, wordt concreet uitgelegd met voor/na en effect. De gebruiker mag geen visueel ander product krijgen doordat bijvoorbeeld een runtime, authprovider of componentbibliotheek werd gewisseld. De backend past zich aan de bestaande productervaring aan.
+
+## Responsieve aanvulling 13 oktober 2026
+
+Vrienden en berichten buiten een wedstrijd vullen de bruikbare viewport. Een geopend gesprek heeft een terugknop, eigen scrollvlak en bereikbare composer; visualViewport en safe-area houden rekening met toetsenbord en korte landschapschermen. Een chatpaneel tijdens een actieve partij behoudt de gamecomponent en verbinding. Ongelezen badges tellen berichten per kanaal, geen gesprekken.
+
+Het gedeelde profiel gebruikt 16 px binnenruimte op mobiel en 24 px op desktop. De hero loopt over de volle breedte; onderhoeken zijn recht en bovenhoeken blijven behouden. Langere namen mogen omlopen. Alle profielingangen gebruiken deze component.
+
+Landing en gewijzigde schermen worden gecontroleerd op 320×568, 360×800, 390×844, 768×1024, 844×390, 1366×768 en 1920×1080, plus zoom en toetsenbord/safe-area-emulatie. Screenshots en traces komen in `artifacts/update-2026-10-13`; fysieke apparaten blijven een afzonderlijk te benoemen beperking.

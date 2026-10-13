@@ -1,4 +1,5 @@
 "use client";
+import {formatAudit,dedupeAudit,type AuditRecord} from "../../../../packages/game-core/src/audit-presentation";
 import {getPlatform,selfName} from "@/lib/platform-client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -26,12 +27,12 @@ const navigation = [
   { id: "rooms", label: "Kamers", icon: Gamepad2 },
   { id: "moderation", label: "Moderatie", icon: ShieldCheck },
   { id: "game", label: "Spel & deelname", icon: SlidersHorizontal, group: "HET PLATFORM" },
-  { id: "elo", label: "Elo & competitie", icon: Target },
+  { id: "elo", label: "DP & competitie", icon: Target },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
   { id: "audit", label: "Actielogboek", icon: ClipboardList },
 ] as const;
 type AdminTab = typeof navigation[number]["id"];
-type AuditEntry = { id: string; at: number; actor: string; action: string; subject: string; detail: string };
+type AuditEntry = AuditRecord;
 const titles: Record<AdminTab, { title: string; description: string }> = {
   overview: { title: "Jouw club. Jouw regie.", description: "Van een volle kamer tot de laatste dubbel. Alles wat jouw community laat draaien." },
   tournaments: { title: "Een avond om voor te spelen.", description: "Organiseer toernooien, deel het veld in en begeleid iedere ronde tot de finale." },
@@ -40,7 +41,7 @@ const titles: Record<AdminTab, { title: string; description: string }> = {
   rooms: { title: "Een plek voor iedereen.", description: "Richt kamers in, bepaal de toegang en bewaak de bezetting." },
   moderation: { title: "Houd de club prettig.", description: "Behandel meldingen met context, een passende maatregel en een duidelijke reden." },
   game: { title: "Jouw spelregels.", description: "Stel de basis in voor nieuwe toernooien en bepaal wie mag deelnemen." },
-  elo: { title: "Een eerlijke plek op de ladder.", description: "Bekijk het actieve Elo-beleid en reken een nieuw beleidsvoorstel door." },
+  elo: { title: "Een eerlijke plek op de ladder.", description: "Bekijk het actieve DP-beleid en reken een nieuw beleidsvoorstel door." },
   platform: { title: "DartsPoint, zoals jij het wilt.", description: "Beheer platformvoorkeuren, aankondigingen en de toegang tot jouw community." },
   audit: { title: "Iedere wijziging, inzichtelijk.", description: "Wie deed wat, wanneer en waarom? Volg je beheerhandelingen terug." },
 };
@@ -50,7 +51,7 @@ function tournamentTime(tournament: Tournament) { const value = tournament.setti
 const statuses = { draft: "Concept", registration: "Inschrijving", checkin: "Check-in", live: "Wordt gespeeld", completed: "Afgerond", cancelled: "Geannuleerd" };
 
 function AuditPreview({ entries }: { entries: AuditEntry[] }) {
-  return <div className="adm-audit-list">{entries.length ? entries.map(entry => <div key={entry.id}><span><Check size={12}/></span><div><strong>{entry.action}</strong><p>{entry.subject} · {entry.actor}</p></div><small>{formatTime(entry.at)}</small></div>) : <p className="adm-audit-empty">Je eerste beheeractie verschijnt hier. Wijzig bijvoorbeeld een kamer of maak een toernooi aan.</p>}</div>;
+  return <div className="adm-audit-list">{entries.length ? entries.map(entry => <div key={entry.id}><span><Check size={12}/></span><div><strong>{formatAudit(entry).summary}</strong><p>{formatAudit(entry).subject}{formatAudit(entry).change&&" · "+formatAudit(entry).change}</p></div><small>{formatTime(entry.at)}</small></div>) : <p className="adm-audit-empty">Je eerste beheeractie verschijnt hier. Wijzig bijvoorbeeld een kamer of maak een toernooi aan.</p>}</div>;
 }
 
 function AuditPanel({ entries }: { entries: AuditEntry[] }) {
@@ -60,11 +61,11 @@ function AuditPanel({ entries }: { entries: AuditEntry[] }) {
   const filtered = entries.filter(entry => entry.at >= cutoff && `${entry.action} ${entry.subject} ${entry.actor} ${entry.detail}`.toLowerCase().includes(query.toLowerCase()));
   function download() {
     const cell = (value: string) => `"${(/^[=+@\-\t\r]/.test(value) ? "'" : "") + value.replaceAll('"', '""')}"`;
-    const csv = "\uFEFF" + [["Datum", "Beheerder", "Actie", "Onderwerp", "Toelichting"], ...filtered.map(entry => [new Date(entry.at).toISOString(), entry.actor, entry.action, entry.subject, entry.detail])].map(row => row.map(cell).join(";")).join("\r\n");
+    const csv = "\uFEFF" + [["Datum", "Beheerder", "Actie", "Onderwerp", "Toelichting"], ...filtered.map(entry => [formatAudit(entry).localTime, formatAudit(entry).actor, formatAudit(entry).action, formatAudit(entry).subject, formatAudit(entry).change])].map(row => row.map(cell).join(";")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "dartspoint-actielogboek.csv"; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  return <><div className="adm-toolbar"><label className="adm-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek een actie, speler of toernooi…" aria-label="Doorzoek actielogboek"/></label><select className="adm-filter-select" value={period} onChange={event => setPeriod(event.target.value)} aria-label="Periode"><option value="all">Alle periodes</option><option value="1">Afgelopen 24 uur</option><option value="7">Afgelopen 7 dagen</option><option value="30">Afgelopen 30 dagen</option></select><button className="adm-btn" disabled={!filtered.length} onClick={download}><Download size={15}/>Exporteer CSV</button></div><div className="adm-panel adm-table-wrap"><table className="adm-table"><thead><tr><th>Datum</th><th>Beheerder</th><th>Actie</th><th>Onderwerp & toelichting</th></tr></thead><tbody>{filtered.map(entry => <tr key={entry.id}><td className="adm-no-wrap">{formatTime(entry.at)}</td><td>{entry.actor}</td><td>{entry.action}</td><td>{entry.subject}<small>{entry.detail}</small></td></tr>)}{!filtered.length && <tr><td colSpan={4}>Nog geen acties gevonden voor deze selectie.</td></tr>}</tbody></table></div><p className="adm-audit-meta">{filtered.length} van {entries.length} acties · duurzaam opgeslagen op de server. Een export bevat alleen de huidige selectie.</p></>;
+  return <><div className="adm-toolbar"><label className="adm-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek een actie, speler of toernooi…" aria-label="Doorzoek actielogboek"/></label><select className="adm-filter-select" value={period} onChange={event => setPeriod(event.target.value)} aria-label="Periode"><option value="all">Alle periodes</option><option value="1">Afgelopen 24 uur</option><option value="7">Afgelopen 7 dagen</option><option value="30">Afgelopen 30 dagen</option></select><button className="adm-btn" disabled={!filtered.length} onClick={download}><Download size={15}/>Exporteer CSV</button></div><div className="adm-panel adm-table-wrap"><table className="adm-table"><thead><tr><th>Datum</th><th>Beheerder</th><th>Actie</th><th>Onderwerp & toelichting</th></tr></thead><tbody>{filtered.map(entry => <tr key={entry.id}><td className="adm-no-wrap">{formatTime(entry.at)}</td><td>{entry.actor}</td><td>{formatAudit(entry).action}</td><td>{formatAudit(entry).subject}<small>{formatAudit(entry).change}</small><details><summary>Technische details</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(formatAudit(entry).technical,null,2)}</pre></details></td></tr>)}{!filtered.length && <tr><td colSpan={4}>Nog geen acties gevonden voor deze selectie.</td></tr>}</tbody></table></div><p className="adm-audit-meta">{filtered.length} van {entries.length} acties · duurzaam opgeslagen op de server. Een export bevat alleen de huidige selectie.</p></>;
 }
 
 export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: string; initialTournamentId?: string }) {
@@ -83,7 +84,7 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
   const tournamentState = useTournaments();
   const divisionState = useDivisionSeasons();
   const preferences = useDartsPreferences();
-  const audit = useMemo(() => [...operations.audit, ...settings.audit, ...divisionState.audit.map(entry => ({ ...entry, subject: divisionState.seasons.find(season => season.id === entry.target)?.name || entry.target })), ...tournamentState.audit.map(entry => ({ ...entry, subject: tournamentState.tournaments.find(tournament => tournament.id === entry.target)?.name || entry.target }))].sort((a,b) => b.at - a.at), [operations.audit, settings.audit, tournamentState.audit, tournamentState.tournaments, divisionState.audit, divisionState.seasons]);
+  const audit = useMemo(() => dedupeAudit(operations.audit).sort((a,b)=>b.at-a.at),[operations.audit]);
   const openCases = operations.cases.filter(item => item.status !== "resolved").length;
   const activeTournaments = tournamentState.tournaments.filter(item => ["registration", "checkin", "live"].includes(item.status));
   const featured = activeTournaments.find(item => item.status === "live") || activeTournaments[0];
@@ -121,8 +122,8 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
           <section className="adm-panel"><div className="adm-panel-heading"><div><h2>Kameroverzicht</h2></div><button className="adm-text-btn" onClick={() => navigate("rooms")}>Beheer<ArrowRight size={13}/></button></div><div className="adm-room-bars">{operations.rooms.slice(0,6).map(room => <div key={room.id} className={room.status === "closed" ? "closed" : ""}><div><span>{room.name}{room.status === "closed" ? " · gesloten" : room.status === "private" ? " · privé" : ""}</span><small>{room.count} / {room.capacity}</small></div><i><span className={room.count / room.capacity > .9 ? "full" : ""} style={{ width: `${Math.min(100,room.count / room.capacity * 100)}%` }}/></i></div>)}</div></section>
           <section className="adm-panel"><div className="adm-panel-heading"><div><h2>Recente acties</h2></div><button className="adm-text-btn" onClick={() => navigate("audit")}>Alles<ArrowRight size={13}/></button></div><AuditPreview entries={audit.slice(0,4)}/></section>
         </div><div className="adm-dashboard-side">
-          <section className="adm-panel"><div className="adm-panel-heading"><h2>Snel geregeld</h2><Sparkles size={16} color="#b2bf94"/></div><div className="adm-quick-actions"><button onClick={() => navigate("tournaments")}><Trophy/><strong>Toernooi organiseren</strong><small>Inschrijven, plaatsen, spelen</small></button><button onClick={() => navigate("seasons")}><ListChecks/><strong>Seizoen organiseren</strong><small>Divisies, ladder en speelrondes</small></button><button onClick={() => navigate("platform")}><Bell/><strong>Aankondiging</strong><small>Zichtbaar in de lobby</small></button><button onClick={() => navigate("game")}><ListChecks/><strong>Deelname instellen</strong><small>Elo, check-in en toelating</small></button></div></section>
-          <section className="adm-panel"><div className="adm-panel-heading"><h2>Dit verdient aandacht</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? `${openCases} melding${openCases === 1 ? "" : "en"} open` : "Een rustige community"}</strong><p>Bekijk de context voordat je een maatregel neemt.</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} toernooiconcepten</strong><p>Controleer spelregels en deelname voordat je publiceert.</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>Elo-beleid: K = 32</strong><p>10 wedstrijden en 5 verschillende tegenstanders voor plaatsing.</p></div></button></div></section>
+          <section className="adm-panel"><div className="adm-panel-heading"><h2>Snel geregeld</h2><Sparkles size={16} color="#b2bf94"/></div><div className="adm-quick-actions"><button onClick={() => navigate("tournaments")}><Trophy/><strong>Toernooi organiseren</strong><small>Inschrijven, plaatsen, spelen</small></button><button onClick={() => navigate("seasons")}><ListChecks/><strong>Seizoen organiseren</strong><small>Divisies, ladder en speelrondes</small></button><button onClick={() => navigate("platform")}><Bell/><strong>Aankondiging</strong><small>Zichtbaar in de lobby</small></button><button onClick={() => navigate("game")}><ListChecks/><strong>Deelname instellen</strong><small>DP, check-in en toelating</small></button></div></section>
+          <section className="adm-panel"><div className="adm-panel-heading"><h2>Dit verdient aandacht</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? `${openCases} melding${openCases === 1 ? "" : "en"} open` : "Een rustige community"}</strong><p>Bekijk de context voordat je een maatregel neemt.</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} toernooiconcepten</strong><p>Controleer spelregels en deelname voordat je publiceert.</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>DP-beleid: K = 32</strong><p>10 wedstrijden en 5 verschillende tegenstanders voor plaatsing.</p></div></button></div></section>
 
         </div></div>
       </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "platform" ? <AdminPlatformSettings/> : <AuditPanel entries={audit}/>}

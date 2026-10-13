@@ -1,4 +1,5 @@
 "use client";
+import {timingInput} from "@/lib/use-timing-input";
 
 import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
@@ -232,6 +233,8 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
 
   const throwWithGesture = useCallback(() => {
     if (interactionBlocked || !game.ready || game.offlineUntil || game.sending || phase === "flight" || phase === "opponent") return;
+    if (phase === "won") { void game.rematch(); return; }
+    startOrStop();
     // Audio is created only inside a real button/keyboard gesture, never on load.
     if (!muted) {
       try {
@@ -240,8 +243,6 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
         if (audioContext.current?.state === "suspended") void audioContext.current.resume().catch(() => {});
       } catch { /* The playable demo still works when audio is unavailable. */ }
     }
-    if (phase === "won") game.rematch();
-    else startOrStop();
   }, [phase, startOrStop, muted, interactionBlocked, game.ready, game.offlineUntil, game.sending, game.rematch]);
 
   useEffect(() => {
@@ -321,7 +322,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
           </div>
         </div>
       </div>
-      <button className={`dp-throw-button ${active ? "is-timing" : ""}`} onClick={throwWithGesture} disabled={disabled} aria-label={game.phase === "won" ? "Speel opnieuw" : game.phase === "horizontal" ? "Stop horizontale indicator" : game.phase === "vertical" ? "Stop verticale indicator en gooi" : game.phase === "flight" ? "Pijl onderweg" : "Tegenstander aan de beurt"}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? "STOP" : "GOOI"}</span><ArrowUpRight size={15} /></>}</button>
+      <button className={`dp-throw-button ${active ? "is-timing" : ""}`} {...timingInput(throwWithGesture)} disabled={disabled} aria-label={game.phase === "won" ? "Speel opnieuw" : game.phase === "horizontal" ? "Stop horizontale indicator" : game.phase === "vertical" ? "Stop verticale indicator en gooi" : game.phase === "flight" ? "Pijl onderweg" : "Tegenstander aan de beurt"}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? "STOP" : "GOOI"}</span><ArrowUpRight size={15} /></>}</button>
     </div>
     <Scoreboard game={game} lessMotion={lessMotion} checkoutHints={checkoutHints} />
     {showExperience && <MatchExperience game={game} lessMotion={lessMotion} hidden={interactionBlocked}/>}

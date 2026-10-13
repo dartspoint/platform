@@ -59,7 +59,7 @@ function contentFor(input: DartsEmailInput, origin: string): EmailContent {
     case "welcome": return {
       subject: "Welkom bij DartsPoint", preheader: `Je spelersnaam ${input.username} staat klaar. Tijd voor je eerste leg.`,
       eyebrow: "JE HOORT ERBIJ", heading: `Welkom, ${input.username}.`,
-      paragraphs: ["Je spelersnaam staat klaar. Vind je favoriete kamer, nodig iemand uit en ontdek dat vertrouwde gevoel van nog één potje.", "Je begint met een voorlopige Elo-rating van 1500. Speel je eerste wedstrijden en vind stap voor stap je plek op de ladder."],
+      paragraphs: ["Je spelersnaam staat klaar. Vind je favoriete kamer, nodig iemand uit en ontdek dat vertrouwde gevoel van nog één potje.", "Je begint met een voorlopige DP-rating van 1500. Speel je eerste wedstrijden en vind stap voor stap je plek op de ladder."],
       details: [["Spelersnaam", input.username], ["Start-rating", "1500 · nieuwe speler"]],
       action: { label: "Naar de lobby", url: lobby }, note: "Deze e-mail bevestigt dat je spelersprofiel is aangemaakt. Fijn dat je erbij bent.",
     };

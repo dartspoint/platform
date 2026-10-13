@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {chromium} from '@playwright/test';
 import {writeFile} from 'node:fs/promises';
-import {login,origin} from './helpers';
+import {login,get,post,origin} from './helpers';
 const browser=await chromium.launch();
 try{
- const actor=await login(browser,'Interface');const page=actor.page;
+ const actor=await login(browser,'Interface');const page=actor.page;await post(page,'room',{roomId:(await get(page,'bootstrap')).rooms.find((r:any)=>r.name==='Nederland 1').id});
  await page.emulateMedia({reducedMotion:'reduce'});await page.goto(origin+'/oefenen');await page.getByRole('button',{name:'Dubbels',exact:true}).click();await page.getByLabel('Jouw dubbel',{exact:true}).waitFor();
  const changed=page.waitForResponse(r=>r.url().endsWith('/api/platform/practice')&&r.request().method()==='POST');await page.getByLabel('Jouw dubbel',{exact:true}).selectOption('7');const prior=await(await changed).json();assert.equal(prior.state.configuration.chosenDouble,7);
  await page.getByRole('button',{name:'Finishes',exact:true}).click();await page.getByLabel('Uitgooien vanaf',{exact:true}).waitFor();

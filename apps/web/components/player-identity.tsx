@@ -11,7 +11,7 @@ import "./player-identity.css";
 
 const roleLabels: Record<PlayerRole, string> = {
   owner: "Eigenaar",
-  admin: "Admin",
+  admin: "Platformbeheerder",
   vip: "VIP",
   player: "Speler",
 };
@@ -31,14 +31,15 @@ export function RatingValue({ player, className = "", brackets = false, interact
   const profile = useRatingProfile(player.name);
   const status = ratingStatus(profile);
   const displayed = Math.round(profile.rating);
-  const description = { white: "Voorlopige rating", red: "Onder de middenzone", amber: "Rond het startniveau", green: "Boven de middenzone" }[status];
+  const formatted=new Intl.NumberFormat("nl-NL").format(displayed)+" DP";
+  const description = { white: "Voorlopige DartsPoints", red: "Onder de middenzone", amber: "Rond het startniveau", green: "Boven de middenzone" }[status];
   const distinct = new Set(profile.opponents).size;
-  if (!interactive) return <span className={`dp-rating-value rating-${status} ${className}`} title={description} aria-label={`${player.name}, rating ${displayed}, ${description.toLowerCase()}`}>{brackets ? `[${displayed}]` : displayed}</span>;
-  return <Popover><PopoverTrigger asChild><span role="button" tabIndex={0} className={`dp-rating-value rating-${status} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#93d6b1] ${className}`} style={{ cursor: "help", borderRadius: 3 }} title={`${description} · tik voor uitleg`} aria-label={`${player.name}, rating ${displayed}, ${description.toLowerCase()}. Toon ratinguitleg`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); event.currentTarget.click(); } }}>{brackets ? `[${displayed}]` : displayed}</span></PopoverTrigger><PopoverContent sideOffset={9} className="border-[#385344] bg-[#11271b] text-[#eef4ee] shadow-2xl" style={{ zIndex: 110, width: "min(310px, calc(100vw - 28px))" }} onClick={(event) => event.stopPropagation()}>
-    <div className="mb-3 flex items-center justify-between gap-3"><strong>{player.name} · <span className={`rating-${status}`}>[{displayed}]</span></strong><Info size={15} className="text-[#91ad9d]"/></div>
+  if (!interactive) return <span className={`dp-rating-value rating-${status} ${className}`} title={description} aria-label={`${player.name}, rating ${displayed}, ${description.toLowerCase()}`}>{brackets ? `[${formatted}]` : formatted}</span>;
+  return <Popover><PopoverTrigger asChild><span role="button" tabIndex={0} className={`dp-rating-value rating-${status} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#93d6b1] ${className}`} style={{ cursor: "help", borderRadius: 3 }} title={`${description} · tik voor uitleg`} aria-label={`${player.name}, rating ${displayed}, ${description.toLowerCase()}. Toon uitleg over DartsPoints`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); event.currentTarget.click(); } }}>{brackets ? `[${formatted}]` : formatted}</span></PopoverTrigger><PopoverContent sideOffset={9} className="border-[#385344] bg-[#11271b] text-[#eef4ee] shadow-2xl" style={{ zIndex: 110, width: "min(310px, calc(100vw - 28px))" }} onClick={(event) => event.stopPropagation()}>
+    <div className="mb-3 flex items-center justify-between gap-3"><strong>{player.name} · <span className={`rating-${status}`}>[{formatted}]</span></strong><Info size={15} className="text-[#91ad9d]"/></div>
     <p className="mb-2 text-sm font-semibold">{description}</p>
     {profile.provisional ? <p className="mb-3 text-xs leading-relaxed text-[#b0c4b8]">Plaatsing: {Math.min(profile.rankedPlayed, 10)}/10 ranked wedstrijden · {Math.min(distinct, 5)}/5 verschillende tegenstanders. Je getal verandert al; de kleur blijft wit tot beide doelen zijn behaald.</p> : <p className="mb-3 text-xs leading-relaxed text-[#b0c4b8]">Geplaatst · {profile.rankedPlayed} ranked wedstrijden. Je rating verandert na een volledige ranked wedstrijd op basis van winst of verlies en de rating van je tegenstander.</p>}
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 border-y border-[#385344] py-3 text-xs"><dt className="rating-white">Wit</dt><dd>Plaatsingsfase</dd><dt className="rating-red">Rood</dt><dd>Lager dan 1450</dd><dt className="rating-amber">Geel</dt><dd>1450–1549</dd><dt className="rating-green">Groen</dt><dd>Vanaf 1550</dd></dl>
-    <p className="mt-3 text-[11px] leading-relaxed text-[#91ad9d]">Elo · start 1500 · K = 32. Rolkleuren horen bij de naam. Ratingwijzigingen zijn gekoppeld aan je account.</p>
+    <p className="mt-3 text-[11px] leading-relaxed text-[#91ad9d]">DP — DartsPoints: rankingpunten. Start 1500 · K = 32. Rolkleuren horen bij de naam. Ratingwijzigingen zijn gekoppeld aan je account.</p>
   </PopoverContent></Popover>;
 }

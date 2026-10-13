@@ -4,7 +4,7 @@ Versie: 12 oktober 2026. Dit document is gebaseerd op de meegeleverde Sites-bron
 
 ## 1. Wat de overdracht wel en niet bewijst
 
-Het prototype bevat veel echte, herbruikbare domeinlogica: bordgeometrie, dartscore, dubbel-in/dubbel-uit, legs/sets, Elo, uitgooimogelijkheden, brackets, divisies en bordplanning. Het bevat ook lokale simulaties van accounts, tegenstanders, aanwezigheid, vrienden, chats en beheer. Een werkende knop in het prototype betekent niet dat de achterliggende productiedienst al bestaat.
+Het prototype bevat veel echte, herbruikbare domeinlogica: bordgeometrie, dartscore, dubbel-in/dubbel-uit, legs/sets, DP, uitgooimogelijkheden, brackets, divisies en bordplanning. Het bevat ook lokale simulaties van accounts, tegenstanders, aanwezigheid, vrienden, chats en beheer. Een werkende knop in het prototype betekent niet dat de achterliggende productiedienst al bestaat.
 
 Gebruik in dit document de volgende onderscheidingen:
 
@@ -22,11 +22,11 @@ Productieteksten mogen geen demoacties, vaste Nick-identiteit of fictieve aanwez
 
 | Route / deel | Bestaande bron | Vast gedrag |
 | --- | --- | --- |
-| `/` | `app/page.tsx`, `components/darts-marketing.*`, `lib/darts-public-data.ts` | Publieke marketingpagina: hero, CTA, spelvoorbeeld, officiële events, Elo, divisieladders, kamers en FAQ. |
+| `/` | `app/page.tsx`, `components/darts-marketing.*`, `lib/darts-public-data.ts` | Publieke marketingpagina: hero, CTA, spelvoorbeeld, officiële events, DP, divisieladders, kamers en FAQ. |
 | `/inloggen` en `/registreren` | Authcomponenten en betreffende routebestanden | Eén wachtwoordloze e-mail → OTP → profielroute. Registratie is dezelfde geverifieerde identiteit, geen apart wachtwoordaccount. |
 | `/lobby` | `components/darts-lobby.*` | Overzicht van alle kamers en promotie van actieve officiële toernooien. Navigatie naar vrienden, privéberichten en profiel. |
 | `/spelen` | `components/darts-app.tsx`, `components/darts-game.tsx` | Losse wedstrijd en de kamercommunity; desktop en mobiel dezelfde actieve partij. |
-| `/oefenen` | `components/darts-practice.*`, `lib/darts-practice.ts` | Vrij oefenen, dubbels, bull, finish, vijf-pijlenintroductie en weekuitdaging. Geen Elo. |
+| `/oefenen` | `components/darts-practice.*`, `lib/darts-practice.ts` | Vrij oefenen, dubbels, bull, finish, vijf-pijlenintroductie en weekuitdaging. Geen DP. |
 | `/clubhuis` | `components/darts-v1-hub.*` | Historie, records, badges, raakpunten, officiële toernooien en voorkeuren. |
 | `/divisies` | `components/darts-divisions.*`, `lib/darts-divisions-*` | Zelfstandige seizoenscompetitie: ladder, rondes, eigen partijen en actieve divisiebadge. |
 | `/toernooi/[id]` | `components/darts-tournament-room.*` | Speciale eventkamer: borden, bracket, deelnemers, kijken en toegewezen eigen wedstrijd. |
@@ -51,7 +51,7 @@ De nieuwe Sites-flow is een visueel en interactief prototype, geen bewijs van ec
 
 Productievereisten: eindige codegeldigheid, servergebonden poginglimieten en resend-cooldown, geen hergebruik van geverifieerde codes, geen plaintext-OTP in applicatielogs, geen e-mailadres in openbare roomstate, veilige sessieherstelroute, CSRF-/origincontroles waar relevant, en expliciete fouten bij een verlopen aanvraag. OTP-mails krijgen zowel HTML als platte tekst. De mail bevat doel, code, geldigheidsduur, afzenderidentiteit en uitleg voor een ongevraagde code. Links en logoassets gebruiken de ingestelde eigen origin.
 
-Gebruikersnaam moet server-side worden gevalideerd en uniek zijn met een vastgelegde normalisatie. De nieuwe bron kiest 3–20 tekens uit A–Z, 0–9, streepje en underscore, zonder spaties, met case-insensitive uniekheid en gereserveerde systeemnamen. Neem deze zichtbare regels over tenzij de gebruiker later anders kiest. Bewaar een onveranderlijke account-ID als sleutel; een naamwijziging mag vrienden, Elo, historie, sancties of deelnemersrecords niet breken. Maak de eerste owner via een gecontroleerde bootstrapprocedure op geverifieerde account-ID, nooit via de eerste willekeurige registratie, e-mail uit een verzoekbody of een geraden nickname. De precieze authimplementatie en deploymentwaarden staan in de architectuur- en uitroldocumenten.
+Gebruikersnaam moet server-side worden gevalideerd en uniek zijn met een vastgelegde normalisatie. De nieuwe bron kiest 3–20 tekens uit A–Z, 0–9, streepje en underscore, zonder spaties, met case-insensitive uniekheid en gereserveerde systeemnamen. Neem deze zichtbare regels over tenzij de gebruiker later anders kiest. Bewaar een onveranderlijke account-ID als sleutel; een naamwijziging mag vrienden, DP, historie, sancties of deelnemersrecords niet breken. Maak de eerste owner via een gecontroleerde bootstrapprocedure op geverifieerde account-ID, nooit via de eerste willekeurige registratie, e-mail uit een verzoekbody of een geraden nickname. De precieze authimplementatie en deploymentwaarden staan in de architectuur- en uitroldocumenten.
 
 ## 4. Spelersidentiteit, rollen en moderatie
 
@@ -60,10 +60,10 @@ Gebruikersnaam moet server-side worden gevalideerd en uniek zijn met een vastgel
 | Signaal | Weergave | Betekenis |
 | --- | --- | --- |
 | Nickname | Eigenaar blauw `#7cb8ff`; admin oranje `#ffad6b`; VIP goud `#e9c66f` met kroon; speler wit `#edf4f0` | Rol/status, niet spelsterkte. |
-| Elo `[rating]` | Wit, rood, geel of groen volgens §7 | Speelsterkte en plaatsingsstatus. |
+| DP `[rating]` | Wit, rood, geel of groen volgens §7 | Speelsterkte en plaatsingsstatus. |
 | Divisiebadge | Afzonderlijke compacte badge met divisie | Lidmaatschap van uitsluitend het actieve seizoen. |
 
-`PlayerName`, `RatingValue` en `DivisionBadge` zijn de gedeelde componenten. Gebruik dezelfde componenten in scoretabel, lijsten, chat, profiel, vrienden en ladders. De grote resterende wedstrijdscore (bijvoorbeeld 321) blijft het herkenbare crèmekleurige scorevak; `[1500]` is de Elo-rating en moet daarmee niet worden verward.
+`PlayerName`, `RatingValue` en `DivisionBadge` zijn de gedeelde componenten. Gebruik dezelfde componenten in scoretabel, lijsten, chat, profiel, vrienden en ladders. De grote resterende wedstrijdscore (bijvoorbeeld 321) blijft het herkenbare crèmekleurige scorevak; `[1500]` is de DP-rating en moet daarmee niet worden verward.
 
 ### 4.2 Bronwaarheid en vereiste productieautorisatie
 
@@ -99,9 +99,13 @@ De lobby is een overzicht van alle kamers, zoeken/filteren, favoriete kamers en 
 
 Kamers tonen naam, categorie, bezetting/maximaal en relevante toegang. Gewone kamers hebben maximaal 50 aanwezigen. Voor productie moeten bezetting, vol/gesloten en toelating atomair aan de server worden gecontroleerd; een stale kaartje verleent geen plek. Favorieten mogen voorkeuren zijn, geen autorisatietoekenning.
 
-Kamercategorieën: sociaal, ranked, beginners en toernooi. Status: open, gesloten voor instroom, privé/op uitnodiging. Kamerbeheer bewaart beschrijving, regels, ratingbereik, moderator en capaciteit. Sluiten stopt nieuwe instroom maar verbreekt bestaande wedstrijden niet. Alleen een lege gesloten kamer zonder wedstrijden mag worden verwijderd. Verkleinen onder de actuele bezetting wordt afgewezen.
+Kamercategorieën: sociaal, ranked, beginners en toernooi. Status: open, gesloten voor instroom, privé/op uitnodiging. Kamerbeheer bewaart beschrijving, regels, DP-bereik, kamerbeheerders en capaciteit. Sluiten stopt nieuwe instroom maar verbreekt bestaande wedstrijden niet. Alleen een lege gesloten kamer zonder wedstrijden mag worden verwijderd. Verkleinen onder de actuele bezetting wordt afgewezen.
 
 De toernooicategorie opent een concreet event of een eventkiezer. Een toevallig gelijke kamernaam mag een sociale kamer niet overnemen; gebruik stabiele IDs en expliciete relaties.
+
+Na een bevestigde kamerjoin is de kamerchat het primaire scherm. Deelname start geen wedstrijd. De contexten zijn lobby, kamerkeuze zonder lidmaatschap, kamerchat zonder partij, oefenen binnen een kamer en actieve wedstrijd. Privégesprekken behouden historie, concepten, tabstatus en eigen berichtenteller. Direct `/oefenen` zonder lidmaatschap leidt naar kamerkeuze; verlopen/veranderde kamerrechten en een actieve partij worden ook door de API gecontroleerd.
+
+In de kamer opent **Meer** het gebruikersmenu met profiel en instellingen. Kamerbeheer verschijnt alleen met de actuele servercapability voor deze stabiele kamer-ID/gebruiker-ID. Platformbeheerder en kamerbeheerder zijn aparte bevoegdheden. Auditvoorvertoning, actielogboek en export gebruiken één op event-ID gededupliceerde feed en dezelfde Nederlandse formatter; namen worden waar mogelijk historisch vastgelegd, onbekende/verwijderde onderwerpen krijgen een eerlijke fallback.
 
 ### 5.2 Vrienden en spelersacties
 
@@ -131,7 +135,7 @@ Productie: tekstlimieten, server-side rate limits, kanaallidmaatschap, escaping,
 | 501 / 701 | Direct starten, dubbel-uit in de gewone uitnodiging. | Dezelfde gedeelde score-engine met gekozen startscore. |
 | Legs | Best-of oneven 1–21. | Eerste speler met `(bestOf + 1) / 2` legs wint de wedstrijd. |
 | Sets | Best-of sets oneven 1–7; legs per set oneven 1–21. | Legstand start opnieuw na gewonnen set; totale legs apart bewaren. |
-| Ranked / vrij | Expliciete instelling in uitnodiging. | Alleen geautoriseerde volledige ranked-resultaten wijzigen Elo. |
+| Ranked / vrij | Expliciete instelling in uitnodiging. | Alleen geautoriseerde volledige ranked-resultaten wijzigen DP. |
 | Toernooien | Eigen startscore, single-/double-out, ronde/finale-best-of en hints. | Regelsnapshot onveranderlijk zodra gestart. Zie §8. |
 | Divisies | 501 double-out, best-of uit seizoen. | Losse competitieresultaten en seizoenspunten. |
 
@@ -159,17 +163,17 @@ Leg-/setwissels en afwisselende starter volgen de gedeelde `advanceMatchScoring`
 
 ### 6.4 Scoretabel en uitgooien
 
-Kolommen: Speler, Sets, Legs, D, Ptn, Beurt. Nickname met eigen rolkleur; Elo tussen vierkante haken; actievebeurtstip; bij 301 nog niet geopend het IN-signaal. Caption toont de actuele spelregels/format en **Game ID: #...**. Het oude vaste voorbeeld-ID 83626 wordt in productie vervangen door een uniek daadwerkelijk ID.
+Kolommen: Speler, Sets, Legs, D, Ptn, Beurt. Nickname met eigen rolkleur; DP tussen vierkante haken; actievebeurtstip; bij 301 nog niet geopend het IN-signaal. Caption toont de actuele spelregels/format en **Game ID: #...**. Het oude vaste voorbeeld-ID 83626 wordt in productie vervangen door een uniek daadwerkelijk ID.
 
 `getCheckoutRoutes(score, dartsLeft, limit=4)` berekent exacte double-out-routes binnen maximaal de resterende één tot drie darts. Voorbeelden moeten optellen tot de betreffende score; `T20 T20 BULL` hoort bij 170. Routebalk schuift klein vanaf links boven de scoretabel omhoog, wordt na iedere inslag herberekend en verdwijnt wanneer geen route resteert. Geen hints voor een gewonnen partij, single-out of nog ongeopende double-in-speler. De voorkeursrangschikking beperkt overbodige permutaties en geeft prettigere finishes; het is geen garantie dat maar één route bestaat.
 
 ### 6.5 Resultaat, historie en voortgang
 
-Na afloop: winnaar, gemiddelde, hoogste beurt, hoogste finish, Elo-wijziging indien geldig, revanche en snelle sportieve reactie. Een 180 wordt pas na de derde bevestigde inslag gevierd; de winnende dubbel licht op. Geluid staat standaard uit; haptiek waar ondersteund is optioneel.
+Na afloop: winnaar, gemiddelde, hoogste beurt, hoogste finish, DP-wijziging indien geldig, revanche en snelle sportieve reactie. Een 180 wordt pas na de derde bevestigde inslag gevierd; de winnende dubbel licht op. Geluid staat standaard uit; haptiek waar ondersteund is optioneel.
 
 Historie bewaart Game ID, spelers, modussnapshot, legs/sets, iedere dart, beurt, resterende punten, opening/bust/checkout, tijden en resultaat. De bron bewaart maximaal 100 afgeronde partijen lokaal. Productie bewaart duurzame event-/resultaatgegevens, pagineert historie en toont een raakpuntenkaart per eigen speler of beide spelers. Individuele records: hoogste beurt/finish, snelste gewonnen leg, 180's, overwinningen en geraakte dubbels. Geen automatisch terugdraaien in ranked of serverwedstrijden; een beheerresultaatcorrectie is auditbaar.
 
-## 7. Elo en ratingkleur
+## 7. DP en ratingkleur
 
 De besliste V1-formule staat in `lib/darts-elo.ts`:
 
@@ -194,9 +198,9 @@ Gebruik voor beide veranderingen de oorspronkelijke ratings. Bewaar decimalen; r
 
 Dit is bewust een middenband rond 1500, niet onmiddellijk rood op 1499/groen op 1501. De gebruiker vroeg om dit goed uit te denken; de bestaande goedgekeurde uitwerking en ratingpopover gebruiken deze drempels. Kleur is nooit de enige statusinformatie: tekst en plaatsingsvoortgang blijven beschikbaar.
 
-Huidig prototype: alleen expliciete `ranked-demo` verwerkt lokale Elo. Vrij, bot, practice en de Sites-fair-play-API leveren geen officiële rating. De lokale ledger houdt maximaal 5.000 IDs vast en weigert daarna verdere veranderingen in plaats van oude IDs te vergeten. Toernooi- en divisiepartijen wijzigen nu geen Elo, ook een als ranked gemarkeerd event niet.
+Huidig prototype: alleen expliciete `ranked-demo` verwerkt lokale DP. Vrij, bot, practice en de Sites-fair-play-API leveren geen officiële rating. De lokale ledger houdt maximaal 5.000 IDs vast en weigert daarna verdere veranderingen in plaats van oude IDs te vergeten. Toernooi- en divisiepartijen wijzigen nu geen DP, ook een als ranked gemarkeerd event niet.
 
-Productie: dezelfde formule onder servercontrole, geen lokale ratings importeren als waarheid, gebonden aan twee echte account-IDs. Rated-eventresultaten moeten aan dezelfde transactionele afsluitservice worden gekoppeld zodra dat beleid actief is. Scheid ranglijst en divisiepunten. Leg vast hoe opgave, no-show, ongeldigverklaring en beheerresultaatcorrectie tellen; een puur administratieve walkover zonder gespeelde partij telt standaard niet voor Elo/plaatsing/statistiek. Een correctie krijgt compenserende transacties en mag nooit stilzwijgend oude ledgerregels overschrijven. Anti-farming en verdachte patronen gaan naar review, niet naar verzonnen automatische bewijzen.
+Productie: dezelfde formule onder servercontrole, geen lokale ratings importeren als waarheid, gebonden aan twee echte account-IDs. Rated-eventresultaten moeten aan dezelfde transactionele afsluitservice worden gekoppeld zodra dat beleid actief is. Scheid ranglijst en divisiepunten. Leg vast hoe opgave, no-show, ongeldigverklaring en beheerresultaatcorrectie tellen; een puur administratieve walkover zonder gespeelde partij telt standaard niet voor DP/plaatsing/statistiek. Een correctie krijgt compenserende transacties en mag nooit stilzwijgend oude ledgerregels overschrijven. Anti-farming en verdachte patronen gaan naar review, niet naar verzonnen automatische bewijzen.
 
 Beheer toont actief K32-beleid en een berekenbaar concept. Opslaan van het beleidsconcept verandert geen bestaande rating of actief beleid. Productiebeleid is versieerbaar; geen stilzwijgende retroactieve herberekening.
 
@@ -208,7 +212,7 @@ Organisator is DartsPoint. In V1 geen vrije door spelers aangemaakte events. Een
 
 Status: concept → inschrijving → check-in → live → afgerond; annuleren is een afzonderlijke status. Concepten en geannuleerde events zijn niet openbaar. Gepubliceerde afgeronde events blijven als archief bereikbaar. Lobby-promotie toont alleen inschrijving/check-in/live. De homepage gebruikt nu een expliciete publieke demoprojectie en mag geen private beheerdata lekken.
 
-Instellingen: naam/omschrijving/publicatie; knock-out of double elimination; 4/8/16/32/64 deelnemers; startscore 301/501/701; single-/double-out; rondebest-of en finalebest-of 1–21 oneven; rankingveld; Elo/random/handmatige plaatsing; ratingmin/max, minimumwedstrijden, VIP/teamtoegang, regelsacceptatie, goedkeuring; registratie- en check-invensters; geplande start; kamer; 1–16 borden; automatische/handmatige planning; rusttijd 0–900 seconden; beurttijd 10–120 seconden; hersteltijd 15–600 seconden; hints. Officiële events houden toeschouwen aan.
+Instellingen: naam/omschrijving/publicatie; knock-out of double elimination; 4/8/16/32/64 deelnemers; startscore 301/501/701; single-/double-out; rondebest-of en finalebest-of 1–21 oneven; rankingveld; DP/random/handmatige plaatsing; ratingmin/max, minimumwedstrijden, VIP/teamtoegang, regelsacceptatie, goedkeuring; registratie- en check-invensters; geplande start; kamer; 1–16 borden; automatische/handmatige planning; rusttijd 0–900 seconden; beurttijd 10–120 seconden; hersteltijd 15–600 seconden; hints. Officiële events houden toeschouwen aan.
 
 Nieuwe events nemen opgeslagen platformdefaults over als eigen snapshot. Latere defaultwijzigingen muteren geen bestaande events. Na start zijn deelnemers en spelregels vergrendeld; aanpassen vereist een expliciet beheerd herstelproces.
 
@@ -257,7 +261,7 @@ Dit is een zelfstandige spelvorm, geen toernooiformat. Eén seizoen tegelijk act
 
 Schema: ieder lid speelt eenmaal tegen ieder ander lid binnen de divisie. Speeldagen liggen wekelijks uiteen; oneven groepsgrootte geeft rustweken. Na start staan indeling en regels vast. Speler ziet actuele divisie, ladder, alle rondes en eigen volgende wedstrijd. Alleen beide ingedeelde spelers mogen die partij spelen. Eerdere open speelronden van die spelers moeten eerst worden afgerond.
 
-Stand: 3 punten voor winst, 0 voor verlies; rangschikking op punten, legsaldo, gewonnen legs. Bij precies twee verder gelijkstaande spelers beslist een gespeeld onderling resultaat. Onopgeloste gelijke standen blijven gedeelde plaatsen; geen Elo als verborgen tiebreaker. De ladder toont gespeeld, gewonnen, legsaldo en punten.
+Stand: 3 punten voor winst, 0 voor verlies; rangschikking op punten, legsaldo, gewonnen legs. Bij precies twee verder gelijkstaande spelers beslist een gespeeld onderling resultaat. Onopgeloste gelijke standen blijven gedeelde plaatsen; geen DP als verborgen tiebreaker. De ladder toont gespeeld, gewonnen, legsaldo en punten.
 
 Seizoensafsluiting bewaart de eindstand. Afsluiten met open partijen vraagt een reden; ongespeelde partijen krijgen geen verzonnen punten. Vervolgseizoen kopieert spelers/divisies met geldige promotie/degradatie naar een nieuw concept en begint zonder oud schema/resultaten. Per grens geldt het kleinste aantal ingestelde promotie- en degradatieplaatsen, begrensd door groepsgrootte. Bij een gedeelde plaats op een grens blijven betrokken divisies onveranderd en krijgt beheer een waarschuwing voor handmatige indeling. Na aanmaken van een vervolgseizoen is de oorspronkelijke eindstand vergrendeld.
 
@@ -273,8 +277,8 @@ Bronhiaten voor productie: duurzame planning/afspraken, no-show/uitval over meer
 | 4 | Historie | Clubhuis/spelmenu, alle darts en legs. | Duurzame serverhistorie en paginatie. |
 | 5 | Verbindingsherstel | Bevestigde state/exact retry, hersteltest. | Colyseus reconnect, idempotentie, deadline. |
 | 6 | Wedstrijdkaart | Regels, opponent, starter vooraf. | Beide spelers dezelfde serverregelsnapshot. |
-| 7 | Elo-preview | Verwachte winst/verlies. | Berekenen met actuele serverratings; indicatie. |
-| 8 | Eindkaart | Winnaar, gemiddelde, maxima, Elo. | Definitieve resultaattransactie. |
+| 7 | DP-preview | Verwachte winst/verlies. | Berekenen met actuele serverratings; indicatie. |
+| 8 | Eindkaart | Winnaar, gemiddelde, maxima, DP. | Definitieve resultaattransactie. |
 | 9 | Bustuitleg | Concrete reden en beurtscoreherstel. | Zelfde engine voor alle clients. |
 | 10 | Records | Beste beurt/finish, snelste leg, 180's, wins, doubles. | Afleiden uit geldige resultaten, geen clientclaims. |
 | 11 | Raakpuntenkaart | Eigen/beide echte raakcoördinaten. | Geautoriseerde eventread met filtering. |
@@ -311,7 +315,7 @@ Beheernavigatie heeft tien pagina's; iedere pagina één hoofdtitel, daarna func
 | Kamers | Maken/wijzigen, 2–50 capaciteit, categorie/toegang/rating/regels/moderator; instroom sluiten; lege gesloten kamer verwijderen. |
 | Moderatie | Nieuwe echte en duidelijk gelabelde demomeldingen; status, bewijs/context, Game ID, maatregel en gemotiveerd afsluiten. |
 | Spel & deelname | Defaults voor score/finish/best-of/finale/timers/hints; capacity/rating/min-wedstrijden/check-in/approval/VIP. |
-| Elo & competitie | Actief beleid en rekenbare conceptpolicy; geen onbedoelde ratingreset. |
+| DP & competitie | Actief beleid en rekenbare conceptpolicy; geen onbedoelde ratingreset. |
 | Platforminstellingen | Naam, slogan, registratiebeleid, onderhoud, aankondiging, contactadres, chatslowmode en standaard privébeleid. |
 | Actielogboek | Gecombineerde beheer-, event- en seizoenacties; zoeken, datum/periode en CSV van huidige selectie. |
 
@@ -321,7 +325,7 @@ Er is in deze bron geen volwaardige betaal-/facturatie-/boekhoudmodule en geen e
 
 ## 12. Marketing, SEO, PWA en mails
 
-De marketingpagina is visueel publieke content, los van de besloten spelomgeving. Fullviewport hero met sfeerfotografie, registratie-CTA en wisselende spotlight voor event/divisie/Elo. Echte SVG-bordrenderer in de gameplaypreview, 301/501/701-keuze. Events met echte status en datum of expliciet datum volgt; ladders met gekozen sortering; divisies met echte seizoenspunten; kamers en FAQ. Geen fictieve betalende klanten, testimonials, aftellers of aantallen als bewijs van echte activiteit.
+De marketingpagina is visueel publieke content, los van de besloten spelomgeving. Fullviewport hero met sfeerfotografie, registratie-CTA en wisselende spotlight voor event/divisie/DP. Echte SVG-bordrenderer in de gameplaypreview, 301/501/701-keuze. Events met echte status en datum of expliciet datum volgt; ladders met gekozen sortering; divisies met echte seizoenspunten; kamers en FAQ. Geen fictieve betalende klanten, testimonials, aftellers of aantallen als bewijs van echte activiteit.
 
 De huidige `lib/darts-public-data.ts` is een allowlist-demoprojectie; production vervangt alleen de data-adapter door gepubliceerde PostgreSQL-queries. Concepten, privéchats, contactgegevens, authclaims en auditrecords blijven erbuiten. Definieer consent/zichtbaarheid van openbare nicknames/ranglijsten.
 
@@ -358,8 +362,12 @@ Verwijder geen voorbeeldcomponent om de integratie eenvoudiger te maken. Bouw ad
 - OTP, eerste naamkeuze, hervatten, uitloggen en sessieverval werkelijk werken met stagingmail; de owner is serverzijdig aantoonbaar owner.
 - Dezelfde productiegame-engine losse partijen, toernooi- en divisiewedstrijden afhandelt en scores alleen op inslag toont.
 - Chat, vrienden, blokkeren, mute, rolechecks, roomcapacity en privétoegang serverzijdig worden afgedwongen.
-- Afsluiting, Elo, bracket/ladder en planner idempotent en herstartbestendig werken; no-show/disconnectbeleid is zichtbaar en getest.
+- Afsluiting, DP, bracket/ladder en planner idempotent en herstartbestendig werken; no-show/disconnectbeleid is zichtbaar en getest.
 - Exacte UI-vergelijking en echte apparaatacceptatie volgens `08-UI-UX-EXACT-EN-ACCEPTATIE.md` zijn uitgevoerd; eerdere bronchecks zijn geen vervanging daarvoor.
 - Een merge naar staging en later production de beschreven gescheiden deployment uitvoert, zonder secrets in git en zonder productie afhankelijk te maken van een draaiende development-VPS.
 
 Dit canon beschrijft de productomvang. Technische stackkeuze, secrets, CI/CD, datamodel, mailintegratie en uitvoerprompt staan in de overige overdrachtsdocumenten.
+
+## Woordenlijst presentatie (13 oktober 2026)
+
+DP — DartsPoints zijn rankingpunten, bijvoorbeeld **1.520 DP**. De onderliggende ratingformule en historische waarden blijven gelijk; interne Elo-veldnamen/modules blijven technisch bruikbaar. DP zijn geen koopbaar tegoed. Divisiepunten of competitiepunten tellen afzonderlijk voor een klassement.

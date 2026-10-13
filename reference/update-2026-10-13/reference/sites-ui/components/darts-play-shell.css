@@ -1,0 +1,248 @@
+/* One live game surface, with social panels layered over its lower 60%. */
+:root {
+  --dp-nav-height:calc(68px + env(safe-area-inset-bottom,0px));
+  --dp-header-height:calc(62px + env(safe-area-inset-top,0px));
+}
+.darts-app.dp-fullscreen {
+  position:relative;
+  top:var(--dp-viewport-top,0px);
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  height:var(--dp-viewport-height,100dvh);
+  min-height:0;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
+.dp-game-header { flex:none; display:flex; align-items:center; gap:20px; height:var(--dp-header-height); padding:env(safe-area-inset-top,0px) max(22px,env(safe-area-inset-right,0px)) 0 max(22px,env(safe-area-inset-left,0px)); border-bottom:1px solid #9fcdb41a; background:linear-gradient(100deg,#12241b,#0c1912); box-shadow:0 4px 20px #00000016; }
+.dp-header-logo { display:flex; align-items:center; flex:none; min-height:44px; border-radius:8px; }
+.dp-header-logo .brand { gap:6px; }
+.dp-header-logo .brand img:first-child { width:31px; height:33px; }
+.dp-header-logo .brand img:last-child { width:122px; }
+.dp-header-room { display:flex; align-items:center; gap:9px; min-height:44px; margin-left:auto; padding:0 12px; border:1px solid #9fcdb415; border-radius:11px; color:#bed7c7; font-size:11px; }
+.dp-header-room small { color:#7c9d88; font-size:10px; font-variant-numeric:tabular-nums; }
+.dp-header-online { width:6px; height:6px; flex:none; border-radius:50%; background:#72d49d; box-shadow:0 0 10px #72d49d33; }
+.dp-header-actions { display:flex; align-items:center; gap:9px; }
+.dp-header-notifications { display:grid; place-items:center; position:relative; width:44px; height:44px; border-radius:11px; color:#a0bcaa; }
+.dp-header-notifications i { position:absolute; top:10px; right:11px; width:5px; height:5px; border-radius:50%; background:#f16c64; box-shadow:0 0 0 2px #0e1c14; }
+.dp-header-profile { display:flex; align-items:center; gap:10px; min-height:44px; min-width:44px; padding:4px; text-align:left; border-radius:11px; }
+.dp-header-avatar { position:relative; display:grid; place-items:center; width:34px; height:34px; flex:none; border:1px solid #7cb8ff40; border-radius:11px; background:linear-gradient(145deg,#294752,#142b31); color:#7cb8ff; font-size:12px; font-weight:700; }
+.dp-header-avatar>span { position:absolute; right:-2px; bottom:-2px; width:8px; height:8px; border:2px solid #102019; border-radius:50%; background:#74d69e; }
+.dp-header-profile-details { display:flex; flex-direction:column; gap:2px; font-size:11px; font-weight:650; }
+.dp-header-profile-details>small { color:#86a591; font-size:9px; font-weight:400; }
+.dp-game-header button:hover { background-color:#8bd3aa0b; }
+.dp-game-header :is(a,button):focus-visible { outline:2px solid #91d4aa; outline-offset:2px; }
+.dp-fullscreen-stage { flex:1; min-width:0; min-height:0; display:grid; overflow:hidden; }
+@media(max-width:740px) {
+  .dp-game-header { gap:10px; padding-left:max(14px,env(safe-area-inset-left,0px)); padding-right:max(10px,env(safe-area-inset-right,0px)); }
+  .dp-header-logo .brand img:first-child { width:29px; height:31px; }
+  .dp-header-logo .brand img:last-child { width:113px; }
+  .dp-header-profile-details { display:none; }
+  .dp-header-room { padding:0 9px; }
+  .dp-header-room small { display:none; }
+  .dp-header-actions { gap:3px; }
+}
+@media(max-width:480px) {
+  .dp-header-room { display:none; }
+  .dp-header-actions { margin-left:auto; }
+}
+.dp-play-nav {
+  position:relative;
+  z-index:60;
+  flex:none;
+  height:var(--dp-nav-height);
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,112px));
+  justify-content:center;
+  gap:4px;
+  padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));
+  border-top:1px solid #9fcdb41a;
+  background:#0c1a13;
+  box-shadow:0 -8px 30px #00000012;
+}
+.dp-play-nav>button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:44px; border-radius:12px; color:#82a892; transition:background .18s,color .18s; }
+.dp-play-nav>button>span { font-size:10px; font-weight:550; }
+.dp-play-nav>button.active { background:#ce504b12; color:#ef978f; }
+.dp-play-nav>button:hover { background:#8bd3aa0b; color:#dceee2; }
+.dp-play-nav>button:focus-visible,.dp-social-close:focus-visible,.dp-room-back:focus-visible { outline:2px solid #91d4aa; outline-offset:-3px; }
+
+.dp-social-sheet {
+  position:fixed;
+  z-index:50;
+  top:calc(var(--dp-viewport-top,0px) + var(--dp-viewport-height,100dvh) * .4);
+  right:0;
+  bottom:auto;
+  left:0;
+  height:calc(var(--dp-viewport-height,100dvh) * .6);
+  max-height:none;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  padding:17px max(0px,env(safe-area-inset-right)) var(--dp-nav-height) max(0px,env(safe-area-inset-left));
+  border:1px solid #94c7ab2c;
+  border-bottom:0;
+  border-radius:22px 22px 0 0;
+  background:#12251b;
+  color:#e5f2e9;
+  box-shadow:0 -8px 24px #00000024;
+  overflow:hidden;
+  --surface:#12251b;
+  --text:#e5f2e9;
+  --muted:#9bb8a5;
+  --border:#99c4aa20;
+}
+.dp-sheet-handle { position:absolute; width:34px; height:3px; border-radius:9px; background:#73917e80; top:7px; left:calc(50% - 17px); }
+.dp-social-heading { display:flex; flex:none; flex-direction:row; align-items:center; min-height:66px; gap:10px; padding:0 66px 12px 19px; }
+.dp-social-heading [data-slot=sheet-title] { font-size:17px; line-height:1.3; font-weight:650; }
+.dp-social-heading [data-slot=sheet-description] { font-size:11px; line-height:1.5; color:#8daf99; margin-top:3px; }
+.dp-room-back,.dp-social-close { display:grid; place-items:center; flex:none; width:44px; height:44px; border-radius:12px; color:#b4d2bf; background:#6daa810b; }
+.dp-room-back { margin-left:-8px; }
+.dp-social-close { position:absolute; right:14px; top:19px; z-index:5; }
+.dp-social-close:hover,.dp-room-back:hover { color:#f2f8f4; background:#7aba9518; }
+.dp-social-body { display:flex; flex:1; min-width:0; min-height:0; flex-direction:column; gap:12px; overflow-y:auto; overscroll-behavior:contain; padding:0 12px 12px; scrollbar-width:thin; scrollbar-color:#88bc9e40 transparent; }
+.dp-social-body>.community-panel:not(.players-panel):not(.chat-panel) { flex-shrink:0; }
+.dp-social-body-chat { overflow:hidden; padding:0; gap:0; }
+.dp-social-sheet-chat .chat-tab-container { padding-right:65px; }
+.dp-social-sheet-chat .chat-tabs { justify-content:flex-start; height:51px!important; }
+.dp-social-sheet-chat .dp-social-close { top:19px; }
+.dp-social-sheet .room-list-search { margin-left:6px; margin-right:6px; }
+.dp-social-sheet .players-panel { overflow:hidden; }
+.dp-social-sheet .players-footer { padding-bottom:2px; }
+.dp-profile-menu { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:3px 4px 12px; }
+.dp-profile-menu>button { display:flex; align-items:center; gap:11px; min-height:58px; padding:12px; border:1px solid #9ec5ad17; border-radius:12px; background:#81b89807; color:#c7dfd0; font-size:12px; text-align:left; }
+.dp-profile-menu>button>svg { flex-shrink:0; color:#7cc69a; }
+.dp-profile-menu>button:hover { background:#81b89815; }
+.dp-panel-link { flex:none; display:flex; align-items:center; gap:10px; min-height:46px; margin:0 4px; padding:10px; font-size:12px; color:#add5ba; }
+.dp-panel-link>svg:last-child:not(:first-child) { margin-left:auto; }
+.dp-dialog { z-index:90; }
+[data-slot=dialog-overlay] { z-index:80; }
+.profile-message-button { width:calc(100% - 44px); margin:0 auto; min-height:44px; color:#a8d2b6; }
+.dp-play-toast { z-index:100; bottom:calc(var(--dp-nav-height) + 12px); }
+@media(min-width:1000px) {
+  .dp-social-heading,.dp-social-body { width:min(100%,1000px); margin-inline:auto; }
+  .dp-social-close { right:max(18px,calc((100% - 1000px) / 2 + 14px)); }
+  .dp-profile-menu { grid-template-columns:repeat(4,minmax(0,1fr)); }
+}
+@media(max-height:560px) {
+  .dp-social-heading { min-height:54px; padding-bottom:7px; }
+  .dp-social-heading [data-slot=sheet-description] { display:none; }
+  .dp-social-sheet .chat-footnote { display:none; }
+  .dp-social-sheet .chat-compose-wrap { padding-top:3px; padding-bottom:3px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .dp-social-sheet { animation:none!important; transition:none!important; }
+  .dp-play-nav>button { transition:none; }
+}
+.dp-social-sheet.reduce-motion { animation:none!important; transition:none!important; }
+
+/* Keep the whole live board visible in the space above an open panel. */
+.darts-app.dp-fullscreen.has-social-panel .dp-game-panel {
+  --height-rail-width:0px;
+  --height-rail-gap:0px;
+  --aim-height:0px;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:max(0px,calc(var(--dp-viewport-height,100dvh) * .4 - var(--dp-header-height) - 8px)) auto;
+  align-content:start;
+  padding-top:8px;
+  gap:8px;
+}
+.darts-app.dp-fullscreen.has-social-panel .dp-aim-header,
+.darts-app.dp-fullscreen.has-social-panel .dp-height-meter,
+.darts-app.dp-fullscreen.has-social-panel .dp-throw-button { display:none; }
+.darts-app.dp-fullscreen.has-social-panel .dp-board-stage { place-items:center; }
+.darts-app.dp-fullscreen.has-social-panel .dp-board-and-height { width:min(100cqw,calc(100cqh - 16px)); max-width:none; grid-template-rows:auto; margin-top:0; }
+.darts-app.dp-fullscreen.has-social-panel .dp-oche-playfield { padding-right:0; }
+.darts-app.dp-fullscreen.has-social-panel .dp-score-area { align-self:start; }
+
+/* Visual viewport sizing also covers keyboards that do not trigger media queries. */
+.dp-short-viewport { --dp-nav-height:calc(52px + env(safe-area-inset-bottom,0px)); --dp-header-height:calc(48px + env(safe-area-inset-top,0px)); }
+.dp-short-viewport .dp-play-nav { padding-top:3px; padding-bottom:calc(3px + env(safe-area-inset-bottom,0px)); }
+.dp-short-viewport .dp-play-nav>button { gap:2px; }
+.dp-short-viewport .dp-play-nav>button>svg { width:18px; height:18px; }
+.dp-short-viewport .dp-play-nav>button>span { font-size:9px; }
+.dp-short-viewport .dp-social-sheet { padding-top:10px; }
+.dp-short-viewport .dp-social-heading { min-height:44px; padding-bottom:0; }
+.dp-short-viewport .dp-social-heading [data-slot=sheet-description] { display:none; }
+.dp-short-viewport .dp-social-close { top:10px; }
+.dp-short-viewport .dp-social-sheet .chat-tabs { height:44px!important; }
+.dp-short-viewport .dp-social-sheet .chat-footnote { display:none; }
+.dp-short-viewport .dp-social-sheet .chat-compose-wrap { padding:2px 8px; }
+.dp-short-viewport .dp-social-sheet .chat-messages { padding:4px 12px; }
+.dp-short-viewport .dp-social-sheet .chat-date { display:none; }
+.dp-short-viewport .dp-social-sheet .players-footer { display:none; }
+.dp-short-viewport .dp-social-sheet .players-toolbar { padding-bottom:4px; }
+.dp-short-viewport .dp-social-sheet .players-table th { height:28px; }
+.dp-short-viewport .dp-social-sheet:has(input:focus) .dp-social-heading { display:none; }
+.dp-short-viewport .dp-social-sheet:has(input:focus) .players-toolbar { padding-right:66px; }
+.dp-short-viewport .dp-social-sheet:has(input:focus) .players-toolbar select { display:none; }
+.dp-short-viewport .dp-social-sheet:has(input:focus) .room-list-search { margin-right:62px; }
+
+/* DartsPoint V1 has one home: the lobby. The live playfield is unchanged. */
+.dp-header-lobby { display:flex; align-items:center; justify-content:center; flex:none; gap:7px; min-width:44px; min-height:44px; padding:0 10px; border:1px solid #9fcdb418; border-radius:11px; color:#adcdb8; font-size:11px; }
+.dp-header-lobby:hover { background:#8bd3aa0b; color:#f1f6ef; }
+.dp-profile-menu>a { display:flex; align-items:center; gap:11px; min-height:58px; padding:12px; border:1px solid #9ec5ad17; border-radius:12px; background:#81b89807; color:#c7dfd0; font-size:12px; text-align:left; }
+.dp-profile-menu>a>svg { flex-shrink:0; color:#7cc69a; }
+.dp-profile-menu>a:hover { background:#81b89815; }
+.dp-profile-menu>:is(a,button):focus-visible { outline:2px solid #91d4aa; outline-offset:2px; }
+@media(max-width:740px) {
+  .dp-header-lobby { padding:0; }
+  .dp-header-lobby>span { display:none; }
+}
+@media(max-width:580px) {
+  .dp-header-room { display:none; }
+  .dp-header-actions { margin-left:auto; }
+}
+@media(max-width:380px) {
+  .dp-game-header { gap:6px; padding-left:max(8px,env(safe-area-inset-left,0px)); padding-right:max(8px,env(safe-area-inset-right,0px)); }
+  .dp-header-logo .brand img:first-child { width:25px; height:28px; }
+  .dp-header-logo .brand img:last-child { width:98px; }
+}
+
+.dp-profile-menu>.settings-note { grid-column:1/-1; margin:6px 4px 0; }
+.dp-profile-menu>a { text-decoration:none; }
+.dp-dialog { max-height:85dvh; overflow-y:auto; overscroll-behavior:contain; }
+
+/* Follow the usable viewport when the on-screen keyboard is open. */
+.dp-dialog[data-slot=dialog-content] {
+  top:calc(var(--dp-viewport-top,0px) + var(--dp-viewport-height,100dvh) * .5);
+  max-height:calc(var(--dp-viewport-height,100dvh) - 24px);
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:#83ad9540 transparent;
+}
+.dp-dialog>[data-slot=dialog-close] {
+  display:grid;
+  place-items:center;
+  width:36px;
+  height:36px;
+  top:10px;
+  right:10px;
+  border-radius:10px;
+  color:#c3d7c9;
+  background:#14261deb;
+}
+.dp-dialog>[data-slot=dialog-close]:hover { background:#284534; }
+.dp-dialog>[data-slot=dialog-close]:focus-visible { outline:2px solid #a7d3b7; outline-offset:2px; }
+.dp-dialog .spectator-board>span { max-width:100%; text-align:center; line-height:1.8; overflow-wrap:anywhere; }
+.dp-dialog .spectator-scores { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; }
+.dp-dialog .spectator-scores>div { width:auto; min-width:0; padding-inline:8px; }
+.dp-dialog .spectator-scores .dp-player-name { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.dp-social-heading>div { min-width:0; }
+.dp-social-heading [data-slot=sheet-title] { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dp-header-room { min-width:0; max-width:240px; }
+.dp-header-room>span:not(.dp-header-online) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dp-header-room>small,.dp-header-room>svg { flex:none; }
+
+@media(max-width:1099px) {
+  /* Keep the composer and close control usable above an Android/iOS keyboard. */
+  .dp-short-viewport .dp-social-sheet-chat .chat-quick-replies,
+  .dp-short-viewport .dp-social-sheet-chat .chat-quiet-note,
+  .dp-short-viewport .dp-social-sheet-chat .chat-person-tools { display:none; }
+  .dp-short-viewport .dp-social-sheet-chat .chat-messages { padding-block:6px; }
+  .dp-short-viewport .dp-social-sheet-chat .chat-compose-wrap { padding:3px 9px 5px; }
+  .dp-short-viewport .dp-social-sheet-chat .chat-compose { padding:2px; }
+  .dp-short-viewport .dp-social-sheet-chat .chat-compose input,
+  .dp-short-viewport .dp-social-sheet-chat .emoji-button,
+  .dp-short-viewport .dp-social-sheet-chat .chat-send { height:40px; }
+  .dp-short-viewport .dp-social-sheet-chat .chat-message { margin-bottom:10px; }
+}

@@ -2,10 +2,10 @@
 import type {DartsPlayer,PlayerRole} from "./darts-data";
 import type {PlayerReport} from "./darts-social";
 import {getPlatform,usePlatform,mutate,playerId} from "./platform-client";
-export type AdminAuditEntry = { id: string; at: number; actor: string; action: string; subject: string; detail: string };
+export type AdminAuditEntry = { id: string; at: number; actor: string; action: string; subject: string; detail: string; data?:Record<string,any>; subjectName?:string };
 export type AdminMember = DartsPlayer & { joinedAt: number; sanctions: AdminSanction[] };
 export type AdminSanction = { id: string; kind: "warn" | "mute" | "suspend"; reason: string; at: number; until: number; revokedAt?: number };
-export type AdminRoom = { id: string; name: string; subtitle: string; count: number; matches: number; capacity: number; category: "social" | "ranked" | "beginners" | "tournament"; status: "active" | "closed" | "private"; rules: string; minRating: number; maxRating: number; moderator: string };
+export type AdminRoom = { id: string; name: string; subtitle: string; count: number; matches: number; capacity: number; category: "social" | "ranked" | "beginners" | "tournament"; status: "active" | "closed" | "private"; rules: string; minRating: number; maxRating: number; moderator: string; moderatorIds?:string[] };
 export type AdminCase = { id: string; player: string; reporter: string; room: string; gameId: string; reason: string; context: string; at: number; status: "open" | "review" | "resolved"; response: string; source: "demo" | "report"; actionId?: string };
 export type AdminOperations = { members: AdminMember[]; rooms: AdminRoom[]; cases: AdminCase[]; audit: AdminAuditEntry[] };
 export type AdminResult = { ok: true; id?: string } | { ok: false; error: string };

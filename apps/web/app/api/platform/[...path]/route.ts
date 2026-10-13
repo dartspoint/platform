@@ -1,3 +1,4 @@
+import {timingPing,timingEcho,practiceIngress} from '../../../../../../packages/data/src/timing';
 import {matchHistory} from '../../../../../../packages/data/src/history';
 import {revokeSession} from '../../../../../../packages/data/src/auth';
 import {createHash} from 'node:crypto';
@@ -31,7 +32,7 @@ export async function GET(request:Request,context:Context){try{
  if(path[0]==='match'&&path[1])return response(await matchAccess(actor,path[1]));
  return response({code:'not_found'},404);
 }catch(e){return failure(e);}}
-export async function POST(request:Request,context:Context){try{
+export async function POST(request:Request,context:Context){const receivedAt=Date.now();try{
  const origin=request.headers.get('origin');requireThat(!origin||origin===process.env.NEXT_PUBLIC_APP_URL,'origin',403);
  requireThat(request.headers.get('content-type')?.startsWith('application/json'),'json_required',415);
  const raw=await request.text();requireThat(raw.length<=16384,'request_too_large',413);const input=JSON.parse(raw);
@@ -58,6 +59,9 @@ export async function POST(request:Request,context:Context){try{
   if(path[1]==='logout'){try{await revokeSession(await currentActorForLogout(request));}catch(e){if(!(e instanceof DomainError&&e.status===401))throw e;}await auth.auth.signOut({scope:'local'});return response({ok:true});}
  }
  const actor=await currentActor(request,path[0]!=='onboard');
- const actions:Record<string,(actor:any,input:unknown)=>Promise<unknown>>={practice:practiceCommand,onboard,room:joinRoom,heartbeat,preferences,social,'private-channel':privateChannel,'chat/send':sendMessage,'chat/preference':chatPreference,'chat/resolve':resolveChannel,invite,'invite/respond':respondInvite,tournament:tournamentAction,division:divisionAction,'division/start':startDivisionMatch,admin:adminAction,moderation:moderate,"moderation/revoke":revokeSanction,report,settings:saveSettings,queue,'queue/advance':advanceQueue,'match/rematch':rematch};
+ if(path.join('/')==='timing/ping'){z.object({}).strict().parse(input);return response(await timingPing(actor));}
+ if(path.join('/')==='timing/echo')return response(await timingEcho(actor,input,receivedAt));
+ if(path[0]==='practice')return response(await practiceCommand(actor,input,await practiceIngress(actor,receivedAt)));
+ const actions:Record<string,(actor:any,input:unknown)=>Promise<unknown>>={onboard,room:joinRoom,heartbeat,preferences,social,'private-channel':privateChannel,'chat/send':sendMessage,'chat/preference':chatPreference,'chat/resolve':resolveChannel,invite,'invite/respond':respondInvite,tournament:tournamentAction,division:divisionAction,'division/start':startDivisionMatch,admin:adminAction,moderation:moderate,"moderation/revoke":revokeSanction,report,settings:saveSettings,queue,'queue/advance':advanceQueue,'match/rematch':rematch};
  const action=actions[path.join('/')];if(!action)return response({code:'not_found'},404);return response(await action(actor,input));
 }catch(e){return failure(e);}}

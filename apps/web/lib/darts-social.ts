@@ -27,8 +27,14 @@ export function toggleBlocked(name:string){return act(isBlocked(name)?"unblock":
 export function togglePersonalMute(name:string){return act(isPersonallyMuted(name)?"unmute":"mute",name);}
 export function isRoomMuted(name:string,room:string,at=Date.now()){return getDartsSocial().moderation.some(e=>e.name===name&&e.room===room&&e.kind==="mute"&&e.until>at);}
 export function isRoomRemoved(name:string,room:string,at=Date.now()){return getDartsSocial().moderation.some(e=>e.name===name&&e.room===room&&e.kind==="remove"&&e.until>at);}
-export function canModeratePlayer(name:string,room:string,actor=selfName()){const p=getPlatform(),viewer=p.players.find(p=>p.name===actor),victim=p.players.find(p=>p.name===name);return !!viewer&&name!==actor&&victim?.role!=="owner"&&(viewer.role==="owner"||(viewer.role==="admin"&&victim?.role!=="admin")||p.rooms.some(r=>r.name===room&&r.moderator===actor));}
-export async function moderationAction(input:{name:string;room:string;kind:ModerationKind;reason:string;minutes?:number;actor?:string}){try{await mutate("moderation",{targetId:playerId(input.name),roomId:getPlatform().rooms.find(r=>r.name===input.room)?.id,kind:input.kind,reason:input.reason,minutes:input.minutes??10});return true;}catch{return false;}}
+function roomContext(idOrName:string){const p=getPlatform(),membership=p.players.find(player=>player.id===p.actor?.id)?.presence.roomId;const current=p.rooms.find(r=>r.id===membership);return p.rooms.find(r=>r.id===idOrName)??(current?.name===idOrName?current:undefined);}
+export function canManageRoom(roomIdOrName:string){return roomContext(roomIdOrName)?.canManage===true;}
+export function canModeratePlayer(name:string,room:string,actor=selfName()){
+ const p=getPlatform(),viewer=p.actor,victim=p.players.find(p=>p.name===name),context=roomContext(room);
+ if(!viewer||viewer.username!==actor||!victim||victim.id===viewer.id||victim.role==='owner')return false;
+ return viewer.role==='owner'||viewer.role==='admin'&&victim.role!=='admin'||canManageRoom(room)&&victim.role==='player'&&!context?.moderatorIds?.includes(victim.id);
+}
+export async function moderationAction(input:{name:string;room:string;kind:ModerationKind;reason:string;minutes?:number;actor?:string}){try{await mutate("moderation",{targetId:playerId(input.name),roomId:roomContext(input.room)?.id,kind:input.kind,reason:input.reason,minutes:input.minutes??10});return true;}catch{return false;}}
 export async function revokeModeration(id:string,_actor=selfName()){try{await mutate("moderation/revoke",{id,reason:"Sanctie na beoordeling ingetrokken"});return true;}catch{return false;}}
 export async function reportPlayer(input:Omit<PlayerReport,"id"|"createdAt"|"status">){const result=await mutate("report",{targetId:playerId(input.name),reason:input.reason,detail:input.detail,...(input.messageId?{messageId:input.messageId}:{}),...(getPlatform().rooms.find(r=>r.name===input.room)?{roomId:getPlatform().rooms.find(r=>r.name===input.room)!.id}:{}),...((getPlatform().matches.some(m=>m.id===input.gameId)||getPlatform().records.some(m=>m.id===input.gameId))?{matchId:input.gameId}:{})});return result.id as string;}
 export function toggleQueue(matchId:string,_name=selfName()){return mutate("queue",{matchId});}

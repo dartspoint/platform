@@ -1,4 +1,6 @@
 "use client";
+import {timingInput} from "@/lib/use-timing-input";
+import {ServerClock,meterFraction} from "../../../packages/game-core/src/timing";
 /* Native links preserve the prototype's reliable full-page mobile navigation. */
 /* eslint-disable @next/next/no-html-link-for-pages */
 
@@ -139,10 +141,11 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
   const xPosition = useTransform(xMeter, value => `${value * 100}%`), yPosition = useTransform(yMeter, value => `${value * 100}%`);
   const lockedX = useRef(.5), dartId = useRef(0), landedId = useRef(0);
   const [sessionReady,setSessionReady]=useState(false),[sending,setSending]=useState(false);
-  const authoritative=useRef<any>(null),busy=useRef(false),offset=useRef(0);
+  const authoritative=useRef<any>(null),busy=useRef(false),clock=useRef(new ServerClock());
   const apply=useCallback((snapshot:any)=>{
     const old=authoritative.current;if(old?.id===snapshot.id&&old.stateVersion>snapshot.stateVersion)return;
-    setSessionReady(true);authoritative.current=snapshot;offset.current=snapshot.serverAt-Date.now();const state=snapshot.state;
+    setSessionReady(true);authoritative.current=snapshot;clock.current.seed(snapshot.serverAt);const state=snapshot.state;
+    if(state.lockedX!=null)xMeter.set((state.lockedX+1.14)/2.28);if(state.lockedY!=null)yMeter.set((state.lockedY+1.14)/2.28);
     setPhase(state.phase);setDart(state.dart);setVisit(state.visit);setCount(state.count);setSessionPoints(state.sessionPoints);setTargetsHit(state.targetsHit);setRemaining(state.remaining);setAttemptEnded(state.attemptEnded);setMessage(state.message);
     if(state.phase==='pause'||state.phase==='done')void refreshPlatform();
   },[]);
@@ -155,7 +158,7 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
     const meter = phase === "horizontal" ? xMeter : yMeter;
     const duration = phase === "horizontal" ? 2200 : 2500;
     let frame=0;
-    const tick=()=>{const s=authoritative.current?.state;if(s){const position=(((Date.now()+offset.current-s.phaseStartedAt)/duration+.25)%1+1)%1;meter.set(1-Math.abs(position*2-1));}frame=requestAnimationFrame(tick);};
+    const tick=()=>{const s=authoritative.current?.state;if(s&&!busy.current&&s.phase===phase){meter.set(meterFraction(clock.current.now(),s.phaseStartedAt,phase as 'horizontal'|'vertical'));}frame=requestAnimationFrame(tick);};
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [phase, xMeter, yMeter]);
@@ -165,11 +168,12 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
     try{const value=await api('practice',{type:'reset',commandId:crypto.randomUUID(),configuration:{mode:nextMode,tutorial:nextTutorial,chosenDouble:nextDouble,finish:nextFinish}});setMode(nextMode);setTutorial(nextTutorial);setInputError('');apply(value);}catch(e){setInputError(e instanceof Error?e.message:'De oefensessie kon niet worden gestart.');}finally{busy.current=false;setSending(false);}
   },[mode,isTutorial,finish,chosenDouble,apply]);
   useEffect(()=>{void reset();},[]);
+  useEffect(()=>{let disposed=false;const sample=async()=>{const sent=performance.now();try{const value=await api('timing/ping',{});if(disposed)return;clock.current.sample(value.serverAt,sent);await api('timing/echo',{nonce:value.nonce});}catch{}};void sample();const timer=setInterval(sample,2000);return ()=>{disposed=true;clearInterval(timer);};},[]);
   const act=useCallback(async()=>{
-    const current=authoritative.current;if(!current||busy.current||['flying','done'].includes(current.state.phase))return;busy.current=true;setSending(true);
-    try{apply(await api('practice',{type:current.state.phase==='horizontal'?'horizontal':current.state.phase==='vertical'?'vertical':'next',commandId:crypto.randomUUID(),sessionId:current.id,expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken}));}catch(e){setInputError(e instanceof Error?e.message:'De worp kon niet worden uitgevoerd.');apply(await api('practice/'+current.id));}finally{busy.current=false;setSending(false);}
-  },[apply]);
-  useEffect(()=>{if(phase!=='flying')return;const timer=setInterval(()=>{const current=authoritative.current;if(current)void api('practice/'+current.id).then(apply).catch(()=>{});},100);return ()=>clearInterval(timer);},[phase,apply]);
+    const current=authoritative.current;if(!current||busy.current||['flying','done'].includes(current.state.phase))return;busy.current=true;const stoppedAt=performance.now();if(current.state.phase==='horizontal')xMeter.set(meterFraction(clock.current.now(stoppedAt),current.state.phaseStartedAt,'horizontal'));if(current.state.phase==='vertical')yMeter.set(meterFraction(clock.current.now(stoppedAt),current.state.phaseStartedAt,'vertical'));performance.mark('dp-local-stop',{detail:{axis:current.state.phase,at:stoppedAt,x:xMeter.get(),y:yMeter.get()}});setSending(true);
+    try{apply(await api('practice',{type:current.state.phase==='horizontal'?'horizontal':current.state.phase==='vertical'?'vertical':'next',commandId:crypto.randomUUID(),sessionId:current.id,expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken}));}catch(e){setInputError(e instanceof Error?e.message:'De worp kon niet worden uitgevoerd.');try{apply(await api('practice/'+current.id));}catch{setSessionReady(false);}}finally{busy.current=false;setSending(false);}
+  },[apply,xMeter,yMeter]);
+  useEffect(()=>{if(phase!=='flying')return;const timer=setInterval(()=>{const current=authoritative.current;if(current)void api('practice/'+current.id).then(apply).catch(()=>{setSessionReady(false);setInputError('Je kamerlidmaatschap is verlopen. Ga terug naar de kamer en sluit opnieuw aan.');});},100);return ()=>clearInterval(timer);},[phase,apply]);
   useEffect(() => {
     const handle = async (event: KeyboardEvent) => { const element = event.target as HTMLElement; if (event.code !== "Space" || event.repeat || /INPUT|SELECT|TEXTAREA|BUTTON|A/.test(element.tagName) || element.isContentEditable) return; event.preventDefault(); await act(); };
     window.addEventListener("keydown", handle); return () => window.removeEventListener("keydown", handle);
@@ -183,7 +187,7 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
   const buttonText = phase === "horizontal" ? "RICHTING" : phase === "vertical" ? "HOOGTE" : phase === "flying" ? "GOOI!" : phase === "done" ? "KLAAR" : attemptEnded ? "OPNIEUW" : "VOLGENDE";
 
   return <div className="darts-practice">
-    <header className="practice-header">{onClose ? <button className="practice-back" onClick={onClose}><ArrowLeft size={18}/><span>Terug</span></button> : <a className="practice-back" href="/lobby"><ArrowLeft size={18}/><span>Lobby</span></a>}<div><Target size={18}/><strong>{isTutorial ? "Je eerste vijf pijlen" : "Het oefenbord"}</strong></div><span className="practice-unranked"><i/>Geen ratingpunten</span></header>
+    <header className="practice-header">{onClose ? <button className="practice-back" onClick={onClose}><ArrowLeft size={18}/><span>Terug</span></button> : <a className="practice-back" href="/spelen"><ArrowLeft size={18}/><span>Kamer</span></a>}<div><Target size={18}/><strong>{isTutorial ? "Je eerste vijf pijlen" : "Het oefenbord"}</strong></div><span className="practice-unranked"><i/>Geen ratingpunten</span></header>
     <main className="practice-layout">
       <section className="practice-play">
         <div className="practice-heading"><div><span className="practice-eyebrow">{isTutorial ? `PIJL ${Math.min(count + 1, 5)} VAN 5` : "RUIMTE OM BETER TE WORDEN"}</span><h1>{isTutorial ? tutorialStep.title : "Vind jouw ritme."}</h1></div><button className="practice-icon-button" aria-label="Oefensessie opnieuw starten" disabled={phase === "flying" || sending || !sessionReady} onClick={() => reset()}><RotateCcw size={17}/></button></div>
@@ -195,14 +199,14 @@ export function DartsPractice({ tutorial = false, onClose }: { tutorial?: boolea
           <div className={`practice-meter practice-meter-x ${phase === "horizontal" ? "is-running" : ""}`} aria-label="Richtingsbalk"><ArrowRight size={16}/><div><motion.i style={{ left: xPosition }}/></div></div>
           <div className="practice-board-space"><PracticeBoard target={target} dart={dart} flying={phase === "flying"} chip={phase === "pause" || phase === "done"} onLand={land}/></div>
           <div className={`practice-meter practice-meter-y ${phase === "vertical" ? "is-running" : ""}`} aria-label="Hoogtebalk"><span>↑</span><div><motion.i style={{ top: yPosition }}/></div><span>↓</span></div>
-          <button className="practice-throw" onClick={act} disabled={!sessionReady || sending || phase === "flying" || phase === "done"} aria-label={phase === "horizontal" ? "Stop de richting" : phase === "vertical" ? "Stop de hoogte en gooi" : "Volgende pijl"}><strong>{buttonText}</strong><ArrowUpRight size={22}/></button>
+          <button className="practice-throw" {...timingInput(act)} disabled={!sessionReady || sending || phase === "flying" || phase === "done"} aria-label={phase === "horizontal" ? "Stop de richting" : phase === "vertical" ? "Stop de hoogte en gooi" : "Volgende pijl"}><strong>{buttonText}</strong><ArrowUpRight size={22}/></button>
           <AnimatePresence>{phase === "done" && <motion.div className="practice-complete" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} role="status"><span className="practice-complete-medal"><Award size={30}/></span><span className="practice-eyebrow">JE EERSTE BADGE IS BINNEN</span><h2>Jij hebt het ritme.</h2><p>Vijf pijlen. {sessionPoints} punten. Klaar voor je eerste wedstrijd?</p><a href="/lobby">Naar de lobby<ArrowRight size={16}/></a><button onClick={() => reset("free", false)}>Nog even oefenen</button></motion.div>}</AnimatePresence>
         </div>
         <div className="practice-status" role="status" aria-live="polite"><span className={attemptEnded && remaining === 0 ? "is-success" : ""}>{message}</span><small>Spatie werkt ook</small></div>
         <div className="practice-visit"><div className="practice-dart-slots">{[0, 1, 2].map(index => <span key={index} className={visit[index] ? "is-filled" : ""}>{visit[index]?.label ?? "—"}</span>)}</div><div><small>{mode === "checkout" && !isTutorial ? "OVER" : "BEURT"}</small><strong>{mode === "checkout" && !isTutorial ? remaining : visitTotal}</strong></div><span>{count} {count === 1 ? "pijl" : "pijlen"}{target ? ` · doel ${target}` : ""}</span></div>
         {mode === "checkout" && !isTutorial && <div className="practice-checkout-routes"><Target size={14}/>{checkoutRoutes.length ? checkoutRoutes.map((route, index) => <span key={index}>{route.join(" ")}</span>) : <span>{attemptEnded ? "Nieuwe poging begint weer op je gekozen finish." : "Geen finish mogelijk met de resterende pijlen."}</span>}</div>}
       </section>
-      <aside className="practice-sidebar"><section className="practice-session-card"><span className="practice-eyebrow">DEZE OEFENSESSIE</span><h3>Elke pijl telt.</h3><div className="practice-session-stats"><div><strong>{count}</strong><span>Pijlen</span></div><div><strong>{sessionPoints}</strong><span>Punten</span></div><div><strong>{count ? (sessionPoints / count * 3).toFixed(1) : "—"}</strong><span>3-pijlsgem.</span></div><div><strong>{targetsHit}</strong><span>Doel geraakt</span></div></div><p>Oefenen heeft geen invloed op Elo. Je eigen records en badges blijven bewaard.</p></section><WeeklyChallengeCard onStart={() => reset("challenge", false)}/>{!isTutorial && <button className="practice-tutorial-link" onClick={() => reset("free", true)}><BookOpen size={19}/><span><strong>Even de bediening leren?</strong><small>Vijf pijlen, helemaal op je eigen tempo.</small></span><ChevronRight size={18}/></button>}</aside>
+      <aside className="practice-sidebar"><section className="practice-session-card"><span className="practice-eyebrow">DEZE OEFENSESSIE</span><h3>Elke pijl telt.</h3><div className="practice-session-stats"><div><strong>{count}</strong><span>Pijlen</span></div><div><strong>{sessionPoints}</strong><span>Punten</span></div><div><strong>{count ? (sessionPoints / count * 3).toFixed(1) : "—"}</strong><span>3-pijlsgem.</span></div><div><strong>{targetsHit}</strong><span>Doel geraakt</span></div></div><p>Oefenen heeft geen invloed op DP. Je eigen records en badges blijven bewaard.</p></section><WeeklyChallengeCard onStart={() => reset("challenge", false)}/>{!isTutorial && <button className="practice-tutorial-link" onClick={() => reset("free", true)}><BookOpen size={19}/><span><strong>Even de bediening leren?</strong><small>Vijf pijlen, helemaal op je eigen tempo.</small></span><ChevronRight size={18}/></button>}</aside>
     </main>
     <div className="practice-achievements-wrap"><PracticeAchievements/></div>
   </div>;

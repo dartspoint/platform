@@ -169,3 +169,12 @@
 
 /* Keep the original scrollable filter row inside narrow grid tracks. */
 .lobby-room-overview > * { min-width:0; }
+
+/* Full mobile conversation screen follows the visual viewport and keyboard. */
+.lobby-screen-back{display:inline-grid;place-items:center;width:44px;height:44px;margin-bottom:8px;border:1px solid #9fcdb425;border-radius:12px;background:#13261b;color:#c7dfd0}
+.lobby-chat-fullscreen[data-slot=sheet-content]{top:var(--lobby-top,0px);bottom:auto;height:var(--lobby-height,100dvh);max-height:none;border-radius:0;padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(8px,env(safe-area-inset-bottom))}
+.lobby-chat-fullscreen .chat-panel{display:flex;flex-direction:column;flex:1;min-height:0;border-radius:0}
+.lobby-chat-fullscreen .chat-messages{flex:1;min-height:0;max-height:none}
+.lobby-chat-fullscreen .chat-compose-wrap{flex:none}
+.lobby-chat-fullscreen .lobby-chat-close{z-index:5}
+.lobby-mobile-nav .dp-unread-badge{position:absolute;top:-5px;right:-13px}

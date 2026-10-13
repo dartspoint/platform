@@ -1,0 +1,258 @@
+DARTSPOINT — UITVOERBARE CODEX-OPDRACHT
+13 oktober 2026 · landingspagina, staging, mobiel, chat, profielen en werptiming
+
+Voer deze opdracht uit in de bestaande DartsPoint-platformrepository op de development/VPS-omgeving. Implementeer de wijzigingen en breng ze via de bestaande, gecontroleerde workflow naar staging. Lever geen nieuwe vrijblijvende analyse of los prototype op. De gebruiker wijzigt daarna zelf de DNS-records op basis van jouw concrete instructies. Raak de productieapplicatie en productiedatabase niet aan.
+
+Het meegeleverde pakket bevat de bijgewerkte landingspagina en een bevroren kopie van de Sites-interface als ontwerpbron. De landingspagina bevat het originele premiumlogo en de juiste links. Het Sites-voorbeeld is https://dartspoint-binnenkort.dgwebserv.chatgpt.site; het platformvoorbeeld is https://dartspoint-afterhours-studio.dgwebserv.chatgpt.site. Toegang tot een privévoorbeeld kan beperkt zijn: gebruik daarom de meegeleverde broncode, niet alleen een URL.
+
+BELANGRIJKE STATUS
+- De sociale links zijn op 13 oktober in de Sites-landingspagina bijgewerkt en gepubliceerd.
+- De overige platformwijzigingen in deze opdracht zijn nog niet in de VPS-repository uitgevoerd.
+- De bronbevindingen hieronder komen uit de op 12 oktober aangeleverde platform-main.zip. Controleer de huidige branch, commit en werkelijk gedeployde release voordat je conclusies over live staging trekt.
+- De Sites-landingspagina gebruikt momenteel een eigen D1-opslag. Die is GEEN bestemming voor het echte stagingformulier. De echte implementatie moet de bestaande staging-PostgreSQL-database gebruiken.
+- Een succesvolle build bewijst geen juiste mobiele weergave, geen snelle input en geen juiste autorisatie. Lever per eis passende waarnemingen/tests op.
+
+0. WERKWIJZE EN VASTE BRONNEN
+
+0.1 Lees de bestaande AGENTS.md-instructies, het canon, deploymentdocumentatie en de relevante geïnstalleerde frameworkdocumentatie. In apps/web/AGENTS.md staat expliciet dat de lokale Next.js-documentatie leidend is voor deze versie.
+0.2 Stel de actuele situatie vast: repository, branch, HEAD, ongewijzigd/gebruikerwerk, staging release-SHA, deploymentpad, huidige Caddy-configuratie, aanwezige stagingdatabase en bestaande autorisaties. Toon nooit secrets, verbindingsstrings of tokens.
+0.3 Gebruik een geïsoleerde branch/worktree als dat nodig is om bestaand werk te behouden. Respecteer de bestaande main → staging → deploymentwerkwijze. Maak geen tweede deploymechanisme naast de bestaande pipeline.
+0.4 Behoud de bestaande Sites-vormgeving, logo's, componenten, typografie, kleuren, animaties en overige flows. Deze opdracht wijzigt specifiek het hieronder genoemde gedrag. De oude 60%-chatpanelen en spelers-eerst-kameropening zijn dus GEEN gewenste referentie voor die nieuwe flows.
+0.5 Gebruik reference/sites-ui uitsluitend om UI/UX te vergelijken. Zet geen prototype-Auth, nepdata, lokale chatstores, testrollen of clientgestuurde scoreberekening terug over de echte backend. De echte platformcode blijft leidend voor identiteit, machtigingen, persistence en spelautoriteit.
+0.6 Leg deze wijzigingen vast in docs/CHANGESET-2026-10-13-LANDING-MOBIEL-CHAT-TIMING.md en houd een checklist per eis-ID bij. Werk conflicterende passages in het bestaande canon expliciet bij. Neem een korte verwijzing naar deze bronnen op in de bestaande AGENTS.md op een passende plek; vervang bestaande instructies niet.
+0.7 Houd besluitvorming in de repo: eis, relevante bestanden, gemaakte keuze, bewijs, resterende beperking. Nieuwe sessies moeten hiermee kunnen doorgaan zonder de chatgeschiedenis opnieuw te reconstrueren.
+0.8 Werk door tot de toegankelijke onderdelen zijn geïmplementeerd en gecontroleerd. Ontbreekt toegang tot DNS, rootconfiguratie of een fysiek apparaat, lever dan het concrete wijzigingsbestand/de testinstructie en meld precies wat nog niet kon worden uitgevoerd. Vraag niet telkens opnieuw toestemming voor al opgedragen ontwikkel- en stagingwerk.
+
+L01 — EXACTE LANDINGSPAGINA EN SOCIALE LINKS
+
+Gebruik landing/index.html uit dit pakket als visuele bron. Dit is één zelfstandig HTML-bestand met CSS, JavaScript, het originele logo en de lettertypen ingebed. Behoud de centrale logo-opstelling, zwevende afwisselende kaarten, e-mailinvoer en consistente ronde sociale iconen.
+
+Definitieve links:
+Facebook  https://www.facebook.com/share/19GY886bNL/
+Instagram https://www.instagram.com/dartspointnl/
+TikTok    https://www.tiktok.com/@dartspoint
+X         Nog geen URL. Geen fictieve link toevoegen.
+
+De eerste drie iconen zijn echte toegankelijke links, ook voordat JavaScript is uitgevoerd, met target=_blank en rel=noopener noreferrer. X behoudt de duidelijke melding dat de link volgt. Behoud de pauzeknop en prefers-reduced-motion.
+
+De pagina past bij normaal gebruik binnen één zichtbare viewport op desktop en mobiel, inclusief logo, formulier en socials. Gebruik dynamische viewporthoogte, veilige schermranden en aparte regels voor korte schermen/toetsenbord. Verberg clipping niet met alleen overflow:hidden terwijl essentiële bediening buiten beeld valt. Bij vergroten van tekst of toegankelijkheidszoom gaat bereikbaarheid voor een geforceerd scrollverbod. Bij een geopend telefoontoetsenbord mag decoratie plaatsmaken voor het invoerveld.
+
+L02 — LANDING HOSTEN VIA DE STAGINGOMGEVING
+
+Zet de pagina onder versiebeheer, bij voorkeur apps/web/public/landing/index.html, tenzij de huidige repo aantoonbaar een betere bestaande voorziening heeft. De bestaande build neemt apps/web/public al op in het webimage. Plaatsing in de stagingomgeving betekent dus: onderdeel van de normale stagingrelease, geen los bestand dat bij een volgende deployment verdwijnt.
+
+Gecontroleerde waarden uit de aangeleverde snapshot, opnieuw te verifiëren op de VPS:
+- staging runtime: /srv/dartspoint/staging;
+- staging web: 127.0.0.1:3001, webcontainer intern 3000;
+- staging realtime: 127.0.0.1:2568;
+- root-owned compose: /etc/dartspoint/<omgeving>/compose.yml;
+- native Caddy-configuratie en root-owned deploymenthelpers worden niet vanzelf door een normale webrelease bijgewerkt.
+
+DNS verwijst een hostnaam naar een server, niet naar een map. Caddy moet de gekozen publieke hostnaam vervolgens aan deze pagina koppelen. Stel de beoogde host vast uit expliciete projectafspraken; een bestaand productiehostblok is op zichzelf geen aanwijzing dat dat domein mag worden omgeleid. Gebruik een expliciete parameter LANDING_HOST/LANDING_ORIGIN als de bestemming nog niet vaststaat en lever de geparametriseerde Caddy-wijziging met het resterende DNS-invulpunt duidelijk op. Activeer die host pas als de bedoelde bestemming vaststaat. Wijzig zelf geen DNS.
+
+Voorkeursopzet: een afzonderlijk, expliciet Caddy-hostblok voor de landing, dat alleen de volgende routes naar de bestaande staging-webcontainer doorstuurt:
+- GET/HEAD /, intern herschreven naar /landing/index.html; behoud de querystring voor afmelden;
+- eventueel strikt benodigde landingassets, geen brede public-folderfallback;
+- exact POST /api/launch-signups;
+- exact POST /api/launch-unsubscribe als de hieronder beschreven afmeldflow gebruikt wordt;
+- overige paden en methoden: geen toegang via deze publieke landingshost.
+
+Publiceer langs deze host dus niet onbedoeld /lobby, /spelen, /beheer, /api/platform/*, /internal*, WebSockets of willekeurige bestanden. Behoud de werkelijk aangetroffen toegangspolitiek van staging.dartspoint.nl en realtime.staging.dartspoint.nl. De oude ZIP bevat Tailscale-beperkingen; neem niet zonder controle aan dat die live nog hetzelfde zijn.
+
+Exposeer nooit /srv/dartspoint/staging of de releasedirectory als brede Caddy-documentroot en versoepel geen directoryrechten om statische bestanden te laten werken. Deze directories bevatten ook private runtimegegevens. Het bestaande webimage serveert de specifieke pagina veilig.
+
+Als expliciet is vastgesteld dat de landing op dartspoint.nl moet komen, houd rekening met het bestaande productiehostblok. Leid een bestaande productieapp niet om op basis van een aanname. Maak geen dubbel Caddy-hostblok en overschrijf niet de hele configuratie. Lever een gerichte, omkeerbare configuratiewijziging en behoud overige hosts. Controleer met caddy validate voordat een toegestane reload plaatsvindt.
+
+Lever uiteindelijk het werkelijk gebruikte pad, hostnaam, upstream, Caddy-wijziging en benodigde A/AAAA/CNAME-records op. Vul alleen een IP in dat je op de echte omgeving hebt vastgesteld. Publiceer geen AAAA-record wanneer IPv6 voor deze host niet werkt. Bewijs lokale hostrouting onafhankelijk van DNS en test publiek HTTPS zodra DNS dat toelaat; claim geen publiek bereikbare TLS-site op basis van alleen een lokale test.
+
+L03 — E-MAILFORMULIER NAAR DE BESTAANDE STAGINGDATABASE
+
+Maak een aparte publieke serverroute, bijvoorbeeld apps/web/app/api/launch-signups/route.ts. Zet in de stagingkopie van de HTML DARTSPOINT_CONFIG.signupEndpoint op /api/launch-signups én DARTSPOINT_CONFIG.unsubscribeEndpoint op /api/launch-unsubscribe. Beide waarden moeten overeenkomen met de backend en de Caddy-allowlist.
+
+Gebruik de bestaande server-side databasevoorziening in packages/data/src/db.ts met de echte staging-DATABASE_URL en de bestaande beperkte applicatierol. Geen nieuw Supabase-project, D1-database, SQLite-bestand, localStorage-lijst, JSON-bestand in een release of productiedatabase.
+
+Voeg een nieuwe expand-only migratie toe onder supabase/migrations/. De snapshot controleert migratiechecksums: bestaande migraties niet herschrijven. Een server-only tabel zoals private.launch_subscriptions past bij de huidige opzet. Minimaal:
+- eigen stabiele ID;
+- genormaliseerd e-mailadres met unieke constraint;
+- aanmeldmoment;
+- bron van aanmelding;
+- vastgelegde toestemming/versie van de aanmeldtekst;
+- voldoende gegevens voor de afgesproken afmeldflow.
+
+Vereiste werking:
+- Trim en normaliseer het adres; valideer server-side en client-side; begrens invoer en requestbody.
+- Accepteer uitsluitend het bedoelde JSON-contract; parameterized SQL; deduplicatie ook bij gelijktijdige verzoeken.
+- Gebruik de bestaande Redis-rate-limitvoorziening voor deze publieke route. Vertrouw forwardingheaders alleen via de bestaande vertrouwde proxyketen.
+- Alleen een echte succesvolle databasehandeling mag een succesmelding opleveren. Toon laden, succes, fouten en opnieuw proberen; geen lokale fallback die ten onrechte succes toont.
+- Geef bij een reeds bestaand adres dezelfde algemene succesmelding als bij een nieuw adres; geef geen publieke lijst, telling of informatie over eerdere aanmelding terug.
+- Geef alleen de benodigde rechten aan dartspoint_app. Geen lees-/schrijfrechten via anon of authenticated voor deze tabel en geen database-/servicegeheimen in de browser.
+- De inschrijving is geen login: geen OTP, geen Auth-account aanmaken en niet zeggen dat een mail verstuurd is wanneer er geen mailprovideractie is uitgevoerd.
+- Bewaar geen volledige adressen in algemene request-/foutlogs.
+
+Gebruik voor deze route een exact toegestane LANDING_ORIGIN. De bestaande applicatieorigin blijft staan: NEXT_PUBLIC_APP_URL mag niet van staging.dartspoint.nl naar het landingsdomein worden veranderd. Maak geen algemene CORS-verruiming voor het platform. Nieuwe environmentvariabelen moeten door de bestaande strikte contracten, inventaris, workflows en releasevoorbereiding worden doorgegeven; een regel in alleen .env is niet voldoende.
+
+Het formulier belooft dat afmelden mogelijk is. Port de afmeldflow naar dezelfde stagingopslag: onvoorspelbaar token, bij voorkeur alleen de hash in de database, een bevestigingsvenster op ?afmelden=..., POST naar de specifieke afmeldroute en veilige idempotente afmelding. Geen verwijderen door alleen een emailadres of door een GET-link die een mailpreview automatisch opent. Houd de privacytekst feitelijk in lijn met de gekozen opslag en anti-misbruikvoorziening. Bij latere mailing moet iedere mail een werkende persoonlijke afmeldlink bevatten.
+
+De gebruiker vraagt voorlopig opslag, geen nieuwe mailingcampagne. Verzend niet op eigen initiatief nieuwsbrieven. De tabel valt onder de bestaande stagingbackup; bewijs dat records blijven bestaan na een normale herstart/redeploy en neem de tabel mee in gerichte herstelcontrole. Geef een beheerder een veilige manier om de aanmeldingen uit te lezen via bestaande beheer-/CLI-mogelijkheden, zonder publiek exportendpoint.
+
+U01 — MOBIEL: VRIENDEN EN BERICHTEN VOLLEDIGE VIEWPORT
+
+Buiten een actieve game openen Vrienden en Berichten als volledige mobiele schermen binnen de app, met bereikbare terugknop/navigatie. Geen onderste 60%-sheet met een leeg of irrelevant speelveld erboven. Lijsten en chatgeschiedenis scrollen binnen hun eigen beschikbare ruimte; de composer blijft boven het toetsenbord bereikbaar. Behoud bestaande visualViewport-afhandeling en safe areas waar deze nodig zijn.
+
+Tijdens een actieve game blijft de spelcontext behouden; een chat openen of sluiten mag de beurt, matchverbinding of worp niet resetten. Pas de desktopindeling alleen aan waar nodig om dezelfde flow correct te ondersteunen.
+
+U02 — KAMER EERST NAAR CHAT; OEFENEN ALLEEN BINNEN KAMER
+
+Maak expliciete toestanden voor lobby zonder kamer, kamer zonder game, oefenen in kamer en actieve wedstrijd.
+
+Na succesvolle kamerselectie:
+1. Rond eerst de echte server-side room join af en controleer toegang/capaciteit/lidmaatschap.
+2. Open de kamerchat als primaire, volledige viewportweergave wanneer er geen actieve game is.
+3. De gebruiker kan vanuit die kamer spelers bekijken, privégesprekken openen/wisselen en zelf oefenen.
+4. Start niet automatisch een wedstrijd omdat een kamer is aangeklikt.
+
+Onderzoek beide ingangen. In de ZIP wacht DartsLobby.enterGame() op mutate('room'), maar DartsApp.chooseRoom() wijzigt alleen UI/sessionStorage. Repareer deze inconsistentie: de getoonde kamer en het werkelijke serverlidmaatschap moeten overeenkomen. Respecteer bestaande beperkingen bij een actieve wedstrijd in een andere kamer.
+
+Privéchat blijft onafhankelijk van kamerselectie bestaan. Bewaar gesprekshistorie, concepten, open/gesloten tabstatus en ongelezen berichten. Geen onverwacht focusspringen naar een nieuw bericht. Het sluiten van een privétab verwijdert geen berichten.
+
+Oefenen:
+- Alleen starten met geldig serverlidmaatschap van de huidige kamer; UI én backend afdwingen.
+- Oefenen vindt binnen de kamercontext plaats; terugkeren opent dezelfde kamer/chat.
+- Lidmaatschap/heartbeat en privéchats blijven in stand.
+- Een directe /oefenen-route zonder geldige kamercontext toont de kamerkeuze of stuurt daarheen terug.
+- Oefenen verandert geen DP, divisiepunten of officiële matchuitslagen en vervangt geen lopende wedstrijd.
+- Handel verlopen lidmaatschap/reconnect duidelijk af, zonder een oefenrun stilzwijgend te laten doorgaan onder ongeldige context.
+
+U03 — ECHTE NUMERIEKE CHATBADGES
+
+Tijdens een game krijgt Chat bij nieuwe berichten een klein rood rondje met het totale aantal ongelezen berichten. In de chat krijgt ieder tabblad hetzelfde type badge met het aantal voor die specifieke chat.
+
+Definitie: tel ongelezen berichten, geen gesprekken. Neem de relevante kamerchat, eventuele afzonderlijke wedstrijdchat en de bereikbare privégesprekken mee; tel ieder channel-ID slechts eenmaal. Ook een gesloten privétab met nieuwe berichten moet bereikbaar en in de privélijst herkenbaar blijven. Tel geen eigen berichten, verborgen/geblokkeerde inhoud of onzichtbare systeemitems mee.
+
+Voorbeeldtest: kamer 3 + privé A 2 + privé B 1 = totaal 6. Privé A lezen maakt totaal 4; de kamer blijft 3 en privé B blijft 1. Bij nul verdwijnt de badge. Grote aantallen mogen visueel 99+ tonen, met de werkelijke telling behouden.
+
+Herbruik en verbeter de bestaande channel_memberships/last_read_cursor-infrastructuur. Maak niet daarnaast een los frontendtellertje. Een cursorverschil is niet automatisch het aantal leesbare berichten: de huidige cursorberekening telt ook eigen en mogelijk verborgen sequenceposities.
+
+Zorg dat kamer- en wedstrijdkanalen werkelijk leesstatusregels hebben; in de ZIP worden channel_memberships alleen bij privékanalen aangemaakt, waardoor een update voor een kamer geen rij kan raken. Bepaal de initiële cursor expliciet: bij eerste toetreding mag eerdere historie standaard gelezen zijn; bestaande leesstatus bij terugkeer blijft behouden.
+
+Markeer berichten alleen gelezen als de bedoelde chat daadwerkelijk zichtbaar is, de app/tab actief is en de nieuwe berichten in beeld zijn. Niet tijdens verborgen tabbladen, een dicht paneel, het lezen van oude historie of tijdelijke quiet-turn-buffering. Voorkom dat een later eigen bericht ongemerkt eerdere ongeziene berichten als gelezen overslaat.
+
+Dedupliceer berichten/events op stabiele ID's en reconcilieer bij reconnect, wisselen van scherm en opnieuw laden. Deel dezelfde leesstatus en formattering tussen lobby, vrienden, berichten, kamer en game. Gebruik relevante realtime-events waar de bestaande infrastructuur dat ondersteunt; voorkom extra agressieve bootstrap-/chatpolling die het spel vertraagt. Meet eventuele resterende notificatievertraging.
+
+U04 — OVERAL DUIDELIJKE RANKINGTERMINOLOGIE
+
+Gebruik als zichtbare merknaam: DP — DartsPoints. Leg bij eerste relevante uitleg uit: rankingpunten. Korte scoreweergave bijvoorbeeld '1.520 DP'. Verwijder zichtbare 'Elo' uit spelersschermen, ladder, profielen, lobby, speluitleg, beheer, tooltips, aria-labels, exportkoppen en bestaande relevante mailteksten.
+
+Dit is in eerste instantie een terminologie-/presentatiewijziging, geen ander ratingsysteem. Behoud ratings, historie, plaatsingsregels, formule en servervalidatie. Interne Elo-functie- of veldnamen hoeven niet massaal te worden hernoemd; verander databasevelden alleen als daar een concrete noodzaak en migratie voor is.
+
+Divisie-/competitiepunten voor het klassement blijven een aparte grootheid. Maak deze niet stilzwijgend gelijk aan DP en presenteer DP niet als een koopbaar tegoed. Leg de woordenlijst vast zodat toekomstige functies dezelfde termen gebruiken.
+
+U05 — PROFIELPADDING EN HEROHOEKEN
+
+Klikken op een spelernaam in de ladder of op een speler/profiel in de lobby opent hetzelfde consistente profiel. Pas de gedeelde profielcomponent aan, niet slechts één ingang.
+
+De inhoud staat nu te dicht tegen de zijkanten: geef identiteit, statistieken, vorm, badges en aanvullende secties consistente binnenmarges, als startpunt circa 16px op mobiel en 24px op desktop, passend bij bestaande tokens. De hero/headerafbeelding blijft juist over de volledige breedte aansluiten. De hoeken linksonder en rechtsonder van die hero zijn recht (radius 0), zodat daar geen afgeronde gaten ontstaan. Behoud zo nodig de bovenste buitenhoeken van de profielcontainer.
+
+Controleer ladder-, lobby-, vrienden- en eigen-profielingangen, lange namen, ontbrekende hero en 320px schermbreedte. Geen horizontale overflow of op elkaar geplakte bediening.
+
+U06 — KAMERNAVIGATIE 'MEER' EN ECHTE BEHEERRECHTEN
+
+Binnen een kamer heet de betreffende onderste navigatieknop 'Meer', met passend menu-icoon en toegankelijk label. In de lobby mag een daadwerkelijke profielpagina 'Profiel' blijven heten. Het eigen profiel is binnen 'Meer' bereikbaar.
+
+Toon 'Kamerbeheer' uitsluitend wanneer de ingelogde gebruiker volgens de server de huidige kamer daadwerkelijk mag beheren. Gebruik stabiele user-/room-ID's en een eenduidige capability, geen hardcoded naam, komma-gescheiden gebruikersnamen of alleen een brede UI-rolcheck. Respecteer de bestaande regels voor kamerbeheerder/moderator en platformbeheerder; geef geen extra rolrechten om de UI makkelijker te maken.
+
+De backend blijft iedere beheermutatie zelf controleren. Gewone speler, bevoegde kamerbeheerder, beheerder van een andere kamer en platformbeheerder krijgen elk het juiste resultaat. Een directe URL of zelfgemaakt verzoek mag de verborgen knop niet omzeilen. Houd rekening met meerdere beheerders en ingetrokken rechten.
+
+U07 — RECENTE ACTIES EN ACTIELOGBOEK LEESBAAR
+
+Gebruik één gedeelde formatter voor recente acties, het actielogboek en bestaande exports. Toon wie, welke begrijpelijke actie, welk herkenbaar onderwerp, relevante wijziging en lokale datum/tijd. Voorbeelden van stijl (geen echte nieuwe auditrecords):
+- 'Een beheerder heeft de kamernaam gewijzigd van Avondkamer naar Gezellige avond.'
+- 'De platformrol van deze speler is gewijzigd van Speler naar Platformbeheerder.'
+
+Vertaal bekende actiecodes, rollen, statussen en categorieën naar gewone Nederlandse tekst. Onderscheid globale rollen en kamerrechten: de globale rol admin betekent Platformbeheerder, niet Kamerbeheerder; een toewijzing van kamerbeheerrechten is een eigen gebeurtenis. Resolveer entiteiten via ID's en waar nodig een historische naamsnapshot. Toon geen UUID/JSON/code als hoofdtekst. Technische details mogen ingeklapt beschikbaar blijven. Geef eerlijke leesbare fallbacks voor onbekende acties of verwijderde gebruikers/kamers; verzin geen naam of handeling.
+
+Belangrijke bestaande fout: in de ZIP voegt darts-admin.tsx vier auditarrays samen, maar de vier echte adapters geven allemaal dezelfde platform.audit terug. Dat toont dezelfde actie vier keer. Gebruik één gezaghebbende feed of dedupliceer op audit-ID vóór formattering, paginatie en export. Herschrijf historische auditrecords niet uitsluitend om de presentatie te verbeteren.
+
+P01 — RICHTVERTRAGING AAN DE OORZAAK OPLOSSEN
+
+De gebruiker ervaart bijna een seconde tussen stoppen en stilstaand indicatiestreepje. Diagnoseer de huidige stagingimplementatie en los zowel lokale feedback als de gezaghebbende worptiming op. Een stilgezet plaatje terwijl de server de pijl veel later op een andere positie vastlegt is geen volledige oplossing.
+
+Concrete aanwijzingen uit de ZIP, eerst verifiëren in de huidige code:
+- apps/web/lib/use-server-game.ts verstuurt de stopactie zonder de meter direct te bevriezen. requestAnimationFrame blijft lopen tijdens sending; de y-meter wordt zelfs tijdens vlucht opnieuw berekend.
+- packages/data/src/matches.ts bepaalt het raakpunt met Date.now() na wachtrij, verificatie, databasewerk en locks. De worp is dus afhankelijk van verwerkingstijd in plaats van alleen een toegelaten invoermoment.
+- apps/realtime/src/server.ts zet iedere 100ms publicatiewerk en spelcommando's op dezelfde seriële wachtrij. Seriële queries per ontvanger kunnen daar backlog veroorzaken.
+- De klokoffset wordt bij ontvangst als serverAt - Date.now() bepaald, zonder gefilterde RTT-/offsetmeting.
+- Oefenen heeft een vergelijkbaar HTTP-wachtpatroon; competitie gebruikt de gedeelde servergame-hook.
+
+Meet apart: input-event, begin/einde handler, zichtbaar vastzetten, verzenden, serverontvangst, wachttijd in queue, database-/pool-/locktijd, autoritatieve berekening, receipt en render. Noteer lokaal-stoppositie versus bevestigde positie. Veronderstel niet dat alle vertraging netwerk is.
+
+Lokale respons:
+- De timingknop reageert op primary pointerdown voor muis/touch/pen; behoud gelijkwaardige toegankelijke toetsenbordbediening.
+- Voorkom dubbele acties door de latere compatibility-click, toetsherhaling, multitouch en dubbele taps. Eén fysieke actie mag niet beide assen of twee worpen stoppen. Voeg geen arbitraire lange debounce toe die geldige volgende invoer vertraagt; onderscheid fysieke inputacties en controleer de actieve phase-token.
+- Leg bij input direct de lokale, voorlopige stoppositie vast en gate/cancel de relevante RAF synchroon. Geen later frame mag deze overschrijven tijdens pending.
+- Geen netwerkawait, audio, opslag of zware React-update vóór het vastzetten. Gebruik een monotone, tijdgebaseerde animatie en actuele refs/waarden, geen stale closures of smoothing op het richtstreepje.
+- De beide assen blijven tijdens de vlucht staan; de bevestigde waarde komt uit de gezaghebbende spelstaat. Behoud score-update-op-impact en bestaande turn/phase-logica.
+
+Serverautoriteit en timingbeleid:
+- Lees docs/04-COLYSEUS-SPEL-EN-DATA.md. Het canon beschrijft serverONTVANGSTtijd als voorgesteld V1-beleid; de huidige VERWERKINGStijd wijkt daarvan af.
+- Leg een vertrouwd ontvangsttijdstip onmiddellijk bij WS/HTTP-ingress vast, vóór de queue en langzame verwerking, en gebruik dat voor toegelaten commands onder de gekozen timingversie. Authenticatie en alle overige controles blijven verplicht voordat een actie mag worden toegepast.
+- Bewaar determinisme/idempotentie: dezelfde command-ID mag bij retries niet op een later gunstiger of ongunstiger moment opnieuw worden berekend. Behoud actor, beurt, phase-token, state-version, sequence, reconnect en scorevalidatie.
+- Valideer dat het gekozen/gecompenseerde moment binnen de betreffende fase valt, niet vóór phaseStartedAt of een eerder geaccepteerde actie ligt en niet in de toekomst staat. Bewaar het eenmaal toegelaten tijdstip en de timingversie bij commandregistratie/receipt. Retries en procesherstel kiezen geen nieuw worpmoment. Test grensgevallen rond fasewissels, reconnect en transactieretries.
+- Deel de deterministische timingfunctie tussen weergave en server. Gebruik periodieke ping/echo's met gefilterde RTT/offset voor de weergegeven serverklok.
+- Coalesce verouderde publicatiejobs en voorkom dat periodieke snapshots de invoerqueue onbeperkt vullen. Behoud geserialiseerde gezaghebbende mutaties; verwijder locks/turnchecks niet als 'optimalisatie'. Hergebruik veilige snapshots waar mogelijk in plaats van dezelfde databaseprojectie per kijker opnieuw te bouwen.
+- Serverontvangsttijd alleen kan niet garanderen dat de uiteindelijke pijl exact op de lokale klikpositie staat bij willekeurige netwerkvertraging. Meet dit onderscheid en benoem het eerlijk.
+- Wanneer na bovenstaande fixes nog hinderlijke correcties bestaan, werk het reeds toegestane beleid voor begrensde, serverafgeleide latentiecompensatie uit en implementeer het per match geversioneerd, met gemeten RTT/jitter, expliciete grenzen en tests. Werk canon en protocol samen bij. Gebruik geen willekeurig teruggedateerde clienttimestamp of door de client opgegeven score/x/y als kortere weg.
+
+Richtwaarde voor deze opdracht: lokale input → zichtbaar bevroren meter op de eerstvolgende beschikbare repaint, gewoonlijk binnen 1–2 frames, met p95 ≤50ms op de benoemde doelapparaten in normaal foregroundgebruik. Dit is een projectdoel, geen universele browsergarantie. Meet daadwerkelijke resultaten en aantallen. Laat onder kunstmatig 100/300/1000ms vertraagde serverbevestiging zien dat de lokale stop niet blijft doorlopen; de bevestiging mag pending zijn.
+
+Test echte touch waar beschikbaar, muis en toetsenbord; 60Hz en waar beschikbaar 120Hz; gewone wedstrijd, competitie en oefenen; inkomende chats; 20/80/180/350ms RTT, jitter, packet loss en queuebelasting. Rapporteer óók de positiecorrectie na serverbevestiging, niet alleen een mooie lokale responstijd. Gebruik traces/frame-opnamen voor fijnmazige timing; alleen een algemene INP-score is hiervoor onvoldoende. Claim geen fysieke-apparaattest als slechts browseremulatie mogelijk was.
+
+A01 — CONTROLEPUNTEN EN OPLEVERING
+
+Houd per eis-ID een bewijsregel bij: betreffende bestanden → implementatie → concrete verificatie → resterende beperking.
+
+Minimale visuele vergelijking:
+- 320×568, 360×800, 390×844;
+- tablet 768×1024;
+- horizontale telefoon 844×390;
+- desktop 1366×768 en 1920×1080;
+- telefoon met open toetsenbord, safe areas en lange tekst.
+
+Leg vóór/na vast voor landing, vrienden, berichten, kamerchat, chat tijdens game, profiel en Meer-menu. Toets uiterlijk aan de meegeleverde Sites-bron; toets het nieuwe gedrag aan deze opdracht. Maak geen schijnbaar volledige schermen door inhoud of buttons buiten de viewport te knippen.
+
+Functionele scenario's:
+1. Aanmelden schrijft exact één record in staging; dubbel/gelijktijdig aanmelden blijft één record; ongeldig adres/foute origin/body/methode/rate limit en DB/Redis-storing geven een passende fout. Geen OTP/account of fictieve verzendmelding. Afmelden werkt en data overleeft herstart/redeploy.
+2. Publieke landinghost geeft alleen toegestane routes door; beschermde app/API/realtime is er niet via bereikbaar. De bestaande stagingapp werkt nog. Caddy-validatie en de relevante deploymentchecks slagen.
+3. Vrienden/Berichten vullen mobiel het scherm zonder game; composer en terugbediening blijven bereikbaar.
+4. Kamerselectie en kamerwissel synchroniseren serverlidmaatschap vóór de chat opent. Privéconcepten/history blijven. Oefenen zonder kamer wordt ook server-side geweigerd; met kamer werkt het en blijven officiële scores/DP onaangetast.
+5. Minimaal drie testaccounts, waarvan één ontvanger en twee verschillende afzenders: kamer 3 + privé A 2 + privé B 1 = 6 unread; één tab lezen verlaagt alleen die telling, eigen berichten tellen niet; gesloten DM, quiet turn, verborgen browsertab en reconnect geven geen foutieve gelezen-status of dubbeltelling.
+6. Kamerbeheer is zichtbaar én uitvoerbaar uitsluitend volgens actuele kamerrechten, inclusief meerdere beheerders en andere-kamerbeheerder.
+7. Geen zichtbare Elo-labels in relevante app-/beheer-/exportteksten; divisiepunten blijven onderscheiden.
+8. Profielpadding en rechte onderste herohoeken zijn consistent bij alle ingangen.
+9. Audit-ID's zijn uniek in recente acties/log/export; bekende events zijn leesbaar en onbekende/verwijderde entiteiten hebben veilige begrijpelijke fallbacks.
+10. Voor/na-speltimingrapport met lokale stop, serverqueue, DB en definitieve positiecorrectie; geen dubbele input, geen weglopende y-meter tijdens vlucht, geen versoepelde scoreautoriteit.
+
+Gebruik de bestaande typecheck, tests, build en operationschecks waar relevant. Voeg gerichte tests toe voor gewijzigd werkelijk gedrag; geen tests die alleen nieuwe CSS-klassennamen controleren. Doe geen onnodige volledige herbouw na iedere kleine wijziging; bundel logische commits en doorloop de afgesproken CI/deploymentgates.
+
+Lever uiteindelijk op:
+- overzicht van gewijzigde bestanden en commits;
+- bijgewerkt canon en woordenlijst DP/rankingpunten;
+- daadwerkelijk gebruikte stagingroute/pad en het Caddy-configuratieverschil;
+- benodigde DNS-records met verifieerbare waarden of exact benoemde nog in te vullen host;
+- nieuwe migratie en verifieerbare opslag van aanmeldingen in staging;
+- screenshots en functionele/timingbewijzen per eis-ID;
+- bestaande pipeline/release-SHA en, indien toegankelijk, de gedeployde stagingcontrole;
+- een korte lijst met eventuele aantoonbaar geblokkeerde verificaties.
+
+Noem een onderdeel pas afgerond wanneer implementatie en passende verificatie zijn gedaan. 'Staat in de code', 'lokaal gesimuleerd' en 'op staging geverifieerd' zijn verschillende statussen.
+
+BRONNEN VOOR DE TECHNISCHE UITWERKING
+
+- Bestaande repo: apps/web/AGENTS.md; docs/04-COLYSEUS-SPEL-EN-DATA.md; ops/README.md; ops/Caddyfile.staging; ops/Caddyfile.production; ops/scripts/deployment_config.py; .github/workflows/deploy.yml.
+- Pointer input: https://developer.mozilla.org/en-US/docs/Web/API/Element/pointerdown_event
+- Animatietiming: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+- Inputvertraging meten: https://web.dev/articles/optimize-inp
+- Caddy routering: https://caddyserver.com/docs/caddyfile/directives/handle
+- Caddy proxy: https://caddyserver.com/docs/caddyfile/directives/reverse_proxy
+
+Begin nu met het vaststellen van de actuele repo-/stagingstaat en voer daarna deze opdracht uit. Houd de bestaande DartsPoint-ervaring herkenbaar en maak het gevraagde gedrag aantoonbaar werkend.

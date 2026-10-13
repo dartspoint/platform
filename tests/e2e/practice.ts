@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
 import {chromium} from '@playwright/test';
-import {login,get,origin} from './helpers';
+import {login,get,post,origin} from './helpers';
 const browser=await chromium.launch();
 try{
  const guest=await browser.newPage();await guest.goto(origin+'/oefenen');assert.ok(guest.url().includes('/inloggen'));await guest.close();
- const actor=await login(browser,'Practice');actor.page.on('response',async r=>{if(r.url().includes('/api/platform/practice')&&!r.ok())console.log('Practice API rejected',r.status(),(await r.json()).code);});await actor.page.goto(origin+'/oefenen?les=1');
+ const actor=await login(browser,'Practice');await actor.page.goto(origin+'/oefenen');assert.ok(actor.page.url().includes('/lobby'),'Bare practice selects a room');await post(actor.page,'room',{roomId:(await get(actor.page,'bootstrap')).rooms.find((r:any)=>r.name==='Nederland 1').id});actor.page.on('response',async r=>{if(r.url().includes('/api/platform/practice')&&!r.ok())console.log('Practice API rejected',r.status(),(await r.json()).code);});await actor.page.goto(origin+'/oefenen?les=1');
  for(let dart=0;dart<5;dart++){
   await actor.page.getByRole('button',{name:'Stop de richting',exact:true}).click();await actor.page.getByRole('button',{name:'Stop de hoogte en gooi',exact:true}).click();
   if(dart<4){await actor.page.getByRole('button',{name:'Volgende pijl',exact:true}).click();}else await actor.page.getByRole('heading',{name:'Jij hebt het ritme.'}).waitFor();

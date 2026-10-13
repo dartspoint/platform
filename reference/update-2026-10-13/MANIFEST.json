@@ -1,0 +1,1052 @@
+{
+  "created_at": "2026-10-13",
+  "purpose": "DartsPoint launch/staging, mobile chat, permissions, audit and timing implementation handoff",
+  "landing_site_source_commit": "82244219774fa8faf9742e180799e1be1f5784ab",
+  "landing_site_url": "https://dartspoint-binnenkort.dgwebserv.chatgpt.site",
+  "ui_reference_commit": "f57c505709e317d457de447f00c822c270edcdaf",
+  "ui_reference_worktree_clean": true,
+  "ui_reference_scope": [
+    "app",
+    "components",
+    "lib",
+    "public"
+  ],
+  "platform_diagnostic_source": "User-uploaded platform-main.zip from 2026-10-12; not current live VPS verification",
+  "files": [
+    {
+      "path": "BRONKAART.txt",
+      "size": 5716,
+      "sha256": "506178c642d5bee7a1f93f6a9a11c9a99cf0f57bfd0391c5522f1166420214b9"
+    },
+    {
+      "path": "LEES-MIJ.txt",
+      "size": 2166,
+      "sha256": "bedbb8b26937dcc5996847e21e95e74454cda5aa08c27bf878a5ab345bd25e84"
+    },
+    {
+      "path": "START-HIER-CODEX.txt",
+      "size": 31525,
+      "sha256": "e7fbca64c0bccd9211b28b6fea39a148c4e3648c7110367fea8d998a5334e6b2"
+    },
+    {
+      "path": "landing/index.html",
+      "size": 2783876,
+      "sha256": "f76772ee34e5a3e7b070f924b5614d8ad68d4e970748f57fc1ca90a5f7af55de"
+    },
+    {
+      "path": "reference/sites-ui/app/[variant]/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/[variant]/page.tsx",
+      "size": 599,
+      "sha256": "d40c2cbe5df99972e5a95af7f401f0ec799c6ef4f120b2b8c3df4e3fb58f590a"
+    },
+    {
+      "path": "reference/sites-ui/app/api/fair-play/route.ts",
+      "size": 8050,
+      "sha256": "08f2f549c3e5718fc07e3ee676e65329ed06b3cc82cadc56929b5e4f0a9d8872"
+    },
+    {
+      "path": "reference/sites-ui/app/beheer/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/beheer/page.tsx",
+      "size": 443,
+      "sha256": "8a42e26cba13f81f48767cb736db1ec7ae993ceb2f60476ac5b019d4a68c3711"
+    },
+    {
+      "path": "reference/sites-ui/app/chatgpt-auth.ts",
+      "size": 2550,
+      "sha256": "4265a2e7c2dcb3a6f4b7026f762bf5b6e4caec76cc13c0a45987ee9a9f2e42cc"
+    },
+    {
+      "path": "reference/sites-ui/app/clubhuis/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/clubhuis/page.tsx",
+      "size": 252,
+      "sha256": "ba2c1b52a8aabf56be2c9081533bda6a0efb253669f9ed1dfdf95e6010b3922c"
+    },
+    {
+      "path": "reference/sites-ui/app/divisies/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/divisies/page.tsx",
+      "size": 273,
+      "sha256": "fc6034bab8c12c091129f4f1fe466bc303ce9f48ca34c80f11ebf98b6e9e7b1c"
+    },
+    {
+      "path": "reference/sites-ui/app/globals.css",
+      "size": 14635,
+      "sha256": "740ea6c3b8d0842787a84129b015f137a363a04b296f2d16c6bfb5e3685d53f0"
+    },
+    {
+      "path": "reference/sites-ui/app/inloggen/page.tsx",
+      "size": 447,
+      "sha256": "b1234d7df56742f5a7740771a22071208f84bf80fb394680a751aebacb683811"
+    },
+    {
+      "path": "reference/sites-ui/app/layout.tsx",
+      "size": 2121,
+      "sha256": "eb30b2f84a87dd50895d389135cf272043e64b26d8e5e9e3dd231e5ef11ca38d"
+    },
+    {
+      "path": "reference/sites-ui/app/lobby/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/lobby/page.tsx",
+      "size": 239,
+      "sha256": "305bbfad24ef82f742986eb46ed9dca8741d91689d8cd81aaff982d950934088"
+    },
+    {
+      "path": "reference/sites-ui/app/mailvoorbeelden/layout.tsx",
+      "size": 318,
+      "sha256": "56b62b64a6f292863f69954bab4c0487ba9fc27d184c011afe6254b1f5b6c622"
+    },
+    {
+      "path": "reference/sites-ui/app/mailvoorbeelden/page.tsx",
+      "size": 148,
+      "sha256": "80619ae22c76fa31f6c2a27c27dd9840b564341160236c1f2a4f8d9d1438f197"
+    },
+    {
+      "path": "reference/sites-ui/app/oefenen/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/oefenen/page.tsx",
+      "size": 315,
+      "sha256": "1eb0e404a243c9ec6bb43fcf15e19862ab61d0f105bd078d9db09aabcf38f36d"
+    },
+    {
+      "path": "reference/sites-ui/app/page.tsx",
+      "size": 1062,
+      "sha256": "76b2b90ee0b3046a844b079c489792d7bcd12372be5baa059414ecfd2e891cea"
+    },
+    {
+      "path": "reference/sites-ui/app/registreren/page.tsx",
+      "size": 563,
+      "sha256": "fe8d9f89a91307260626e545e2dc804da32377bf0ed30b8b92ff0d1942150134"
+    },
+    {
+      "path": "reference/sites-ui/app/robots.ts",
+      "size": 483,
+      "sha256": "8851d365afb827d23b2163574a1ebf1e63e598f57a839e1f1ad51e75f4d03ecc"
+    },
+    {
+      "path": "reference/sites-ui/app/sitemap.ts",
+      "size": 297,
+      "sha256": "3b6e528428094254a0975dff472169f3070794467a8413c5885d7b41405e251e"
+    },
+    {
+      "path": "reference/sites-ui/app/spelen/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/app/spelen/page.tsx",
+      "size": 233,
+      "sha256": "582e96f7c4d1fa1d5a2ff403a87364987c286e4f8e87a63e9b19454a80c7689e"
+    },
+    {
+      "path": "reference/sites-ui/app/toernooi/[id]/page.tsx",
+      "size": 389,
+      "sha256": "63b9151a8ca9a5e8942c6592fc29a32ce1bca9120adfde956d3a3e769ef6e2dd"
+    },
+    {
+      "path": "reference/sites-ui/app/toernooi/layout.tsx",
+      "size": 359,
+      "sha256": "ec861bd08c4f80685e3c80447bb4accf0699c70aebd57fca9a91c0c3fff92ae3"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-admin.css",
+      "size": 13656,
+      "sha256": "9abe940c063b8d322dc5d972cbebc53565ffb20437e8be9862ad46d59eaea05f"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-admin.tsx",
+      "size": 20006,
+      "sha256": "1b76c73b07f7eaecd1a8c83cc167c598cbdab34bf86de9523ccf17ef2364fad2"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-operations.css",
+      "size": 16028,
+      "sha256": "50ef815bc844c964bd8b774494136daf1c9ef4afb38252377fc0eea7045374d4"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-operations.tsx",
+      "size": 23997,
+      "sha256": "f2f15afda5ee2483941030d626621ca6995a3147f168ea085b4da642e43df143"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-seasons.css",
+      "size": 12993,
+      "sha256": "5e268ee4b4a1cc5a1ecaca7b8874822e50a6b71a37c1b6903eb13ea75758d79b"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-seasons.tsx",
+      "size": 24812,
+      "sha256": "ed6437bfd337f58437796cc8274baaa435077bd8a9556a2f44652b03991e391a"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-settings.css",
+      "size": 9912,
+      "sha256": "5c0921fdbc6c76790c1a783db2ea9adb4cd430275ac9440ffa44ba6921dd8c3b"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-settings.tsx",
+      "size": 17904,
+      "sha256": "c14f4ba2d6daaedf67d7d7412c28de46e938c16cb975843a2ac7bcdb2584657d"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-tournaments.css",
+      "size": 29234,
+      "sha256": "0c73bbd5fb1730df2e4f055a5dbea536f41203a4b951dbc506048dee0d2dcdad"
+    },
+    {
+      "path": "reference/sites-ui/components/admin/darts-tournaments.tsx",
+      "size": 59342,
+      "sha256": "f30f45d53d4f7f8cd0de8e96806d7e81f5d5f590d7251e9f9f5fe153d6bbb98e"
+    },
+    {
+      "path": "reference/sites-ui/components/connector-error.tsx",
+      "size": 1082,
+      "sha256": "2d0d04559952ce9c9a327cca499f4b99f35d885cccfce375230e116695d3f155"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-app.css",
+      "size": 57653,
+      "sha256": "6943ffe60b25ea19ba8ebfa11d260cb85c430bab2d4cb9549437a0e43f8261f6"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-app.tsx",
+      "size": 26307,
+      "sha256": "c064fe685933c7b58ab91ad2e2afb10941b347b9f4953365d1ef7455a7a8d24f"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-community.css",
+      "size": 49872,
+      "sha256": "470f4ab891efd1e488e2def8031a935fc6d41491f693608e2bc72749e42bdb9e"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-community.tsx",
+      "size": 40583,
+      "sha256": "e6eed6bc41c91818fb2426b1a41aafed2cb24ddbf43df7cd23694726e904225d"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-competition-game.css",
+      "size": 2783,
+      "sha256": "ce7b916f356a104075b9d53ec096d76d1b83520a8bb83159ea61c8a9d587379c"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-competition-game.tsx",
+      "size": 8475,
+      "sha256": "a24f316d7d97f993d49a5e9cfe8ba8f0739fcdc4ca8f538c120137246d7036b8"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-demo-gate.tsx",
+      "size": 912,
+      "sha256": "eac0c50a03b053fa8d070aecba1f4d54e2295277953682c9cb1240cef65d0eec"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-desktop.css",
+      "size": 11876,
+      "sha256": "f27322c95eeb91ef764568f723a42cdcfb5ac54e77d612a8a8abe060ccc7fbc7"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-divisions.css",
+      "size": 16465,
+      "sha256": "4ad2a5d870c84263202e80b42f6c11aaddda458f2b5c9238c6521b0ca35220d9"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-divisions.tsx",
+      "size": 14974,
+      "sha256": "52245021331b419e394d35dd1019b45e20104eb63f1f884a307fc9aaeaec9083"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-email-preview.css",
+      "size": 8483,
+      "sha256": "2bc2a0fc9c4ca2c694ea2f23b161e741bf7522748c93f98707d0c8d3a58864f1"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-email-preview.tsx",
+      "size": 5072,
+      "sha256": "5e7bf9ccee56142deb9a326d76b2b88c80442da24c62c7564352eb784abc8f1f"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-game.css",
+      "size": 11265,
+      "sha256": "f6d4bda1dcd7fee226198a58c5eaff564aa8600e0f6d36f5faeee1855f402fb4"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-game.tsx",
+      "size": 39418,
+      "sha256": "1163615059ce97cb6ca12a19b5a06d6fa6a360613b61dc08378cca098a1afd2a"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-lobby.css",
+      "size": 20242,
+      "sha256": "90402ebe881d107f49825e0dfe47b2d9b5f3f9af9fc0f53ffe08483b5f5310de"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-lobby.tsx",
+      "size": 26833,
+      "sha256": "d73d38700f4a1a81b94515955ca318515225f449ab34728f92bf049e32c542ef"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-login.css",
+      "size": 19951,
+      "sha256": "793ccd2bf380d5881fffe392f5c106608e2ad386aaeb323041261caf1ec2080f"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-login.tsx",
+      "size": 21802,
+      "sha256": "76d87a2674d6d1080b9627876c6d4ee0df148001d8415cf867242ecf02a8687b"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-marketing.css",
+      "size": 54829,
+      "sha256": "9739e722b34d3f44bf4c1ae2593bdcfc7ec09fc51c4abef0d93ee4c1e31f51e9"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-marketing.tsx",
+      "size": 25020,
+      "sha256": "8ba04dd079a25835f732c4cc3666229e5ca873b4fefa52ace76b294f62281d4f"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-match-experience.css",
+      "size": 8655,
+      "sha256": "87a5f9ff669920a970c425baf87753324271484b1c5b6ba7ef958bbf0efd67b7"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-match-experience.tsx",
+      "size": 11377,
+      "sha256": "74b9e8cd091f320948b357b137dd698581b25c8b64358c0d422e8a586878632a"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-match-invite.css",
+      "size": 4560,
+      "sha256": "f63815b2bdb76d9e475e103cb36d6fe94dd3dcd9c8aec0bf796383a3240f61fc"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-match-invite.tsx",
+      "size": 5344,
+      "sha256": "bf13088d14906fef045934cd919e36e99f545c95bcef1753e6469fc40fdd9786"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-play-shell.css",
+      "size": 14901,
+      "sha256": "9e57f7b35d8725ab4021bb2bd1d6a34f2149727b83b1dd4cb8762d65c6d6fce7"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-player-menu.css",
+      "size": 4487,
+      "sha256": "7b1c9cbae7dc1ebfbcb83bd1cbda9fbbaf92eca4c16a4308182e81b75525eddc"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-player-menu.tsx",
+      "size": 10496,
+      "sha256": "d6ef8cfad0bf42390a2f899165c8bdcfa7e968d9910c42cedbcb59c3fc2ca1c0"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-playfield.css",
+      "size": 7854,
+      "sha256": "7b56ca70ca7dcbdf3362828d2cf0eafd08dc85d479fdc34abd43de351dfed5d6"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-practice.css",
+      "size": 16140,
+      "sha256": "e8342594ac165c82c8dbc471f39bcd18da6ac9bef7cfd65bf218aa74bd9eb4cd"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-practice.tsx",
+      "size": 24183,
+      "sha256": "6e56ea96e5f7489fae9ebcc289a73d8bc8d32f4242818841fda994186e120a1d"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-preferences-panel.tsx",
+      "size": 2813,
+      "sha256": "f6fce3d2aca1a1ad37020ab4073660abab091b0939f3211b863506e7c00b32bf"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-pwa.tsx",
+      "size": 2842,
+      "sha256": "a94178cb94e98c72f51724815b6f849b230aa83f73620edf4f81431b85638f75"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-registration.css",
+      "size": 3133,
+      "sha256": "2691db22e06887a1d1e98aebb9fb4f5588bc843ae8a541a16136ba4e4c95715e"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-registration.tsx",
+      "size": 243,
+      "sha256": "3bdcedd16ef7436e910ade8f3bef35fe78db6f797473530ad917d74101694c01"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-social-tools.css",
+      "size": 5660,
+      "sha256": "c0d4a823d73f37bb7ac9e66b774e8bfb177c27752cb8433aed3fdfef4e1581a9"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-social-tools.tsx",
+      "size": 10782,
+      "sha256": "248daaab013fea27e143bef982c49d7b3774703f12aacbf42f0a7cca060cc91a"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-tournament-room.css",
+      "size": 14304,
+      "sha256": "4cb94b9ede01dd192cb2862b910b37a58521a60b28d0863c85934044c88c436d"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-tournament-room.tsx",
+      "size": 18423,
+      "sha256": "6fcd38ea7f15027d52e1184879c2578229eadf691a2db06b92d1e5389e938fad"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-v1-hub.css",
+      "size": 11343,
+      "sha256": "9d5c0fedd4003cca2982a7c0698bc7b19aeae8094e618a81eb53a78b8ab3b397"
+    },
+    {
+      "path": "reference/sites-ui/components/darts-v1-hub.tsx",
+      "size": 11743,
+      "sha256": "1c4e975e01471662780e5fe9a540dc7810a7bc3134fb08c7a524392210a63d14"
+    },
+    {
+      "path": "reference/sites-ui/components/design-studio.tsx",
+      "size": 5491,
+      "sha256": "ade2203f684b39b0df0d88d7f03e49ead3bcb24a1d26181ddf603ad517ffbd90"
+    },
+    {
+      "path": "reference/sites-ui/components/division-badge.css",
+      "size": 753,
+      "sha256": "a825d3f748603db9e03bf425db5dc8c09d8afc380f5656b89852f86fdcd73d34"
+    },
+    {
+      "path": "reference/sites-ui/components/division-badge.tsx",
+      "size": 905,
+      "sha256": "996886fbe09f94b3dd6a836fd1a26f0655d93d1bf83ad52335d9833c07ef77f8"
+    },
+    {
+      "path": "reference/sites-ui/components/player-identity.css",
+      "size": 904,
+      "sha256": "eb42cb1b1dc6e3b22a47df83c8af8cb5bd2dfee5d6b93a57c59932967377f081"
+    },
+    {
+      "path": "reference/sites-ui/components/player-identity.tsx",
+      "size": 4434,
+      "sha256": "e18240a87a2f05647876ba478f909e020fb48ed3c2920d5aade666374ed83d1e"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/accordion.tsx",
+      "size": 2048,
+      "sha256": "a4f153089ba886dfcf73fac26b5c01ca933fa12fbe88df6fb723912bfffdfbb0"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/alert-dialog.tsx",
+      "size": 5439,
+      "sha256": "9a8d950f2b9b4352d5ebb762fb44d5c28c2d353aa29712071973656a8736e311"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/alert.tsx",
+      "size": 1614,
+      "sha256": "2cc59b5f7bda91c1670884b1bf46bfc8a2a6f226cef184f5762acc037188885b"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/aspect-ratio.tsx",
+      "size": 274,
+      "sha256": "b1c157886236782cb92d8fbcd4749532aaf6d8aabefd6e157ca40358f902f407"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/attachment.tsx",
+      "size": 6002,
+      "sha256": "ae8a25dd1a896d3964e3ef54d97e51221b418cde287dfd794428b89951c5c790"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/avatar.tsx",
+      "size": 2916,
+      "sha256": "58a846bf1617b94b9681921db9b8461d0145f311424663d11678a06b6153cb34"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/badge.tsx",
+      "size": 1776,
+      "sha256": "46a0de5224f6a5d5d63d45246534288518dce888f031064bff925bbc7fe6ad97"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/breadcrumb.tsx",
+      "size": 2350,
+      "sha256": "d4c0831bba2212e778248f54a6ace6ef378df8bba4616d1abf27787a31eabae5"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/bubble.tsx",
+      "size": 4699,
+      "sha256": "870cc0c5cfc8a515053f7e41e706a6bd017a909b45f1305fd3b164a52cc4483b"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/button-group.tsx",
+      "size": 2202,
+      "sha256": "784c89d8ee683e1bc972ae69e6ea8225a7f63abe22aa1b5fc3423ae8a2a399c0"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/button.tsx",
+      "size": 2392,
+      "sha256": "cc36af0f8b5019c33cc039fbf03bb952a513072b15b55b53c592b78af3e5f4c4"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/calendar.tsx",
+      "size": 7832,
+      "sha256": "3855fbe0d3f8ad3a4b93071f98b76a9f6782d46ec8b05f5d2ddbee1e4e39bc84"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/card.tsx",
+      "size": 1987,
+      "sha256": "c48dd3b96be90a7066f1aebf294f0af9d00ebcdc367d5d4aca55429ade570c1c"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/carousel.tsx",
+      "size": 5556,
+      "sha256": "b7ea0dda3903d972c186f739e23da61f547bc83b5a0bf13b16856577846d5fc3"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/chart.tsx",
+      "size": 10614,
+      "sha256": "45aa5ea4a386f4fb5b8869ff4bab3a08cf89255190ee322043baf84c3e950b6a"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/checkbox.tsx",
+      "size": 1214,
+      "sha256": "b23ab9d4deeedf2ac8f512c368361ede681aa383437ef48563a6f9b7dbe95f27"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/collapsible.tsx",
+      "size": 795,
+      "sha256": "c6598e5584f4258b5d9fefadbc5ad6a66888ad58729f4b634a0bb2d9c513188b"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/combobox.tsx",
+      "size": 9158,
+      "sha256": "2d68e78b2dc7e38a085f222dede60a80b4f8229a6e91732c484605e204d46735"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/command.tsx",
+      "size": 4818,
+      "sha256": "361193df1e3d64a9e9b5048f045264782fcb387aab3f00f2b805fdcbf538b16a"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/context-menu.tsx",
+      "size": 8268,
+      "sha256": "2cf1fcf59df0649a3e2a126d1df2f639145f6b6bf5689ee54af1f40ab1245017"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/dialog.tsx",
+      "size": 4303,
+      "sha256": "dce39c6adc47d997bd2567f8b7a72f466b0134715105cd42f9194007b8ecdb14"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/direction.tsx",
+      "size": 506,
+      "sha256": "84ae2ad658207f0e0f367978e5508cd8027cd00c29c41d3d13db21a708c3d1e6"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/drawer.tsx",
+      "size": 4255,
+      "sha256": "cb6eaf58eb0757ca91af284e5d925b89a42ad7eb19cb3f44c575a3487aa9350f"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/dropdown-menu.tsx",
+      "size": 8418,
+      "sha256": "98f0dcdae38225b73734aceeb9213dd751fea2c72ea520df31003cd133deac8a"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/empty.tsx",
+      "size": 2396,
+      "sha256": "ae95bdcf367a076ae02e7925f14522a148798f72d9651749c6d55497dba584c0"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/field.tsx",
+      "size": 6159,
+      "sha256": "ba67d76f017ac059fc86cf8c344e0b2991c4322d3619e125498c19b87f6eefbd"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/form.tsx",
+      "size": 3757,
+      "sha256": "315b46bb75ab7d1c6061b5d750aa4bedf6e7a455e15e2d7f9182f053d5972b1e"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/hover-card.tsx",
+      "size": 1526,
+      "sha256": "f5d8df42c59370ec14d61bcc54f7d68e9bb7dfa0d6a872b2f7cffc2aafbf23b8"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/input-group.tsx",
+      "size": 5065,
+      "sha256": "6afbd58fea4c438e6252dc4568bddc122e84ababead4ad5cee50ace01100c9a0"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/input-otp.tsx",
+      "size": 2254,
+      "sha256": "161946daa89f0eda2575b9271c0494e35807c4ffb55598a49f67160c17fec299"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/input.tsx",
+      "size": 962,
+      "sha256": "8c4612a7c41319ac5049daa3b34b080f9784b6245c17780eb87c127e58e473db"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/item.tsx",
+      "size": 4486,
+      "sha256": "6e2144d6d87142dbbe56d568810bf546318c8aa661447ebb0d76ebbf382cb45f"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/kbd.tsx",
+      "size": 862,
+      "sha256": "6088c3a5432338b1719c17e9b5d0e1fa74fd1f66060f248fc88909d33a82cd13"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/label.tsx",
+      "size": 606,
+      "sha256": "a476e41f08b9de5bd447de66a33d8bc2ad18f2fa6b96c064778bab4b6f439f4c"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/marker.tsx",
+      "size": 1864,
+      "sha256": "3d798763f094b2bb5e7ade2d5cd1b9bab498bc8ca7fd4cfaf4e5835bdedc34a0"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/menubar.tsx",
+      "size": 8389,
+      "sha256": "9243af8afcea03703398ccd1c2a8c0a87ad6cbaf2bd272fb609f5b79fe46aebb"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/message-scroller.tsx",
+      "size": 3992,
+      "sha256": "bb7660a248e4e9589c3816c7c1c199ea1381a70d2c8476ae895b567a7a4d86cf"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/message.tsx",
+      "size": 2232,
+      "sha256": "9d2952bf3b641081f09aa2739535e6bbd1be0a4946789752a2c20d8aaef43185"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/native-select.tsx",
+      "size": 1995,
+      "sha256": "007516b111fca8c98a6c40c94ab91bb68cc5b52afce1ed1f5e510c3d86e7347c"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/navigation-menu.tsx",
+      "size": 6658,
+      "sha256": "889d358a77de88e9cb6f39ea4895ea4c76eaf01d731b74e44f1c41e97a78a044"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/pagination.tsx",
+      "size": 2717,
+      "sha256": "374ad135c3d4ff3ec080a0009cd9745cdd0e12faa89d2b0e86074f11e5127fd1"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/popover.tsx",
+      "size": 2357,
+      "sha256": "31c350309ff5d3034e6ecf1b0eda75ba8855bdbf987fc7ad6d71f0ef07c5a447"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/progress.tsx",
+      "size": 755,
+      "sha256": "c8c26e8f5f041c3cdf4915347dc1d9c022f9448f149990fadcaf303e952fa57d"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/radio-group.tsx",
+      "size": 1460,
+      "sha256": "fe5ce39636d0818c2bf9c4eebddff893d1225fa2c81b5fa4bb8cbb39a8c913ce"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/resizable.tsx",
+      "size": 1815,
+      "sha256": "bc63958467aa00557c551bb0d96a5ae4c965c1e1ba2380e595949d933b132f7c"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/scroll-area.tsx",
+      "size": 1639,
+      "sha256": "8bd9d986b2844c9a87de825c6de4787b6739b36c3dc9a05ccf3eb107160e4043"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/select.tsx",
+      "size": 6353,
+      "sha256": "0b796a108a4eb5ba52d9ad938b7aea36dc56ae66c703a6d0a23dbc24f96daff3"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/separator.tsx",
+      "size": 694,
+      "sha256": "6da346505c8629a4668420d2a5ca48891383bbe0b0ceb14163537c671879427e"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/sheet.tsx",
+      "size": 4188,
+      "sha256": "63863cf2df8f8973e52b3459ac9bdbf81be1262dbc70eb53d5271ffb03488e16"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/sidebar.tsx",
+      "size": 21526,
+      "sha256": "4a8d73e7730a2b1fcecfca31299ed26db65c2307b84197a59c6ec7c01c7ad28e"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/skeleton.tsx",
+      "size": 276,
+      "sha256": "ba48dd5be5a6a1378bd4e011028654b5bf419f1e7d20ee4b9f8330c1264e7239"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/slider.tsx",
+      "size": 1991,
+      "sha256": "0e37484f4b416e79ac18c655cac961aefacf6e67085cfc2b320ea8af545635a3"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/sonner.tsx",
+      "size": 1034,
+      "sha256": "13ccc9b0fe4248e622f83a1d3b2f0566b72b5e04162d7d0c8db8945ecc71b55f"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/spinner.tsx",
+      "size": 331,
+      "sha256": "3e6e6e8d37fb4069f8e43e55318f8db06fbc36e6c8be0096da3c9337c1c798b9"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/switch.tsx",
+      "size": 1408,
+      "sha256": "386d4d4deb39f34126f9700fe9bf5393d238485dd94018bba9d154dda84c62ae"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/table.tsx",
+      "size": 2478,
+      "sha256": "20e5a7f224959c6b75802995706a97e9da171f693d4b6b1b436388fcd9df96f3"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/tabs.tsx",
+      "size": 3782,
+      "sha256": "865d0194331b9b2be36723fa79d3575dc83078b4cb941cafee87cb72fc2cff46"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/textarea.tsx",
+      "size": 759,
+      "sha256": "253cdeb487c73beaaccdf47fc163e36e7d5b7ae6ddf09a4f64998a109a112979"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/toggle-group.tsx",
+      "size": 2308,
+      "sha256": "69f643e889e933f05c1439084480d8646f66a161c7d1cf0730ee926382ade35e"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/toggle.tsx",
+      "size": 1565,
+      "sha256": "ba4d0b0a2b2fee75dc36dfc19e32082e721024b919050c97fd5dc70faa924e16"
+    },
+    {
+      "path": "reference/sites-ui/components/ui/tooltip.tsx",
+      "size": 1830,
+      "sha256": "a0784eb77831a799fad7991df4f1b666f876201565a80175e1aa68733574a2e4"
+    },
+    {
+      "path": "reference/sites-ui/lib/connector-context.ts",
+      "size": 612,
+      "sha256": "bbddff68689cb0f6926fecd4b8b96f12f2054277c296e97b0df07d4ad5ece24e"
+    },
+    {
+      "path": "reference/sites-ui/lib/connector-contract.mts",
+      "size": 5362,
+      "sha256": "e1a7b24a8793af34b595690d9b1300c897c7321c14f215cedf58ad95799d7c3e"
+    },
+    {
+      "path": "reference/sites-ui/lib/connector-errors.mts",
+      "size": 2717,
+      "sha256": "a22edf13d6873ae832c4a2a0d579fc666c73ec996ef0722d39172649d38f0871"
+    },
+    {
+      "path": "reference/sites-ui/lib/connector-preview.d.ts",
+      "size": 433,
+      "sha256": "abd69a94f7f61f1359063bb557574faae35e8ff5a028cc4c04b9ee248ef52642"
+    },
+    {
+      "path": "reference/sites-ui/lib/connectors.ts",
+      "size": 416,
+      "sha256": "1c93d747e384c8e17e3e3dd5361b24412babf5eba2a11d2ae7a75f4e0924112c"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-admin-operations.ts",
+      "size": 15256,
+      "sha256": "e56de105c41ece3c73a5f8b8f8f73acc80ce611e28f107ec249444814405efa5"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-admin-settings.ts",
+      "size": 9124,
+      "sha256": "0ee3622d5a8358310965a6ae148b704302360714023475b1ca0b338f2eeaffb2"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-chat-state.ts",
+      "size": 11941,
+      "sha256": "96bf4e1755730b6bcf82ce58b3707983d8637a6574957a3c6dfe9f6e599f273a"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-checkouts.ts",
+      "size": 4733,
+      "sha256": "181ac72d016768690462ca170419c8733c4af6787a96345c96c3c8d331e732d3"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-data.ts",
+      "size": 3567,
+      "sha256": "384bf74ca30ba29af0335a9f5ea0b2a5e8ba457bca7c2db72e20a63a58e06771"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-demo-auth.ts",
+      "size": 4943,
+      "sha256": "d101ad14181a577e28ac618714ebb68d1ab2787d0189c14dbe80ddba6a53b3a1"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-divisions-model.ts",
+      "size": 16877,
+      "sha256": "50b8c3dd5dadbd8260f80929ea91728a42bc880f6953c8477a1eb110e2605ed5"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-divisions-store.ts",
+      "size": 13479,
+      "sha256": "43f485ba9be9aa7b4f6a38468ad86e9205f7399ccb3ae9a72653c7ed47ccc2e0"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-elo.ts",
+      "size": 1838,
+      "sha256": "c09e3f257ff46a70014cae05c1c92dce105ec31823f5c74dbfee8d52f42324ef"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-email-templates.ts",
+      "size": 18297,
+      "sha256": "a3bb9a56eb2b83b0dd35a07b4df247053c82b628916da069b72ffe879028562a"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-fair-play-client.ts",
+      "size": 2754,
+      "sha256": "1be74af7bb388d79d0ca38b884224f22866b91adb4e524ecdac9aa41e6cfec03"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-fair-play-state.ts",
+      "size": 1728,
+      "sha256": "0db533d10e51218f8533a5a39fe617da18f38f9fbda86c2f3536a252674b1bd5"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-game-state.ts",
+      "size": 8304,
+      "sha256": "fc21da22fd9eeb21790e9efcc289fec46d795825f06e1ad9835dc683e391e9cb"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-login-destination.ts",
+      "size": 412,
+      "sha256": "37a1c616c0dc71feeab010edbb687ea46cbd7d83066ff91a071a67327c202847"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-match-records.ts",
+      "size": 2645,
+      "sha256": "380a9d44b022a42c1d2a45abaef4c7cb65b0826f1f8289c8b5e1eaa118fd4340"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-match-rules.ts",
+      "size": 5404,
+      "sha256": "853cbd98bba182aff5bce5b73e7960dd80f4d4e722ef1019710f52123a4d6406"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-match-setup.ts",
+      "size": 2320,
+      "sha256": "dc3147cf8f9225d9d2c0609b699f6c54d940aa294298c0df492382ea99d2acbe"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-practice.ts",
+      "size": 6420,
+      "sha256": "dd420608370f8b96b833e46533af0ea52410b6d07e1f5995dfbb6c29997012fc"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-preferences.ts",
+      "size": 2404,
+      "sha256": "9e1db84edce484c62560a9b436b4403995f93bd7dd8dae2bdce58ad7ac2ceb80"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-public-data.ts",
+      "size": 3399,
+      "sha256": "bb250ebc6b5f62b68cccb52d8483496a8033dfc4c4b0601b7410bf5f3415402a"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-ratings.ts",
+      "size": 7874,
+      "sha256": "60f4cf2f40057d9d14c9fcfba9ba49845842399682a78fae283f618330562b4e"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-rules.ts",
+      "size": 4525,
+      "sha256": "2798e8f3a5c3f594304e1f581cf6c807ea584a8c312ba716a67bcb34b3eb4319"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-session.ts",
+      "size": 1648,
+      "sha256": "2aa3043b67827acb361489d4b7349a28728e062db729aabddbff2ee1c342f03a"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-social.ts",
+      "size": 12989,
+      "sha256": "a98d848c795fad4160a5718fa92c6fc865e17cc2e3fc764ce1e3c4a1bd446992"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-tournament-model.ts",
+      "size": 19450,
+      "sha256": "beed2ab2fedea293022def4586e676b6f702b1b7d4df8002985f88057c9f08db"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-tournament-navigation.ts",
+      "size": 1090,
+      "sha256": "7a6c0e1da8de6c838d87e6dd97761bda3fb6ce89b2034d34e3f85293bc9c17ee"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-tournament-planning.ts",
+      "size": 6606,
+      "sha256": "0fbe248a738145b300feefc0e92e4b4a281ed204ff532dd0323b8c6cdcce692a"
+    },
+    {
+      "path": "reference/sites-ui/lib/darts-tournament-store.ts",
+      "size": 24793,
+      "sha256": "becd93085d922b64ca93117d746edfa1ac44d3aefb7e2492c63cf00df166f0e7"
+    },
+    {
+      "path": "reference/sites-ui/lib/designs.ts",
+      "size": 1923,
+      "sha256": "c30b5f65aaff030d981800fdcd1925137913f21ec59101d9a971c04ed3def454"
+    },
+    {
+      "path": "reference/sites-ui/lib/use-favorite-design.ts",
+      "size": 883,
+      "sha256": "996bebb3a526fa14ed5b1bde7e15d4cd9a8022d80a663c89538414174393b435"
+    },
+    {
+      "path": "reference/sites-ui/lib/utils.ts",
+      "size": 177,
+      "sha256": "53f3d3d070f0a9082934da25b875f9499855c2b0693868dd28be8c23d8730f68"
+    },
+    {
+      "path": "reference/sites-ui/public/assets/emails/dartspoint-logo.png",
+      "size": 21873,
+      "sha256": "c4b4c46b8b4eb34f584bbd1fa54c8769408cf1b85a5517594f19bc60ef18b1dc"
+    },
+    {
+      "path": "reference/sites-ui/public/brand/icon.svg",
+      "size": 7162,
+      "sha256": "c1b57be0fbcc7f39b8fb42679426c4ff460cf320acb690f6d2cee8b25a355655"
+    },
+    {
+      "path": "reference/sites-ui/public/brand/logo-premium.png",
+      "size": 1999581,
+      "sha256": "aeebe4a3885b484cb6a821d583f64bfac9d9185c2aec523ca6da3e70ba0355de"
+    },
+    {
+      "path": "reference/sites-ui/public/brand/logo.svg",
+      "size": 9441,
+      "sha256": "469cf060e8d20e0b9358e16ad381829a33bc9502b43261566ac3dae5932c6510"
+    },
+    {
+      "path": "reference/sites-ui/public/brand/wordmark-premium.png",
+      "size": 1000997,
+      "sha256": "23c0e6e3352f4a1de67931d846c3312207443293b66f616812dace4c133be3d4"
+    },
+    {
+      "path": "reference/sites-ui/public/brand/wordmark.svg",
+      "size": 2593,
+      "sha256": "5086e92fc04f041b669d16f346d99abf3a1976aa8fe7fc44dc1670b3b7c21c5a"
+    },
+    {
+      "path": "reference/sites-ui/public/concepts/arena.png",
+      "size": 1978165,
+      "sha256": "f8a84008e9b64b32703c7666ee5773723abb6e972602213f07487a69e43dba6c"
+    },
+    {
+      "path": "reference/sites-ui/public/concepts/broadcast.png",
+      "size": 2161320,
+      "sha256": "f2bdc12fd5b8c08a86149a7c0d9e6d12859312366da3db90d01a31df77d27e44"
+    },
+    {
+      "path": "reference/sites-ui/public/concepts/club.png",
+      "size": 2062969,
+      "sha256": "ac15bfa0a13dc7bda164e1645b2717931c16cac88437f090a0f56bac5c7f22bd"
+    },
+    {
+      "path": "reference/sites-ui/public/concepts/focus.png",
+      "size": 2138666,
+      "sha256": "f5f33639c5893f00cddcfecfe123464c9ee298e399b900d09da37aa6fd50708f"
+    },
+    {
+      "path": "reference/sites-ui/public/concepts/league.png",
+      "size": 2055655,
+      "sha256": "7a446429e74e6bfa6e4669c985febb17a712f2b9ab7f09d2a71149a1b582bd00"
+    },
+    {
+      "path": "reference/sites-ui/public/favicon.svg",
+      "size": 7162,
+      "sha256": "c1b57be0fbcc7f39b8fb42679426c4ff460cf320acb690f6d2cee8b25a355655"
+    },
+    {
+      "path": "reference/sites-ui/public/file.svg",
+      "size": 392,
+      "sha256": "1e0ae4d1a1ddfa36752988647b731e4abf150c414d069ec83c96fb0aaeff0307"
+    },
+    {
+      "path": "reference/sites-ui/public/globe.svg",
+      "size": 1036,
+      "sha256": "d051a8c47936990a9085693d307bb7cea1bc1b6d7ed956bcbaacf674f4ec96b9"
+    },
+    {
+      "path": "reference/sites-ui/public/icons/icon-192.png",
+      "size": 10469,
+      "sha256": "d8f76f705af9266c3189fa6c8f602ff5d8a5a097dd2b9846c2c3d03c65ea9dfb"
+    },
+    {
+      "path": "reference/sites-ui/public/icons/icon-512.png",
+      "size": 36571,
+      "sha256": "add73926a32545c1ba2b7ffe366ebcbbf0319b60e87c3c967eb939c7b5332d69"
+    },
+    {
+      "path": "reference/sites-ui/public/manifest.webmanifest",
+      "size": 673,
+      "sha256": "1f76488a78727e75ed58b3c5d21f7489d20c955671f1085938d6c9105b4c3304"
+    },
+    {
+      "path": "reference/sites-ui/public/marketing/afterhours-hero.webp",
+      "size": 180452,
+      "sha256": "1c1ef589843f59c3f6626d43b382879c35b4f77bc37c862745f96dd864f26eb9"
+    },
+    {
+      "path": "reference/sites-ui/public/marketing/dartspoint-share.png",
+      "size": 379444,
+      "sha256": "c853fbfa7b3da4baf0cabcc0ff21b089d06934b936d166434dcb8a692740febb"
+    },
+    {
+      "path": "reference/sites-ui/public/marketing/dartspoint-share.svg",
+      "size": 64655,
+      "sha256": "423242ac99948633f714a1e3eddd1212dedfe62eb3b987f26a5cd1880e513341"
+    },
+    {
+      "path": "reference/sites-ui/public/offline.html",
+      "size": 8576,
+      "sha256": "43d34d5e7ab32bc25f1a7f3ec5829c5e50ae74ec4e5e88920f7c53735c58eed7"
+    },
+    {
+      "path": "reference/sites-ui/public/sw.js",
+      "size": 1635,
+      "sha256": "4aaf949fb6a544bb300f5d9e4ab154e2f1f304833b44d68be9948bc704f94d2b"
+    },
+    {
+      "path": "reference/sites-ui/public/window.svg",
+      "size": 386,
+      "sha256": "decf1cf7bb22b5c99c4857cfcd5718ce5465c4454166317589c83fc73df74b66"
+    }
+  ]
+}

@@ -25,7 +25,7 @@ def fixture(env='staging'):
     pins=json.loads((HERE.parent/'image-pins.json').read_text())
     host='staging.dartspoint.nl' if env=='staging' else 'dartspoint.nl'
     values={'NEXT_PUBLIC_APP_URL':'https://'+host,'NEXT_PUBLIC_REALTIME_URL':'https://realtime.'+host,'NEXT_PUBLIC_SUPABASE_URL':'https://'+'a'*20+'.supabase.co','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY':'sb_publishable_example','NEXT_PUBLIC_TURNSTILE_SITE_KEY':'site-key',
-            'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':''}
+            'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':'','LANDING_ORIGIN':''}
     values['DATABASE_URL']='postgresql://postgres:example-password@db.'+'a'*20+'.supabase.co/postgres?sslmode=verify-full'
     manifest={'version':1,'environment':env,'sha':'a'*40,'run':'100','attempt':'1','repository':'dartspoint/platform','workflow':'.github/workflows/deploy.yml','platform':'linux/amd64','public':{k:values[k] for k in config.PUBLIC},'pins':pins,'images':{s:'ghcr.io/dartspoint/platform-'+env+'-'+s+'@sha256:'+'b'*64 for s in config.SERVICES},'builtAt':'2026-10-12T00:00:00+00:00'}
     return manifest,values,pins
@@ -61,6 +61,7 @@ class DeploymentChecks(unittest.TestCase):
              patch.object(deployment, "verify_images", side_effect=lambda p:event("images",p)), \
              patch.object(deployment, "verify_database", side_effect=lambda p:event("database",p)), \
              patch.object(deployment, "verify_backup", side_effect=lambda root,p:event("backup",p)), \
+             patch.object(deployment, "verify_launch_storage", side_effect=lambda root,p:event("launch",p)), \
              patch.object(deployment, "token", return_value="test-token"), \
              patch.object(deployment, "drain", side_effect=lambda p,t:event("drain",p)), \
              patch.object(deployment, "compose", side_effect=compose), \
@@ -321,6 +322,17 @@ class DeploymentContractChecks(unittest.TestCase):
             self.assertIn('target=/tmp/database-ca.crt,readonly',' '.join(args))
             self.assertNotIn(env['PGPASSWORD'],' '.join(args))
             self.assertTrue((Path(folder)/'database-ca.crt').read_bytes().startswith(b'-----BEGIN CERTIFICATE-----'))
+
+    def test_landing_origin_is_exact_separate_and_forwarded(self):
+        m,v,p=fixture();v['LANDING_ORIGIN']='https://binnenkort.dartspoint.nl'
+        config.validate_values('staging',v)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'releases').mkdir();release=prepare.prepare(m,v,root)
+            self.assertEqual(config.read_env(release/'web.env')['LANDING_ORIGIN'],v['LANDING_ORIGIN'])
+            self.assertEqual(config.read_env(release/'web.env')['TRUST_PROXY'],'caddy')
+            self.assertEqual(config.read_env(release/'worker.env')['LANDING_ORIGIN'],v['LANDING_ORIGIN'])
+        for origin in ('http://binnenkort.dartspoint.nl','https://staging.dartspoint.nl','https://binnenkort.dartspoint.nl/path','https://user@binnenkort.dartspoint.nl','https://binnenkort.dartspoint.nl?x=1'):
+            with self.assertRaises(ValueError):config.validate_values('staging',{**v,'LANDING_ORIGIN':origin})
 
     def test_public_values_cannot_change_after_build(self):
         m,v,p=fixture();v['NEXT_PUBLIC_TURNSTILE_SITE_KEY']='changed-after-build'
