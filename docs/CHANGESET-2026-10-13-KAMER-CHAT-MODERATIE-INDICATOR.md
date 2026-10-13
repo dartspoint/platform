@@ -205,8 +205,8 @@ en load. De gerichte en brede backendintegraties slagen eveneens, inclusief
 filter/rechten/naamprojecties, realtimeprivacy, timing, services, competities,
 herstel, owner en mail. De productiebuild, typechecks, 32 units, oorspronkelijke
 spelregels, 39 operationele checks en source parity zijn geslaagd. De
-updatebrowser behield alle 30 foreground-stops: eerste-frame p95 10,6 ms,
-maximum 11,4 ms en freeze/bevestiging 0 px; alle vier Chromiumvertragingen
+updatebrowser behield alle 30 foreground-stops: eerste-frame p95 12,8 ms,
+maximum 15,0 ms en freeze/bevestiging 0 px; alle vier Chromiumvertragingen
 20/80/180/350 ms accepteerden de exacte sample. CSS-zoom 200% en echte offline
 oefening slagen. Grote beheerpagina's worden als echte boven-/midden-/onder-
 viewports vastgelegd; de lokale QA-spelerslijst van circa 66.000 px overschrijdt
@@ -218,9 +218,19 @@ ontvangen response vast. Alle 30 echte responses zijn 100/300/1000 ms
 vastgehouden; invoer en klokkalibratie blijven op de native browserverbinding.
 Een eerdere testforwarder voegde een ongemeten heenweg toe: de server wees
 een 59 ms oude sample terecht af bij een gemeten venster van 54 ms. De
-gecorrigeerde test mat maximaal 33 ms leeftijd bij originele serveringress,
-zonder verruiming van de spelgrenzen. De touchfixture wacht op drie echte
-ping/echo-paren en reset daarna via de gewone bediening.
+test beoordeelt iedere poging onafhankelijk tegen de oorspronkelijke,
+onveranderlijke serveringress: een geldige sample moet exact worden bevestigd;
+een te oude, toekomstige of eerdere-fasesample moet expliciet worden geweigerd,
+zonder wijziging van de volledige spelstate, en gecontroleerd herstellen.
+Alle 30 pogingen blijven in de p95-verdeling; iedere combinatie van invoer en
+vertraging moet bovendien minstens één geldige bevestiging bevatten. De
+uiteindelijke lokale run accepteerde 30/30 stops. Een afzonderlijk geïnjecteerde
+hoofdthreadpauze van 160 ms gaf een sampleleeftijd van 185 ms bij een venster
+van 54 ms: HTTP 409 `invalid_render_sample`, zichtbare fout, ongewijzigde
+state/version en hervatte meter. Deze negatieve controle staat apart van de
+normale verdeling. Screenshots en snapshots worden tijdens de timingmeting
+uitgeschakeld; de overige UI-controles houden hun trace. De touchfixture wacht
+op drie echte ping/echo-paren en reset daarna via de gewone bediening.
 
 Implementatie-SHA, CI-runs en actieve staging-SHA worden na deployment
 en acceptatie hieronder vastgelegd. Chromiumemulatie,

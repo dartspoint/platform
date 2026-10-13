@@ -131,6 +131,17 @@ kamerchat, replay van een oude receipt en verlies/herstel van een echte
 bevestiging slaagden; de oorspronkelijke UUID werd hersteld zonder extra pijl.
 Deze waarden betreffen de lokale build, niet de nog te meten stagingrelease.
 
+De aanvullende updatebrowser bewaart alle 30 native invoerpogingen met
+100/300/1000 ms vertraging van uitsluitend de ontvangen response. Iedere
+poging wordt onafhankelijk getoetst aan de oorspronkelijke database-ingress.
+Geldige stops moeten exact worden bevestigd; ongeldige stops moeten HTTP 409,
+een zichtbare timingfout, volledig ongewijzigde spelstate en gecontroleerd
+herstel geven. Iedere delay/invoer-combinatie vereist een echte geldige stop.
+De lokale run had 30/30 geldige stops, eerste-frame p95 `12,8 ms` en maximum
+`15,0 ms`. Een afzonderlijke 160 ms hoofdthreadpauze bewees de afwijzingscontrole
+met een 185 ms oude sample bij een 54 ms venster. Deze geïnjecteerde controle
+staat apart van de verdeling; natuurlijke weigeringen worden daarin behouden.
+
 Traces bevatten commandId, match/session UUID, dart/fase/version, sampletijd en
 fractie, geometrie vóór input, inputtijd, lokale lock/clockoffset, serveringress,
 gemeten venster/latency, admittedAt, receipt en definitieve lock/raakpunt. Er
