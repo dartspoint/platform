@@ -37,6 +37,10 @@ async function friendMenu(page:Page,scope:string,name:string){
  assert.deepEqual(afterEnd.documentScroll,beforeEnd.documentScroll,'Keyboard menu scrolling does not move the outer document');report.checks.lastEnabledMenuActionKeyboardReachable=true;
  await page.keyboard.press('Escape');await pause(50);trace.afterEscape=await layerState(page);trace.triggerPresentAfterEscape=await trigger.count();await expect(trigger).toBeFocused();report.checks.keyboardMenuFocusRestored=true;
 }
+async function openMobileChat(page:Page){
+ await page.locator('.dp-play-nav').getByRole('button',{name:/^Chat/}).click();
+ await page.locator('.dp-social-sheet').evaluate(async panel=>{await Promise.all(panel.getAnimations().map(animation=>animation.finished));});
+}
 async function composerReachable(page:Page,label:string){
  await expect(page.locator('.chat-panel')).toHaveCount(1);await expect(page.locator('.chat-compose')).toHaveCount(1);
  const geometry=await page.evaluate(()=>{const element=document.querySelector('.chat-compose')!,r=element.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,viewport:{width:innerWidth,height:innerHeight},scrollWidth:document.documentElement.scrollWidth};});
@@ -93,7 +97,7 @@ try{
  }
  report.checks.denseDesktopGeometryAndInternalScroll=true;report.checks.eightPrivateTabsKeyboardReachable=true;
  for(const [width,height] of [[320,568],[390,844],[390,400]]){
-  await main.page.setViewportSize({width,height});await main.page.goto(origin+'/spelen');await main.page.getByLabel('Chatbericht',{exact:true}).waitFor();await expect(main.page.locator('.dp-desktop-community')).toHaveCount(0);await expect(main.page.locator('.chat-private-tab-wrap')).toHaveCount(8);
+  await main.page.setViewportSize({width,height});await main.page.goto(origin+'/spelen');await openMobileChat(main.page);await main.page.getByLabel('Chatbericht',{exact:true}).waitFor();await expect(main.page.locator('.dp-desktop-community')).toHaveCount(0);await expect(main.page.locator('.chat-private-tab-wrap')).toHaveCount(8);
   const composer=await composerReachable(main.page,width+'×'+height+' dense mobile'),tabs=await tabKeyboard(main.page),mobile:{width:number;height:number;composer:unknown;tabs:unknown;friends?:unknown;secondEscape?:unknown;keyboardSizedViewport:boolean;completed:boolean}={width,height,composer,tabs,keyboardSizedViewport:height===400,completed:false};report.mobile.push(mobile);
   await main.page.locator('.dp-play-nav').getByRole('button',{name:'Meer',exact:true}).click();await main.page.locator('.dp-profile-menu').getByRole('button',{name:'Vrienden',exact:true}).click();await expect(main.page.locator('.dp-social-sheet .friend-row')).toHaveCount(20);
   mobile.friends=await internalScroll(main.page,'.dp-social-sheet .friends-scroll','Mobile friends');await friendMenu(main.page,'.dp-social-sheet',peers[19].name);
@@ -102,7 +106,7 @@ try{
    await main.page.keyboard.press('Escape');await pause(50);second.afterKey=await layerState(main.page);await expect(main.page.locator('.dp-social-sheet')).toHaveCount(0);second.afterDismiss=await layerState(main.page);
    assert.equal(second.afterDismiss.focus.connected,true);assert.notEqual(second.afterDismiss.focus.tag,'BODY','Second Escape leaves focus on a live navigation control');await expect(main.page.locator('.dp-play-nav button').first()).toBeFocused();report.checks.nestedMenuAndParentEscapeDistinct=true;
   }else await main.page.getByRole('button',{name:'Paneel sluiten',exact:true}).click();
-  await composerReachable(main.page,'Mobile after keyboard menu close');mobile.completed=true;
+  await openMobileChat(main.page);await composerReachable(main.page,'Mobile after keyboard menu close');mobile.completed=true;
   await main.page.screenshot({path:directory+'/mobile-'+width+'x'+height+'.png'});
  }
  report.checks.denseMobile320And390AndReducedHeight=true;
