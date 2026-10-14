@@ -1,12 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ServerClock,admittedSample,meterPosition,meterFraction,sampleWindow,TIMING_VERSION} from '../../packages/game-core/src/timing';
+import {ServerClock,admittedSample,meterPosition,meterFraction,meterPeriod,sampleWindow,TIMING_VERSION,METER_SPEED_VERSION} from '../../packages/game-core/src/timing';
 import {commandSchema} from '../../packages/contracts/src/index';
 import {randomUUID} from 'node:crypto';
 test('New games use versioned samples with no altered old compensation policy',()=>{
  assert.equal(TIMING_VERSION,'render-sample-v3');assert.equal(sampleWindow([40,40]),0);assert.equal(sampleWindow([40,40,40]),94);assert.equal(sampleWindow([350,350,350]),124);
  const payload={protocolVersion:1,commandId:randomUUID(),matchId:randomUUID(),expectedStateVersion:7,type:'dart.stop_horizontal',phaseToken:randomUUID(),renderSample:{sampleAt:1000123.456,connectionId:randomUUID(),dartNumber:2}};
  assert.ok(commandSchema.safeParse(payload).success);for(const renderSample of [{...payload.renderSample,score:180},{...payload.renderSample,sampleAt:NaN},{...payload.renderSample,dartNumber:0}])assert.equal(commandSchema.safeParse({...payload,renderSample}).success,false);
+});
+test('Speed markers preserve stored legacy curves and give new games approximately eight percent faster cycles',()=>{
+ const start=1_000_000;
+ for(const axis of ['horizontal','vertical'] as const){
+  const legacy=axis==='horizontal'?2200:2500,faster=axis==='horizontal'?2037:2315;
+  assert.equal(meterPeriod(axis),legacy);assert.equal(meterPeriod(axis,'standard-v1'),legacy);assert.equal(meterPeriod(axis,METER_SPEED_VERSION),faster);
+  assert.ok(legacy/faster>1.079&&legacy/faster<1.081);
+  assert.equal(meterPosition(start+legacy/4,start,axis),1.14);assert.equal(meterPosition(start+legacy*3/4,start,axis),-1.14);
+  assert.equal(meterPosition(start+faster/4,start,axis,METER_SPEED_VERSION),1.14);assert.equal(meterPosition(start+faster*3/4,start,axis,METER_SPEED_VERSION),-1.14);
+  for(const at of [start,start+17,start+549,start+1100,start+1875,start+10000]){
+   assert.equal(meterPosition(at,start,axis),meterPosition(at,start,axis,'standard-v1'));
+   const admitted=admittedSample(at,at+30,54,start,start,at+300);
+   assert.equal(meterPosition(admitted,start,axis,METER_SPEED_VERSION),meterPosition(at,start,axis,METER_SPEED_VERSION));
+   for(const width of [220,500,900])assert.equal((meterFraction(admitted,start,axis,METER_SPEED_VERSION)-meterFraction(at,start,axis,METER_SPEED_VERSION))*width,0);
+  }
+ }
 });
 test('Accepted sample stays exact across asymmetric jitter and DB queues, on both axes and directions',()=>{
  const phaseStart=1_000_000;

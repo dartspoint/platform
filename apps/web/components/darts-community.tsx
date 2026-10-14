@@ -2,13 +2,14 @@
 import {ChatBadge} from "./chat-badge";
 import {selfName,getPlatform,usePlatform} from "@/lib/platform-client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowDown, ArrowUpDown, ArrowUpRight, Check, ChevronRight, Clock3, Crown, Eye, Flag, Gamepad2, Medal, MessageCircle, Search, Send, ShieldCheck, Smile, Sparkles, Target, Trophy, UserPlus, Users, VolumeX, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { playerByName, players, rooms, type DartsPlayer } from "@/lib/darts-data";
 import { PlayerName, RatingValue } from "@/components/player-identity";
 import { useTournaments } from "@/lib/darts-tournament-store";
@@ -83,6 +84,10 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
 }) {
   const [localTab, setLocalTab] = useState(lobby ? "" : "room");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [presetsOpen,setPresetsOpen]=useState(false),[newBelow,setNewBelow]=useState(0);
+  const [joinNotice,setJoinNotice]=useState<{key:string;message:ChatMessage}|null>(null),[joinTick,setJoinTick]=useState(0);
+  const pendingJoin=useRef<string|null>(null),seenJoins=useRef(new Set<string>()),joinTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+  const draftInput=useRef<HTMLInputElement>(null),presetFocus=useRef(false),forceBottom=useRef(false),historyBoundary=useRef(0),historyBoundaries=useRef(new Map<string,number>()),scrollActor=useRef<string|undefined>(undefined);
   const [playerTools, setPlayerTools] = useState(false);
   const [privacyFeedback, setPrivacyFeedback] = useState("");
   const actions=useRef({onInvite,onProfile,onMessage,onSpectate});actions.current={onInvite,onProfile,onMessage,onSpectate};
@@ -91,7 +96,7 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
   const adminRooms = useAdminOperations().rooms;
   const preferences = useDartsPreferences();
   const scroll = useRef<HTMLDivElement>(null);
-  const panelRoot=useRef<HTMLElement>(null),atBottom=useRef(true),previousKey=useRef(""),sendGuard=useRef({key:'',at:0});
+  const panelRoot=useRef<HTMLElement>(null),atBottom=useRef(true),previousKey=useRef(""),previousQuiet=useRef(quiet),quietPinHold=useRef<{key:string;top:number}|null>(null),sendGuard=useRef({key:'',at:0});
   const [visibilityTick,setVisibilityTick]=useState(0);
   const tabList = useRef<HTMLDivElement>(null);
   const emptyState = useRef<HTMLDivElement>(null);
@@ -124,8 +129,24 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
   const quietBoundary = sameQuietWindow ? quietWindow.maximumId : maximumId;
   const unblockedMessages = current.filter(message => message.system || (!social.isBlocked(message.senderId??message.name) && !social.isMuted(message.senderId??message.name)));
   const deferredCount = quiet ? unblockedMessages.filter(message => !message.system && message.senderId !== platform.actor?.id && message.id > quietBoundary).length : 0;
-  const visible = unblockedMessages.filter(message => !quiet || message.system || message.senderId === platform.actor?.id || message.id <= quietBoundary);
+  const visible = unblockedMessages.filter(message => !message.system&&(!quiet || message.senderId === platform.actor?.id || message.id <= quietBoundary));
   const visibleCursor=visible.reduce((cursor,message)=>Math.max(cursor,message.id),0);
+  const roomChannelId=platform.chatChannels?.find(channel=>channel.kind==='community'&&(roomId?channel.roomId===roomId:channel.name===roomName))?.id;
+  useEffect(()=>{
+   pendingJoin.current=null;seenJoins.current.clear();setJoinNotice(null);clearTimeout(joinTimer.current);
+   if(!channelKey.startsWith('room:')||!roomChannelId)return;
+   const joined=(event:Event)=>{const detail=(event as CustomEvent).detail;
+    if(detail?.channelId!==roomChannelId||detail.redacted||(detail.kind??detail.message?.kind)!=='room.member_joined'||typeof detail.messageId!=='string'||seenJoins.current.has(detail.messageId))return;
+    seenJoins.current.add(detail.messageId);if(seenJoins.current.size>32)seenJoins.current.delete(seenJoins.current.values().next().value!);
+    clearTimeout(joinTimer.current);setJoinNotice(null);
+    pendingJoin.current=detail.messageId;setJoinTick(value=>value+1);
+   };
+   window.addEventListener('dartspoint:chat-changed',joined);return()=>{window.removeEventListener('dartspoint:chat-changed',joined);clearTimeout(joinTimer.current);};
+  },[channelKey,roomChannelId,platform.actor?.id]);
+  useEffect(()=>{
+   const message=current.find(value=>value.system&&value.messageId===pendingJoin.current);if(!message)return;
+   pendingJoin.current=null;clearTimeout(joinTimer.current);setJoinNotice({key:channelKey,message});joinTimer.current=setTimeout(()=>setJoinNotice(null),2000);
+  },[current,joinTick,channelKey]);
   useEffect(()=>watchChatChannel(channelKey),[channelKey]);
   useEffect(()=>{const changed=()=>setVisibilityTick(n=>n+1);document.addEventListener('visibilitychange',changed);window.addEventListener('focus',changed);window.addEventListener('blur',changed);return ()=>{document.removeEventListener('visibilitychange',changed);window.removeEventListener('focus',changed);window.removeEventListener('blur',changed);};},[]);
   useEffect(()=>{
@@ -144,7 +165,7 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
   useEffect(() => { if (!releasedCount) return; const timer = setTimeout(() => setReleasedCount(0), 4500); return () => clearTimeout(timer); }, [releasedCount]);
   async function selectTab(value: string) {
     const allowed = lobby && !value.startsWith("private:") ? "" : value;
-    setLocalTab(allowed); onTabChange?.(allowed); setEmojiOpen(false); setPlayerTools(false); setPrivacyFeedback("");
+    setLocalTab(allowed); onTabChange?.(allowed); setEmojiOpen(false);setPresetsOpen(false); setPlayerTools(false); setPrivacyFeedback("");
   }
   async function closePrivate(name: string) {
     const next = await closePrivateChatTab(name, tab, lobby, privateNames);
@@ -164,17 +185,28 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
     pendingFocus.current = null;
   }, [openPrivateNames, tab]);
   useEffect(hydrateChat, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if(scrollActor.current!==platform.actor?.id){scrollActor.current=platform.actor?.id;historyBoundaries.current.clear();previousKey.current='';quietPinHold.current=null;}
     const changed=previousKey.current!==channelKey;previousKey.current=channelKey;
-    if(changed){const saved=getChatScroll(channelKey);atBottom.current=saved.bottom;if(!saved.bottom)scroll.current?.scrollTo({top:saved.top,behavior:'instant'});}
-    if(atBottom.current)scroll.current?.scrollTo({top:scroll.current.scrollHeight,behavior:'instant'});
+    // Revealing quiet-turn rows retains the viewport the player was reading.
+    // Selecting the channel again, sending or opening new messages resumes pinning.
+    if(!changed&&previousQuiet.current&&!quiet)quietPinHold.current={key:channelKey,top:scroll.current?.scrollTop??0};
+    previousQuiet.current=quiet;
+    if(changed){quietPinHold.current=null;const saved=getChatScroll(channelKey);atBottom.current=saved.bottom;historyBoundary.current=historyBoundaries.current.get(channelKey)??visibleCursor;forceBottom.current=false;if(!saved.bottom)scroll.current?.scrollTo({top:saved.top,behavior:'instant'});}
+    if(forceBottom.current){atBottom.current=true;forceBottom.current=false;quietPinHold.current=null;}
+    if(atBottom.current&&!quietPinHold.current)scroll.current?.scrollTo({top:scroll.current.scrollHeight,behavior:'instant'});
+    if(atBottom.current&&!quietPinHold.current)historyBoundary.current=visibleCursor;
+    historyBoundaries.current.set(channelKey,historyBoundary.current);
+    setNewBelow(atBottom.current&&!quietPinHold.current?0:visible.filter(message=>message.id>historyBoundary.current&&message.senderId!==platform.actor?.id).length);
     if(scroll.current)saveChatScroll(channelKey,{top:scroll.current.scrollTop,bottom:atBottom.current});
-  },[current,channelKey]);
+  },[current,channelKey,quiet,visibleCursor,visible.length,platform.actor?.id,releasedCount,privacyFeedback,slowModeSeconds]);
+  useEffect(()=>{const container=scroll.current;if(!container)return;const observer=new ResizeObserver(()=>{if(atBottom.current&&!quietPinHold.current)container.scrollTop=container.scrollHeight;setVisibilityTick(value=>value+1);});observer.observe(container);return()=>observer.disconnect();},[channelKey]);
+  function showLatest(){quietPinHold.current=null;atBottom.current=true;historyBoundary.current=visibleCursor;historyBoundaries.current.set(channelKey,visibleCursor);setNewBelow(0);scroll.current?.scrollTo({top:scroll.current.scrollHeight,behavior:'instant'});setVisibilityTick(value=>value+1);}
   async function send(text = draft) {
     if (!channelKey || !text.trim() || blocked || (!privateName && (isRoomMuted(selfName(), roomName) || isRoomRemoved(selfName(), roomName)))) return;
     const concept=channelKey+'\u0000'+text.trim(),now=performance.now();if(sendGuard.current.key===concept&&now-sendGuard.current.at<250)return;sendGuard.current={key:concept,at:now};
     const time = new Date().toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
-    setEmojiOpen(false);setPrivacyFeedback('');
+    forceBottom.current=true;setEmojiOpen(false);setPresetsOpen(false);setPrivacyFeedback('');
     try { await appendChatMessage(channelKey, { id: 0, name: selfName(), text: text.trim().slice(0, 500), time }); } catch(e) { setPrivacyFeedback(e instanceof Error ? e.message : "Je bericht kon niet worden verstuurd. Je concept blijft bewaard."); }
   }
   async function tryNewPrivateChat(){const name=getDartsSocial().friends.find(name=>!getDartsSocial().blocked.includes(name));if(!name){setPrivacyFeedback("Kies een speler in de kamer of je vriendenlijst om een gesprek te openen.");return;}const channelId=await openPrivateChatTab(name);if(channelId)selectTab("private:"+channelId);}
@@ -184,13 +216,18 @@ export function ChatPanel({ roomId, roomName = "", gameId = "", opponentName = "
     {!tab ? <div ref={emptyState} tabIndex={-1} className="chat-empty-state" role="region" aria-label="Geen privégesprek geopend"><span><MessageCircle size={25}/></span><h3>Je gesprekken beginnen hier</h3><p>Open een privégesprek via je vrienden of berichten. Gesloten gesprekken blijven bewaard.</p></div> : <>
     {quiet && <div className="chat-quiet-note"><Target size={12}/>{deferredCount ? `${deferredCount} ${deferredCount === 1 ? "nieuw bericht komt" : "nieuwe berichten komen"} na je beurt` : "Rustige beurt · nieuwe berichten blijven bewaard"}</div>}{!quiet && releasedCount > 0 && <div className="chat-quiet-note" role="status"><MessageCircle size={12}/>{releasedCount} {releasedCount === 1 ? "bewaard bericht staat" : "bewaarde berichten staan"} voor je klaar</div>}
     {privateName && <div className="chat-person-tools"><span>{blocked ? "Geblokkeerd gesprek" : muted ? "Gedempt gesprek" : "Privégesprek"}</span><PlayerActionMenu userId={contact?.userId} name={privateName} channelId={chatChannelId(channelKey)} onProfile={onProfile} onInvite={onInvite} onMessage={onMessage} onToast={setPrivacyFeedback} className="chat-contact-menu"><PlayerName name={privateName}/></PlayerActionMenu></div>}
-    <div className="chat-messages" ref={scroll} onScroll={()=>{const el=scroll.current;if(el){atBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<24;saveChatScroll(channelKey,{top:el.scrollTop,bottom:atBottom.current});setVisibilityTick(n=>n+1);}}} role="log" aria-live={quiet ? "off" : "polite"} aria-label={privateName ? `Privéberichten met ${privateName}` : tab === "room" ? "Kamerberichten" : "Spelberichten"}>
-      <span className="chat-date">VANDAAG</span>{visible.map(message => message.system ? <div className="chat-system" key={message.messageId??message.eventId??message.id} data-message-seq={message.id}><Users size={13}/><span>{systemText(message)}</span><time>{message.time}</time></div> : <ChatMessageRow key={message.clientMessageId??message.messageId??`${channelKey}:${message.id}`} message={message} authorName={messagePlayer(message).name} authorRole={messagePlayer(message).role} authorInitials={messagePlayer(message).initials} own={message.senderId===platform.actor?.id} roomId={privateName?undefined:roomId} roomName={privateName?'':roomName} channelId={chatChannelId(channelKey)} gameId={tab==='match'?gameId:''} onInvite={onInvite?rowActions.onInvite:undefined} onProfile={onProfile?rowActions.onProfile:undefined} onMessage={onMessage?rowActions.onMessage:undefined} onSpectate={onSpectate?rowActions.onSpectate:undefined} onToast={setPrivacyFeedback} onEdit={setDraft} channelKey={channelKey}/>)}
+    <div className="chat-messages" ref={scroll} onScroll={()=>{const el=scroll.current;if(el){const hold=quietPinHold.current;if(!hold||hold.key!==channelKey||Math.abs(el.scrollTop-hold.top)>1){quietPinHold.current=null;const wasBottom=atBottom.current;atBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<24;if(wasBottom&&!atBottom.current)historyBoundary.current=visibleCursor;if(atBottom.current){historyBoundary.current=visibleCursor;setNewBelow(0);}}historyBoundaries.current.set(channelKey,historyBoundary.current);saveChatScroll(channelKey,{top:el.scrollTop,bottom:atBottom.current});setVisibilityTick(n=>n+1);}}} role="log" aria-live={quiet ? "off" : "polite"} aria-label={privateName ? `Privéberichten met ${privateName}` : tab === "room" ? "Kamerberichten" : "Spelberichten"}>
+      <span className="chat-date">VANDAAG</span>{visible.map(message => <ChatMessageRow key={message.clientMessageId??message.messageId??`${channelKey}:${message.id}`} message={message} authorName={messagePlayer(message).name} authorRole={messagePlayer(message).role} authorInitials={messagePlayer(message).initials} own={message.senderId===platform.actor?.id} roomId={privateName?undefined:roomId} roomName={privateName?'':roomName} channelId={chatChannelId(channelKey)} gameId={tab==='match'?gameId:''} onInvite={onInvite?rowActions.onInvite:undefined} onProfile={onProfile?rowActions.onProfile:undefined} onMessage={onMessage?rowActions.onMessage:undefined} onSpectate={onSpectate?rowActions.onSpectate:undefined} onToast={setPrivacyFeedback} onEdit={setDraft} channelKey={channelKey}/>)}
       {!privateName && social.moderation.filter(entry => entry.room === roomName).slice(-3).map(entry => <div className="chat-system" key={entry.id}><ShieldCheck size={13}/>{entry.name}: {entry.kind === "warn" ? "waarschuwing" : entry.kind === "mute" ? "tijdelijke mute" : "uit de kamer verwijderd"} · {entry.reason}</div>)}
       {blocked && <p className="chat-system">Berichten van {privateName} zijn verborgen. Deblokkeer deze speler om het gesprek te hervatten.</p>}{muted && !blocked && <p className="chat-system"><VolumeX size={13}/>Je hebt {privateName} gedempt. Klik bovenaan op de naam om berichten weer te tonen.</p>}
     </div>
-    <div className="chat-compose-wrap">{!blocked && <div className="chat-quick-replies" aria-label="Snelle chatzinnen">{["Succes! 🎯", "Mooie finish! 👏", "Goed gespeeld!", "Revanche?"].map(text => <button key={text} type="button" onClick={() => send(text)}>{text}</button>)}</div>}{emojiOpen && <div className="chat-emoji-picker" aria-label="Kies een emoji">{["🎯", "👏", "🔥", "👋", "😂", "🏆", "💪", "🍻"].map(emoji => <button key={emoji} aria-label={`Voeg ${emoji} toe`} onClick={() => { setDraft(draft + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
-      <form className="chat-compose" onSubmit={e => { e.preventDefault(); void send(); }}><Button variant="ghost" size="icon-sm" type="button" className="emoji-button" disabled={blocked} aria-label="Emoji kiezen" aria-expanded={emojiOpen} onClick={() => setEmojiOpen(value => !value)}><Smile size={18}/></Button><Input value={draft} disabled={blocked} onChange={e => setDraft(e.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();if(!event.repeat&&!event.nativeEvent.isComposing&&!event.shiftKey)void send();}}} placeholder={blocked ? "Deze speler is geblokkeerd" : privateName ? `Bericht aan ${privateName}…` : tab === "room" ? "Praat mee in de kamer…" : "Bericht in het spel…"} aria-label={privateName ? `Privébericht aan ${privateName}` : "Chatbericht"} maxLength={500}/><Button type="submit" size="icon-sm" className="chat-send" disabled={!draft.trim() || blocked} aria-label="Verstuur bericht"><Send size={17}/></Button></form>
+    <div className="chat-compose-wrap"><div className="chat-composer-notices">
+      {newBelow>0&&<button type="button" className="chat-new-messages" onClick={showLatest}><ArrowDown size={13}/>{newBelow} {newBelow===1?'nieuw bericht':'nieuwe berichten'}</button>}
+      {joinNotice?.key===channelKey&&<div key={joinNotice.message.messageId} className="chat-join-notice" role="status" aria-live="polite"><Users size={13}/><span>{systemText(joinNotice.message)}</span></div>}
+      </div>{emojiOpen && <div className="chat-emoji-picker" aria-label="Kies een emoji">{["🎯", "👏", "🔥", "👋", "😂", "🏆", "💪", "🍻"].map(emoji => <button key={emoji} aria-label={`Voeg ${emoji} toe`} onClick={() => { setDraft(draft + emoji); setEmojiOpen(false);draftInput.current?.focus(); }}>{emoji}</button>)}</div>}
+      <form className="chat-compose" onSubmit={e => { e.preventDefault(); void send(); }}><Button variant="ghost" size="icon-sm" type="button" className="emoji-button" disabled={blocked} aria-label="Emoji kiezen" aria-expanded={emojiOpen} onClick={() => {setPresetsOpen(false);setEmojiOpen(value => !value);}}><Smile size={18}/></Button>
+       <DropdownMenu modal={false} open={presetsOpen} onOpenChange={open=>{setPresetsOpen(open);if(open)setEmojiOpen(false);}}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" type="button" className="preset-button" disabled={blocked} aria-label="Snelle chattekst kiezen"><MessageCircle size={18}/></Button></DropdownMenuTrigger><DropdownMenuContent data-sheet-nested-menu="" className="chat-presets-menu" side="top" align="start" sideOffset={8} aria-label="Snelle chatzinnen" onEscapeKeyDown={event=>{event.preventDefault();setPresetsOpen(false);}} onCloseAutoFocus={event=>{if(presetFocus.current){event.preventDefault();presetFocus.current=false;draftInput.current?.focus();}}}>{["Succes! 🎯", "Mooie finish! 👏", "Goed gespeeld!", "Revanche?"].map(text=><DropdownMenuItem key={text} onSelect={()=>{presetFocus.current=true;void send(text);}}>{text}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
+       <Input ref={draftInput} value={draft} disabled={blocked} onChange={e => setDraft(e.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();if(!event.repeat&&!event.nativeEvent.isComposing&&!event.shiftKey)void send();}}} placeholder={blocked ? "Deze speler is geblokkeerd" : privateName ? `Bericht aan ${privateName}…` : tab === "room" ? "Praat mee in de kamer…" : "Bericht in het spel…"} aria-label={privateName ? `Privébericht aan ${privateName}` : "Chatbericht"} maxLength={500}/><Button type="submit" size="icon-sm" className="chat-send" disabled={!draft.trim() || blocked} aria-label="Verstuur bericht"><Send size={17}/></Button></form>
       {slowModeSeconds>0&&<p className="chat-footnote chat-slow-mode" role="status" style={{display:'block',opacity:1}}>Langzame chat actief · maximaal één nieuw bericht per {slowModeSeconds} {slowModeSeconds===1?'seconde':'seconden'}.</p>}
       <p className="chat-footnote">Speel sportief. <span>Berichten zijn gekoppeld aan je account.</span></p>
       {lobby && <div className="chat-privacy-preview"><span>Nieuwe chats: {preferences.privateMessages === "everyone" ? "iedereen" : preferences.privateMessages === "friends" ? "alleen vrienden" : "niemand"}</span><button type="button" onClick={tryNewPrivateChat}>Nieuw gesprek</button></div>}

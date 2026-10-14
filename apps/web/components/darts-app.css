@@ -445,3 +445,18 @@
   .darts-app .dp-oche-playfield>.dp-throw-button svg { width:12px; height:12px; }
   .darts-app .dp-board-caption { margin-top:18px; margin-bottom:7px; }
 }
+
+/* The approved live board and its chat stay reachable inside the modal. */
+.dp-dialog.spectator-dialog { width:calc(100vw - 32px); max-width:920px!important; max-height:calc(100dvh - 32px); overflow-y:auto; gap:16px; padding:22px; }
+.spectator-view { min-width:0; }
+.spectator-view .spectator-status { margin-bottom:12px; }
+.spectator-live-game { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); align-items:start; gap:16px; min-width:0; }
+.spectator-live-game>.dp-game-panel { --board-size:300px; min-width:0; min-height:0; height:auto; }
+.spectator-live-game .dp-board-stage { padding:8px 10px; }
+.spectator-live-game>.chat-panel { grid-column:2; grid-row:1; height:min(490px,60dvh); }
+.spectator-live-game>.dp-match-queue { grid-column:1 / -1; }
+@media(max-width:740px) {
+ .dp-dialog.spectator-dialog { width:calc(100vw - 24px); max-width:calc(100vw - 24px)!important; padding:18px; }
+ .spectator-live-game { grid-template-columns:minmax(0,1fr); gap:12px; }
+ .spectator-live-game>.chat-panel { grid-column:1; grid-row:auto; height:min(360px,55dvh); }
+}

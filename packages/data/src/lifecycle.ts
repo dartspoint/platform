@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {transaction,audit,outbox,draining,redis} from './db';
 import {finishMatch,persist,type ServerGame} from './matches';
 import {dartsGameReducer} from '../../game-core/src/darts-game-state';
+import {observeTurnTimeout} from '../../game-core/src/turn-timeout';
 export async function maintainMatches(){return transaction(async c=>{
  // A lost writer cannot make elapsed infrastructure downtime into a player loss.
  const recovery=(await c.query("select * from matches where lifecycle='playing' and writer_id is not null and lease_until<now() and not exists(select 1 from match_darts d where d.match_id=matches.id and impacted_at is null) for update skip locked")).rows;
@@ -18,7 +19,16 @@ export async function maintainMatches(){return transaction(async c=>{
   await audit(c,null,'match.no-show',m.id,{winner,deadlineMinutes:5},winner===null?'Geen eenduidige aanwezige speler; hernieuwde bevestiging of beheerbesluit nodig':'Enige aanwezige speler had de wedstrijd bevestigd; administratieve walkover');
  }
  const turns=(await c.query("select m.* from matches m where lifecycle='playing' and state->'pendingDart'='null'::jsonb and not exists(select 1 from match_players p where p.match_id=m.id and disconnected_at is not null) and coalesce((state->>'turnStartedAt')::bigint,(state->>'phaseStartedAt')::bigint)+coalesce((competition->>'turnSeconds')::integer,30)*1000<$1 for update skip locked",[Date.now()])).rows;
- for(const m of turns){const s={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:m.state.turn}),phaseToken:randomUUID()};await finishMatch(c,m,s,'forfeit',s.winner);await persist(c,m,s,'turn-timeout',null);await audit(c,null,'match.turn-timeout',m.id);}
+ for(const m of turns){
+  const now=Date.now(),intervalMs=(m.competition?.turnSeconds??30)*1000,timeout=observeTurnTimeout(m.state,now,intervalMs);if(!timeout)continue;
+  if(timeout.forfeit){
+   const s={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:m.state.turn}),...timeout,phaseToken:randomUUID(),lastResult:'Wedstrijd verloren na drie opeenvolgende beurttijdoverschrijdingen.'};
+   await finishMatch(c,m,s,'forfeit',s.winner);await persist(c,m,s,'turn-timeout',null);await audit(c,null,'match.turn-timeout',m.id,{player:m.state.turn,strike:3,intervalMs});
+  }else{
+   await persist(c,m,{...m.state,...timeout},'turn-timeout-warning',null);
+   await audit(c,null,'match.turn-timeout-warning',m.id,{player:m.state.turn,strike:timeout.timeoutWarning!.strike,deadlineAt:timeout.timeoutWarning!.deadlineAt,intervalMs});
+  }
+ }
 });}
 export async function scheduleReminders(){return transaction(async c=>{
  const tournaments=(await c.query("select * from tournaments where published and status in('registration','checkin') and nullif(model->'settings'->>'startsAt','')::timestamptz between now() and now()+interval '30 minutes'")).rows;

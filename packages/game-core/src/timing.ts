@@ -1,15 +1,21 @@
 export const TIMING_VERSION='render-sample-v3' as const;
 export type TimingVersion='receive-v1'|'bounded-latency-v2'|typeof TIMING_VERSION;
+export const METER_SPEED_VERSION='faster-v2' as const;
+export type MeterSpeedVersion='standard-v1'|typeof METER_SPEED_VERSION;
 export const MAX_COMPENSATION_MS=90;
 export const MAX_RENDER_AGE_MS=34;
-export type RenderSampleClaim={sampleAt:number;connectionId:string;dartNumber:number};
-export function meterPosition(at:number,startedAt:number,axis:'horizontal'|'vertical'){
- const period=axis==='horizontal'?2200:2500;
+export type RenderSampleClaim={sampleAt:number;connectionId:string;dartNumber:number;meterSpeedVersion?:MeterSpeedVersion};
+// Missing markers preserve the periods of already stored matches and practice.
+export function meterPeriod(axis:'horizontal'|'vertical',version:MeterSpeedVersion='standard-v1'){
+ return axis==='horizontal'?(version===METER_SPEED_VERSION?2037:2200):(version===METER_SPEED_VERSION?2315:2500);
+}
+export function meterPosition(at:number,startedAt:number,axis:'horizontal'|'vertical',speedVersion:MeterSpeedVersion='standard-v1'){
+ const period=meterPeriod(axis,speedVersion);
  const phase=(((at-startedAt)/period+.25)%1+1)%1;
  return (1-Math.abs(phase*2-1))*2.28-1.14;
 }
-export function meterFraction(at:number,startedAt:number,axis:'horizontal'|'vertical'){
- return (meterPosition(at,startedAt,axis)+1.14)/2.28;
+export function meterFraction(at:number,startedAt:number,axis:'horizontal'|'vertical',speedVersion:MeterSpeedVersion='standard-v1'){
+ return (meterPosition(at,startedAt,axis,speedVersion)+1.14)/2.28;
 }
 export function admittedMoment(receivedAt:number,latencyMs:number,phaseStartedAt:number,lastAcceptedAt:number,processedAt:number){
  if(![receivedAt,latencyMs,phaseStartedAt,lastAcceptedAt,processedAt].every(Number.isFinite)||receivedAt<phaseStartedAt||receivedAt<lastAcceptedAt||receivedAt>processedAt||latencyMs<0||latencyMs>90)throw new Error('invalid_timing');

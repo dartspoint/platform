@@ -60,7 +60,7 @@ try{
     // A rejected stale intent gets a new UUID after a fresh authoritative read.
     // No accepted command is replayed with a changed payload.
     const calibration=calibrations.get(socket);assert.ok(!phase||calibration?.ready,'Socket must complete measured calibration');
-    socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type,...(phase?{renderSample:{sampleAt:Math.max(state.state.phaseStartedAt,Date.now()-2),connectionId:calibration!.connectionId,dartNumber:state.state.dartCount[0]+state.state.dartCount[1]+1}}:{})});
+    socket.send('command',{protocolVersion:1,commandId:randomUUID(),matchId:pair.id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type,...(phase?{renderSample:{sampleAt:Math.max(state.state.phaseStartedAt,Date.now()-2),connectionId:calibration!.connectionId,dartNumber:state.state.dartCount[0]+state.state.dartCount[1]+1,meterSpeedVersion:state.state.meterSpeedVersion??'standard-v1'}}:{})});
    });
    if(accepted){latencies.push(performance.now()-start);return;}
    staleStateReconciliations++;

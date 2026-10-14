@@ -1003,3 +1003,66 @@ Achttien helper/componentcases, vier mailpollmocks, typecheck en **39/39**
 ops-contracttests slagen. Alle **29** integrationtestcommando's blijven exact
 gelijk. Bewijs staat in de private `ci-9d2439-*`- en `staging-3faea-final`-mappen;
 nieuwe exacte-SHA-CI en verse live stagingacceptatie blijven vereist.
+
+## Aanvulling: spelbediening en chat — 14 oktober 2026
+
+De snelle chatzinnen staan in het toegankelijke tekstwolkmenu rechts van de
+smiley. De desktopheaders gebruiken minder ruimte en de spelerszoekbalk heeft
+ruimte onder de header. Nieuwe berichten volgen de onderste scrollpositie;
+wie oudere berichten leest behoudt zijn positie en kan met de nieuwberichtknop
+terug naar beneden. Een actuele binnenkomst verschijnt twee seconden boven
+de composer en wordt vervangen door een volgende binnenkomst. Het getypeerde
+serverevent blijft bewaard; historische binnenkomsten worden geen chatrij of
+nieuwe notificatie bij het ophalen van geschiedenis.
+
+Oefenen behoudt één component en serveroefensessie bij desktop-hydratatie en
+het veranderen van venstergrootte. Twee eerdere mounts konden twee resets
+versturen; een laat antwoord van de verlaten mount sloot de zichtbare sessie.
+De regressie vertraagt de eerste reset en controleert één sessie, dezelfde
+indicator en de eerste geldige native stop.
+
+Nieuwe wedstrijden en oefensessies slaan `meterSpeedVersion: faster-v2` op.
+De horizontale/verticale perioden zijn 2037/2315 ms, ongeveer acht procent
+sneller. Zonder marker blijven bestaande sessies exact 2200/2500 ms gebruiken.
+De client tekent en verstuurt de opgeslagen marker; de server vereist die
+marker voor nieuwe sessies en kiest de snelheid uitsluitend uit eigen state.
+Een oude gecachte client kan daardoor geen verkeerd berekende positie of score
+krijgen. `render-sample-v3`, het oorspronkelijke sample, serveringress,
+UUID-idempotentie, toelatingsvenster, 50 ms en 1 CSS-pixel blijven behouden.
+De wedstrijdindicatoren bewegen uitsluitend tijdens de eigen actieve beurt.
+
+Een eerste en tweede opeenvolgende beurttijdoverschrijding tonen een
+waarschuwing en geven dezelfde speler een volledig nieuw beurtvenster. Pas de
+derde overschrijding levert verlies op. Alleen een nieuwe, geldig toegelaten
+stop wist de eigen waarschuwingen; herhaalde receipts en afgewezen commando's
+doen dat niet. Een laat gestarte worker verbruikt niet meerdere vensters ineens.
+
+De kamer heeft een afzonderlijke activiteitstijd en een netwerklease van vijf
+minuten. Gewone achtergrondheartbeats maken een gebruiker niet actief.
+Geaccepteerde acties en gemelde vertrouwde toetsen-/pointer-/scrollinvoer
+vernieuwen activiteit. Nieuwe invoer wordt na het lokale framebudget gemeld;
+een lopende rustige heartbeat blokkeert die melding niet. Reeds verlopen
+lidmaatschappen worden niet door een heartbeat opnieuw aangemaakt. Een oudere
+transactie kan een nieuwere activiteitstijd of netwerklease niet terugzetten.
+
+Het zichtbare wedstrijdnummer gebruikt de reeds bestaande unieke numerieke
+`matches.game_number`; UUIDs blijven interne resource- en route-ID's. Een
+kamerlid kan na actuele servertoegangscontrole een echte readonly livewedstrijd
+openen en in het wedstrijdkanaal chatten. Meekijken creëert geen spelersstoel
+of reservering en bewaart een eigen lopende partij. Kamerrechten, private
+roomgrants, ratinggrenzen, blocks en mute blijven actueel gecontroleerd.
+Deelnemers kunnen na het wedstrijdeinde nog een bericht in hun spelchat sturen.
+
+De codeaanvraag- en resendknoppen wachten op een Turnstile-token zodra de
+sitekey is ingesteld. Enter verstuurt geen verzoek voordat het token klaar is;
+verlopen/error-callbacks vergrendelen opnieuw. Iedere verzendpoging vervangt het
+widget en token. De API controleert een ontbrekend token vóór het reserveren
+van de 60-secondenresendlimiet; de provider blijft de captcha verifiëren.
+
+De expand-only migratie `20261013231951_room_activity_and_match_numbers.sql`
+voegt `last_activity_at` toe en bewaakt de bestaande numerieke teller. De
+geïsoleerde domeinintegratie controleert timeout-, activiteit- en toegangsscenario's met eigen fixtures;
+nieuwe browserchecks gebruiken de echte login, server en UI. Release- en
+browsertimingbewijs wordt per uitvoering verzameld. Eerdere latencyfailures
+blijven behouden; een profielscreenshot of DOM-frame bewijst geen fysieke
+schermpresentatie binnen 50 ms.

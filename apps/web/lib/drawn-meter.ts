@@ -1,5 +1,5 @@
-import {meterFraction} from '../../../packages/game-core/src/timing';
-export type DrawnMeterSample={phaseToken:string;sampleAt:number;fraction:number;renderedAt:number};
+import {meterFraction,type MeterSpeedVersion} from '../../../packages/game-core/src/timing';
+export type DrawnMeterSample={phaseToken:string;sampleAt:number;fraction:number;renderedAt:number;meterSpeedVersion:MeterSpeedVersion};
 export type MeterGeometry={indicator:number;trackStart:number;trackSize:number;fraction:number};
 export function meterGeometry(element:HTMLElement,axis:'horizontal'|'vertical'):MeterGeometry{
  const track=element.parentElement!.getBoundingClientRect(),indicator=element.getBoundingClientRect(),horizontal=axis==='horizontal';
@@ -7,9 +7,9 @@ export function meterGeometry(element:HTMLElement,axis:'horizontal'|'vertical'):
  return {indicator:position,trackStart:start,trackSize:size,fraction:size?(position-start)/size:.5};
 }
 // Native RAF writes cannot get one frame ahead via Motion's separate renderer.
-export function drawMeter(element:HTMLElement|null,axis:'horizontal'|'vertical',sampleAt:number,phaseStartedAt:number,phaseToken:string):DrawnMeterSample|null{
- if(!element)return null;const fraction=meterFraction(sampleAt,phaseStartedAt,axis);element.style[axis==='horizontal'?'left':'top']=`${fraction*100}%`;
- return {phaseToken,sampleAt,fraction,renderedAt:performance.now()};
+export function drawMeter(element:HTMLElement|null,axis:'horizontal'|'vertical',sampleAt:number,phaseStartedAt:number,phaseToken:string,meterSpeedVersion:MeterSpeedVersion='standard-v1'):DrawnMeterSample|null{
+ if(!element)return null;const fraction=meterFraction(sampleAt,phaseStartedAt,axis,meterSpeedVersion);element.style[axis==='horizontal'?'left':'top']=`${fraction*100}%`;
+ return {phaseToken,sampleAt,fraction,renderedAt:performance.now(),meterSpeedVersion};
 }
 export function lockMeter(element:HTMLElement|null,axis:'horizontal'|'vertical',fraction:number){if(element)element.style[axis==='horizontal'?'left':'top']=`${fraction*100}%`;}
 export function timingTrace(value:Record<string,unknown>){

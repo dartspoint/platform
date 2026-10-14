@@ -4,7 +4,7 @@ import type {Room} from '@colyseus/sdk';
 import {Client} from '@colyseus/sdk';
 import {DART_NUMBERS} from '../../packages/game-core/src/darts-rules';
 import {getCheckoutRoutes} from '../../packages/game-core/src/darts-checkouts';
-import {meterPosition,ServerClock,TIMING_VERSION,type RenderSampleClaim} from '../../packages/game-core/src/timing';
+import {meterPosition,meterPeriod,ServerClock,TIMING_VERSION,type RenderSampleClaim} from '../../packages/game-core/src/timing';
 import {get} from './helpers';
 const pause=(ms:number)=>new Promise(r=>setTimeout(r,Math.max(0,ms)));
 export async function fullMatch(a:any,b:any,id:string){
@@ -38,7 +38,7 @@ export async function fullMatch(a:any,b:any,id:string){
   return {next,payload};
  }
  async function stopAt(room:Room,state:any,axis:'horizontal'|'vertical',coordinate:number){
-  const period=axis==='horizontal'?2200:2500,p=(coordinate+1.14)/2.28;
+  const period=meterPeriod(axis,state.state.meterSpeedVersion),p=(coordinate+1.14)/2.28;
   const phases=[p/2,1-p/2].map(v=>(v-.25+1)%1);
   if(state.state.timingVersion===TIMING_VERSION){
    const calibration=calibrations.get(room)!;assert.ok(calibration.clock.ready&&calibration.ready&&calibration.connectionId,'The real socket must complete both clock calibrations');
@@ -50,10 +50,10 @@ export async function fullMatch(a:any,b:any,id:string){
    // calibrated, fixed phase mapping; actual drawn samples have separate tests.
    // Node can send within one millisecond of receiving a sample; give this
    // synthetic bot frame an age of 2 ms to cover integer Date.now ingress granularity.
-   const sampleAt=calibration.clock.phaseNow(state.state.phaseToken,performance.now()-botSampleAgeMs),renderSample={sampleAt,connectionId:calibration.connectionId!,dartNumber:state.state.dartCount[0]+state.state.dartCount[1]+1};
+   const sampleAt=calibration.clock.phaseNow(state.state.phaseToken,performance.now()-botSampleAgeMs),renderSample={sampleAt,connectionId:calibration.connectionId!,dartNumber:state.state.dartCount[0]+state.state.dartCount[1]+1,meterSpeedVersion:state.state.meterSpeedVersion??'standard-v1'};
    const result=await send(room,state,'dart.stop_'+axis,randomUUID(),renderSample);
    assert.equal(result.next.timing.admittedAt,sampleAt,'The server admits the exact calibrated fixture sample');
-   assert.equal(axis==='horizontal'?result.next.state.lockedX:result.next.state.lockedY,meterPosition(sampleAt,start,axis),'The full match uses the actual versioned meter function');
+   assert.equal(axis==='horizontal'?result.next.state.lockedX:result.next.state.lockedY,meterPosition(sampleAt,start,axis,state.state.meterSpeedVersion),'The full match uses the actual versioned meter function');
    return result;
   }
   const now=Date.now(),start=state.state.phaseStartedAt,cycle=Math.floor((now-start)/period);

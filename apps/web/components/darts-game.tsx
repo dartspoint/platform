@@ -1,7 +1,7 @@
 "use client";
 import {timingInput} from "@/lib/use-timing-input";
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { ArrowDown, ArrowUp, ArrowRight, ArrowUpRight, RotateCcw } from "lucide-react";
 import { BOARD_GEOMETRY, DART_NUMBERS, dartPoseAt, dartTipPosition, dartTransform, opponentTarget, scoreDart, type DartHit } from "@/lib/darts-rules";
@@ -199,7 +199,7 @@ export function Scoreboard({ game, lessMotion = false, checkoutHints = true }: {
     {checkoutHints && game.rules.doubleOut && game.opened[game.turn] ? <CheckoutHint game={game} reducedMotion={reducedMotion}/> : <div className="dp-checkout-slot"/>}
     <div className="dp-match-score">
     <table className="dp-match-score-table">
-      <caption><span title={`${matchRulesLabel(game.rules)} · ${matchFormatLabel(game.rules)}`}>{game.rules.startScore} · {game.rules.doubleIn ? game.rules.doubleOut ? "DIDO" : "DI" : game.rules.doubleOut ? "DO" : "SO"} · <strong>{game.rules.format === "sets" ? `BO${game.rules.bestOfSets} sets / BO${game.rules.bestOf} legs` : `Best of ${game.rules.bestOf} ${game.rules.bestOf === 1 ? "leg" : "legs"}`}</strong></span><span>Game ID: #{game.id}</span></caption>
+      <caption><span title={`${matchRulesLabel(game.rules)} · ${matchFormatLabel(game.rules)}`}>{game.rules.startScore} · {game.rules.doubleIn ? game.rules.doubleOut ? "DIDO" : "DI" : game.rules.doubleOut ? "DO" : "SO"} · <strong>{game.rules.format === "sets" ? `BO${game.rules.bestOfSets} sets / BO${game.rules.bestOf} legs` : `Best of ${game.rules.bestOf} ${game.rules.bestOf === 1 ? "leg" : "legs"}`}</strong></span><span>Wedstrijd {game.publicGameId ? `#${game.publicGameId}` : "—"}</span></caption>
       <colgroup><col className="dp-match-score-player-col" /><col className="dp-match-score-small-col" /><col className="dp-match-score-small-col" /><col className="dp-match-score-small-col" /><col className="dp-match-score-points-col" /><col className="dp-match-score-visit-col" /></colgroup>
       <thead><tr><th scope="col">Speler</th><th scope="col">Sets</th><th scope="col">Legs</th><th scope="col"><abbr title="Resterende darts in de huidige beurt">D</abbr></th><th scope="col"><abbr title="Resterende punten">Ptn</abbr></th><th scope="col">Beurt</th></tr></thead>
       <tbody>{[game.playerName, game.opponentName].map((name, i) => {
@@ -225,7 +225,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
   const audioContext = useRef<AudioContext | null>(null);
   const previousDarts = useRef(game.dartCount[0] + game.dartCount[1]);
   const active = game.phase === "horizontal" || game.phase === "vertical";
-  const disabled = game.phase === "opponent" || game.phase === "flight" || interactionBlocked || !game.ready || !!game.offlineUntil || game.sending || (active && !game.timingReady);
+  const disabled = game.isSpectator || game.phase === "opponent" || game.phase === "flight" || interactionBlocked || !game.ready || !!game.offlineUntil || game.sending || (active && !game.timingReady);
   // Sending-only renders keep the unchanged board and flight props stable.
   const boardDarts = useMemo(() => game.pendingDart ? [...(game.freshVisit ? [] : game.landedDarts), game.pendingDart] : game.landedDarts, [game.pendingDart, game.freshVisit, game.landedDarts]);
 
@@ -237,7 +237,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
   useEffect(() => () => { void audioContext.current?.close().catch(() => {}); audioContext.current = null; }, []);
 
   const throwWithGesture = useCallback(() => {
-    if (interactionBlocked || !game.ready || game.offlineUntil || game.sending || (active && !game.timingReady) || phase === "flight" || phase === "opponent") return;
+    if (game.isSpectator || interactionBlocked || !game.ready || game.offlineUntil || game.sending || (active && !game.timingReady) || phase === "flight" || phase === "opponent") return;
     if (phase === "won") { void game.rematch(); return; }
     startOrStop();
     // Audio is created only inside a real button/keyboard gesture, never on load.
@@ -248,7 +248,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
         if (audioContext.current?.state === "suspended") void audioContext.current.resume().catch(() => {});
       } catch { /* The playable demo still works when audio is unavailable. */ }
     }
-  }, [phase, startOrStop, muted, interactionBlocked, game.ready, game.offlineUntil, game.sending, game.timingReady, active, game.rematch]);
+  }, [phase, startOrStop, muted, interactionBlocked, game.isSpectator, game.ready, game.offlineUntil, game.sending, game.timingReady, active, game.rematch]);
 
   useEffect(() => {
     const dartCount = game.dartCount[0] + game.dartCount[1];
@@ -327,9 +327,23 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
           </div>
         </div>
       </div>
-      <button className={`dp-throw-button ${active ? "is-timing" : ""}`} {...timingInput(throwWithGesture)} disabled={disabled} aria-label={game.phase === "won" ? "Speel opnieuw" : game.phase === "horizontal" ? "Stop horizontale indicator" : game.phase === "vertical" ? "Stop verticale indicator en gooi" : game.phase === "flight" ? "Pijl onderweg" : "Tegenstander aan de beurt"}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? "STOP" : "GOOI"}</span><ArrowUpRight size={15} /></>}</button>
+      {!game.isSpectator && <button className={`dp-throw-button ${active ? "is-timing" : ""}`} {...timingInput(throwWithGesture)} disabled={disabled} aria-label={game.phase === "won" ? "Speel opnieuw" : game.phase === "horizontal" ? "Stop horizontale indicator" : game.phase === "vertical" ? "Stop verticale indicator en gooi" : game.phase === "flight" ? "Pijl onderweg" : "Tegenstander aan de beurt"}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? "STOP" : "GOOI"}</span><ArrowUpRight size={15} /></>}</button>}
     </div>
+    {game.timeoutWarning && game.phase !== "won" && <p className="dp-connection-note dp-timeout-warning" role="status" aria-live="polite" data-timeout-strike={game.timeoutWarning.strike}>
+      {game.timeoutWarning.player === 0 ? game.playerName : game.opponentName}: {game.timeoutWarning.strike === 1 ? "eerste time-outwaarschuwing. Gooi binnen de nieuwe beurttijd." : "tweede time-outwaarschuwing. Bij de volgende time-out verlies je de wedstrijd."}
+    </p>}
     <Scoreboard game={game} lessMotion={lessMotion} checkoutHints={checkoutHints} />
     {showExperience && <MatchExperience game={game} lessMotion={lessMotion} hidden={interactionBlocked}/>}
+  </div>;
+}
+
+/** A separate socket observes the approved match without changing the player's
+ * own game hook, selected match, timing samples or drafts. */
+export function SpectatorGame({ matchId, variant, lessMotion, children }: { matchId: string; variant: string; lessMotion: boolean; children?: ReactNode }) {
+  const game = useServerGame("", matchId, true);
+  if (!game.ready || game.offlineUntil) return <p className="spectator-note" role="status">{game.connectionMessage || "De livewedstrijd wordt geladen…"}</p>;
+  return <div className="spectator-live-game" data-spectator-match={matchId} data-public-game-id={game.publicGameId}>
+    <GamePanel game={game} variant={variant} lessMotion={lessMotion} muted interactionBlocked showExperience={false}/>
+    {children}
   </div>;
 }

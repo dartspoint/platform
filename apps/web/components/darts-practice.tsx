@@ -159,7 +159,7 @@ export function DartsPractice({ tutorial = false, onClose,embedded=false }: { tu
     if (phase !== "horizontal" && phase !== "vertical") return;
     const meter = phase === "horizontal" ? xMeter : yMeter;
     let frame=0;
-    const tick=()=>{const s=authoritative.current?.state;if(s&&!busy.current&&s.phase===phase&&clock.current.ready&&serverCalibrated.current){const axis=phase as 'horizontal'|'vertical',at=clock.current.phaseNow(s.phaseToken,performance.now(),s.timingVersion??'receive-v1');if(s.timingVersion!==TIMING_VERSION||at>=s.phaseStartedAt){const sample=drawMeter(axis==='horizontal'?xIndicator.current:yIndicator.current,axis,at,s.phaseStartedAt,s.phaseToken);if(sample){drawn.current[axis]=sample;meter.set(sample.fraction);}}}frame=requestAnimationFrame(tick);};
+    const tick=()=>{const s=authoritative.current?.state;if(s&&!busy.current&&s.phase===phase&&clock.current.ready&&serverCalibrated.current){const axis=phase as 'horizontal'|'vertical',at=clock.current.phaseNow(s.phaseToken,performance.now(),s.timingVersion??'receive-v1');if(s.timingVersion!==TIMING_VERSION||at>=s.phaseStartedAt){const sample=drawMeter(axis==='horizontal'?xIndicator.current:yIndicator.current,axis,at,s.phaseStartedAt,s.phaseToken,s.meterSpeedVersion);if(sample){drawn.current[axis]=sample;meter.set(sample.fraction);}}}frame=requestAnimationFrame(tick);};
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [phase, xMeter, yMeter]);
@@ -173,8 +173,8 @@ export function DartsPractice({ tutorial = false, onClose,embedded=false }: { tu
   const act=useCallback(async()=>{
     const current=authoritative.current;if(!current||busy.current||['flying','done'].includes(current.state.phase))return;
     const axis=current.state.phase==='horizontal'?'horizontal':current.state.phase==='vertical'?'vertical':null,sample=axis?drawn.current[axis]:null;
-    if(axis&&(!sample||sample.phaseToken!==current.state.phaseToken||current.state.timingVersion===TIMING_VERSION&&sample.sampleAt<current.state.phaseStartedAt||!clock.current.ready||!serverCalibrated.current))return;
-    busy.current=true;const stoppedAt=performance.now(),payload={type:axis??'next',commandId:crypto.randomUUID(),sessionId:current.id,expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken,...(axis&&sample&&current.state.timingVersion===TIMING_VERSION?{renderSample:{sampleAt:sample.sampleAt,connectionId:connectionId.current,dartNumber:current.state.count+1}}:{})};pending.current=payload;
+    if(axis&&(!sample||sample.phaseToken!==current.state.phaseToken||sample.meterSpeedVersion!==(current.state.meterSpeedVersion??'standard-v1')||current.state.timingVersion===TIMING_VERSION&&sample.sampleAt<current.state.phaseStartedAt||!clock.current.ready||!serverCalibrated.current))return;
+    busy.current=true;const stoppedAt=performance.now(),payload={type:axis??'next',commandId:crypto.randomUUID(),sessionId:current.id,expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken,...(axis&&sample&&current.state.timingVersion===TIMING_VERSION?{renderSample:{sampleAt:sample.sampleAt,connectionId:connectionId.current,dartNumber:current.state.count+1,meterSpeedVersion:sample.meterSpeedVersion}}:{})};pending.current=payload;
     const element=axis==='horizontal'?xIndicator.current:yIndicator.current;
     if(axis&&sample)lockMeter(element,axis,sample.fraction);
     const stopAppliedAt=performance.now(),sendAt=performance.now();

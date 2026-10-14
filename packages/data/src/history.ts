@@ -9,7 +9,7 @@ export async function matchHistory(actor:Actor,input:unknown){
  (select jsonb_agg(jsonb_build_object('id',l.user_id,'before',l.before,'after',l.after,'delta',l.delta)) from rating_ledger l where l.match_id=m.id) ledger,
  (select jsonb_agg(jsonb_build_object('id',p.user_id,'seat',p.seat,'name',case when pr.rename_required then 'Speler-'||left(replace(pr.id::text,'-',''),12) else pr.username end)) from match_players p join profiles pr on pr.id=p.user_id where p.match_id=m.id) players
  from matches m join match_results r on r.match_id=m.id where exists(select 1 from match_players p where p.match_id=m.id and p.user_id=$1)
- and ($2::timestamptz is null or (m.ended_at,m.id)<($2::timestamptz,$3::uuid)) order by m.ended_at desc,m.id desc limit 100`,[actor.id,before??null,id??'ffffffff-ffff-ffff-ffff-ffffffffffff'])).rows.map(row=>({...row,data:presentMatchNames(row.data,row.players??[])}));
+ and ($2::timestamptz is null or (m.ended_at,m.id)<($2::timestamptz,$3::uuid)) order by m.ended_at desc,m.id desc limit 100`,[actor.id,before??null,id??'ffffffff-ffff-ffff-ffff-ffffffffffff'])).rows.map(row=>({...row,gameNumber:Number(row.game_number),publicGameId:Number(row.game_number),data:presentMatchNames(row.data,row.players??[])}));
 }
 
 export async function personalRecords(actor:Actor){

@@ -29,6 +29,12 @@ export async function blocked(c:PoolClient,a:string,b:string){return !!(await c.
 export async function ensureChannelReadState(c:PoolClient,userId:string,channelId:string){
  await c.query('insert into channel_memberships(channel_id,user_id,last_read_cursor) select id,$2,cursor from channels where id=$1 on conflict(channel_id,user_id) do update set left_at=null',[channelId,userId]);
 }
+export const ROOM_IDLE_MS=300000;
+/** Only an accepted action or the explicit recent-input heartbeat flag calls
+ * this. Polls, reads and ordinary connectivity pulses never refresh activity. */
+export async function markRoomActivity(c:PoolClient,actorId:string,roomId?:string){
+ await c.query("update room_memberships set last_activity_at=greatest(last_activity_at,clock_timestamp()),lease_until=greatest(last_activity_at,clock_timestamp())+interval '5 minutes' where user_id=$1 and ($2::uuid is null or room_id=$2) and lease_until>clock_timestamp()",[actorId,roomId??null]);
+}
 export async function currentRoomMembership(c:PoolClient,actor:Actor,expectedRoomId?:string){
  const membership=(await c.query('select room_id from room_memberships where user_id=$1 and lease_until>now()',[actor.id])).rows[0];
  requireThat(membership&&(!expectedRoomId||membership.room_id===expectedRoomId),'join_room_first',403,'Kies eerst een kamer om te oefenen.');
@@ -58,7 +64,7 @@ export async function joinRoom(actor:Actor,input:unknown){
    if(budget.n>=10)throw new DomainError('room_join_rate',429,'Je wisselt erg vaak van kamer. Probeer het zo opnieuw.',Math.max(1,Math.ceil(Number(budget.retry))));
   }
   const visitId=transition?randomUUID():current.visit_id;
-  await c.query("insert into room_memberships(user_id,room_id,lease_until,visit_id) values($1,$2,now()+interval '60 seconds',$3) on conflict(user_id) do update set room_id=$2,lease_until=excluded.lease_until,visit_id=$3,joined_at=case when room_memberships.visit_id=$3 then room_memberships.joined_at else now() end",[actor.id,roomId,visitId]);
+  await c.query("insert into room_memberships(user_id,room_id,lease_until,visit_id,last_activity_at) values($1,$2,clock_timestamp()+interval '5 minutes',$3,clock_timestamp()) on conflict(user_id) do update set room_id=$2,lease_until=greatest(room_memberships.last_activity_at,excluded.last_activity_at)+interval '5 minutes',last_activity_at=greatest(room_memberships.last_activity_at,excluded.last_activity_at),presence='available',visit_id=$3,joined_at=case when room_memberships.visit_id=$3 then room_memberships.joined_at else now() end",[actor.id,roomId,visitId]);
   const channel=(await c.query("select id from channels where room_id=$1 and kind='community'",[roomId])).rows[0];
   if(channel)await ensureChannelReadState(c,actor.id,channel.id);
   let event:any;
@@ -75,11 +81,18 @@ export async function joinRoom(actor:Actor,input:unknown){
  if(result.event)await publishChatChange(result.channelId!,result.event.id,Number(result.event.seq),'room.member_joined');
  return {roomId:result.roomId,visitId:result.visitId};
 }
-export async function heartbeat(actor:Actor){return transaction(async c=>{
- const member=(await c.query('select room_id from room_memberships where user_id=$1 and lease_until>now()',[actor.id])).rows[0];
+export async function heartbeat(actor:Actor,input:unknown={}){const {active=false}=z.object({active:z.boolean().optional()}).strict().parse(input);return transaction(async c=>{
+ const member=(await c.query("select room_id from room_memberships where user_id=$1 and lease_until>clock_timestamp() for update",[actor.id])).rows[0];
  if(!member)return {ok:false,code:'room_membership_expired'};
  await roomAccess(c,actor,member.room_id);
- await c.query("update room_memberships set lease_until=now()+interval '60 seconds' where user_id=$1 and room_id=$2 and lease_until>now()",[actor.id,member.room_id]);return {ok:true};
+ const updated=await c.query("update room_memberships set lease_until=case when $3 then greatest(last_activity_at,clock_timestamp())+interval '5 minutes' else least(lease_until,last_activity_at+interval '5 minutes') end,last_activity_at=case when $3 then greatest(last_activity_at,clock_timestamp()) else last_activity_at end where user_id=$1 and room_id=$2 and lease_until>clock_timestamp() and last_activity_at>clock_timestamp()-interval '5 minutes'",[actor.id,member.room_id,active]);
+ if(!updated.rowCount){await c.query('update room_memberships set lease_until=least(lease_until,clock_timestamp()) where user_id=$1 and room_id=$2',[actor.id,member.room_id]);return {ok:false,code:'room_membership_expired'};}return {ok:true};
+});}
+export async function expireRoomMemberships(){return transaction(async c=>{
+ const expired=(await c.query("update room_memberships set lease_until=least(lease_until,now()) where lease_until>now() and last_activity_at<=now()-interval '5 minutes' returning user_id,room_id")).rows;
+ // The existing match disconnect/turn policies remain responsible for match
+ // outcomes; room inactivity never fabricates a dart or directly forfeits.
+ return expired.length;
 });}
 const preferencesSchema=z.object({favoriteRooms:z.array(z.string().max(100)).max(50),sound:z.boolean(),lessMotion:z.boolean(),leftHanded:z.boolean(),haptics:z.boolean(),quietTurn:z.boolean(),privateMessages:z.enum(['everyone','friends','nobody']),availability:z.enum(['available','playing','watching'])}).partial().strict();
 export async function preferences(actor:Actor,input:unknown){const patch=preferencesSchema.parse(input);await db().query('insert into preferences(user_id,data) values($1,$2) on conflict(user_id) do update set data=preferences.data || excluded.data,updated_at=now()',[actor.id,JSON.stringify(patch)]);return {ok:true};}
@@ -136,7 +149,11 @@ export async function channelAccess(c:PoolClient,actor:Actor,channelId:string,wr
  if(ch.kind==='private'){requireThat([ch.user_low,ch.user_high].includes(actor.id),'forbidden',403);requireThat(!await blocked(c,ch.user_low,ch.user_high),'blocked',403);if(writing){const recipient=ch.user_low===actor.id?ch.user_high:ch.user_low;const policy=(await c.query('select data from preferences where user_id=$1',[recipient])).rows[0]?.data?.privateMessages??'everyone';requireThat(policy==='everyone'||policy==='friends'&&(await c.query('select 1 from friendships where user_low=$1 and user_high=$2',[ch.user_low,ch.user_high])).rowCount,'private_messages_closed',403);}}
  else{
   roomId=ch.room_id;
-  if(ch.kind==='match'){const m=(await c.query('select room_id from matches where id=$1',[ch.match_id])).rows[0];requireThat(m,'not_found',404);roomId=m.room_id;}
+  if(ch.kind==='match'){
+   const m=(await c.query('select m.room_id,m.lifecycle,exists(select 1 from match_players participant where participant.match_id=m.id and participant.user_id=$2) participant from matches m where m.id=$1',[ch.match_id,actor.id])).rows[0];requireThat(m,'not_found',404);roomId=m.room_id;
+   if(writing)requireThat(['assigned','playing','paused'].includes(m.lifecycle)||m.lifecycle==='completed'&&m.participant,'match_ended',409);
+   requireThat(!(await c.query('select 1 from user_blocks b join match_players participant on participant.match_id=$2 where not exists(select 1 from match_players own where own.match_id=$2 and own.user_id=$1) and ((b.blocker_id=$1 and b.blocked_id=participant.user_id) or (b.blocked_id=$1 and b.blocker_id=participant.user_id))',[actor.id,ch.match_id])).rowCount,'blocked',403);
+  }
   await roomAccess(c,actor,roomId!);
   requireThat((await c.query('select 1 from room_memberships where user_id=$1 and room_id=$2 and lease_until>now()',[actor.id,roomId])).rowCount,'join_room_first',403);
  }
@@ -151,7 +168,9 @@ const chatMessageSelect=`select m.id,m.channel_id,m.seq,coalesce(m.change_cursor
 /** All reads happen in the snapshot acquired after the separate user lock. */
 async function chatSendSnapshot(c:PoolClient,actor:Actor,channelId:string,clientMessageId:string){
  return (await c.query(`with context as (
-  select ch.*,game.id is not null match_found,room.id actual_room_id,room.status room_status,room.min_rating,room.max_rating,
+  select ch.*,game.id is not null match_found,game.lifecycle match_lifecycle,room.id actual_room_id,room.status room_status,room.min_rating,room.max_rating,
+   exists(select 1 from match_players own where own.match_id=game.id and own.user_id=$1) match_participant,
+   exists(select 1 from user_blocks block join match_players participant on participant.match_id=game.id where (block.blocker_id=$1 and block.blocked_id=participant.user_id) or (block.blocked_id=$1 and block.blocker_id=participant.user_id)) match_blocked,
    coalesce((select rating from player_ratings where user_id=$1),1500) rating,
    exists(select 1 from user_roles role where role.user_id=$1 and role.role in('admin','owner') and role.revoked_at is null) staff_allowed,
    exists(select 1 from room_access grant_access where grant_access.room_id=room.id and grant_access.user_id=$1) private_grant,
@@ -174,7 +193,7 @@ function requireChatSendAccess(actor:Actor,ch:any){
   requireThat([ch.user_low,ch.user_high].includes(actor.id),'forbidden',403);requireThat(!ch.pair_blocked,'blocked',403);
   requireThat(ch.private_policy==='everyone'||ch.private_policy==='friends'&&ch.friends,'private_messages_closed',403);
  }else{
-  if(ch.kind==='match')requireThat(ch.match_found,'not_found',404);
+  if(ch.kind==='match'){requireThat(ch.match_found,'not_found',404);requireThat(['assigned','playing','paused'].includes(ch.match_lifecycle)||ch.match_lifecycle==='completed'&&ch.match_participant,'match_ended',409);requireThat(ch.match_participant||!ch.match_blocked,'blocked',403);}
   requireThat(ch.actual_room_id,'room_unavailable',403);requireThat(ch.room_status!=='private'||ch.staff_allowed||ch.private_grant,'room_private',403);
   requireThat(!ch.room_removed,'room_removed',403);requireThat(Number(ch.rating)>=ch.min_rating&&Number(ch.rating)<=ch.max_rating,'room_rating_restricted',403);
   requireThat(ch.live_membership,'join_room_first',403);
@@ -224,6 +243,7 @@ export async function sendMessage(actor:Actor,input:unknown){
   // Read state precedes cursor advance. Projection needs another statement:
   // profiles may change while this statement waits on a membership/cursor lock.
   const saved=(await c.query(`with read_state as (insert into channel_memberships(channel_id,user_id,last_read_cursor) select id,$2,cursor from channels where id=$1 on conflict(channel_id,user_id) do update set left_at=null returning channel_id),
+   activity as (update room_memberships set last_activity_at=greatest(last_activity_at,clock_timestamp()),lease_until=greatest(last_activity_at,clock_timestamp())+interval '5 minutes' where user_id=$2 and lease_until>clock_timestamp() returning user_id),
    next_cursor as (update channels set cursor=cursor+1 where id=$1 and exists(select 1 from read_state) returning cursor),
    inserted as (insert into chat_messages(channel_id,sender_id,client_message_id,seq,body,normalized_body) select $1,$2,$3,cursor,$4,$5 from next_cursor returning *)
    select id from inserted`,[channelId,actor.id,clientMessageId,body,normalized])).rows[0];
@@ -264,6 +284,8 @@ export async function personalChatChange(messageId:string,actors:readonly Actor[
   and not exists(select 1 from sanctions ban where ban.target_id=s.user_id and ban.room_id is null and ban.kind='suspend' and ban.revoked_at is null and ban.starts_at<=now() and ban.ends_at>now())
   and not exists(select 1 from personal_mutes mute where mute.user_id=s.user_id and mute.muted_id=coalesce(message.sender_id,message.actor_id))
   and not exists(select 1 from user_blocks b where (b.blocker_id=s.user_id and b.blocked_id=coalesce(message.sender_id,message.actor_id)) or (b.blocked_id=s.user_id and b.blocker_id=coalesce(message.sender_id,message.actor_id)))
+  and (ch.kind<>'match' or exists(select 1 from match_players own where own.match_id=game.id and own.user_id=s.user_id)
+   or not exists(select 1 from user_blocks b join match_players participant on participant.match_id=game.id where (b.blocker_id=s.user_id and b.blocked_id=participant.user_id) or (b.blocked_id=s.user_id and b.blocker_id=participant.user_id)))
   and (ch.kind='private' and s.user_id in(ch.user_low,ch.user_high)
    and (select count(*) from profiles peer where peer.id in(ch.user_low,ch.user_high) and peer.status='active' and peer.onboarded_at is not null)=2
    and not exists(select 1 from user_blocks b where (b.blocker_id=ch.user_low and b.blocked_id=ch.user_high) or (b.blocker_id=ch.user_high and b.blocked_id=ch.user_low))

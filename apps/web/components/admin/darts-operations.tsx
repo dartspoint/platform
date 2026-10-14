@@ -1,5 +1,6 @@
 "use client";
-import {selfName} from "@/lib/platform-client";
+import {selfName,usePlatform} from "@/lib/platform-client";
+import {publicGameLabel} from '@/lib/public-game-label';
 
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, ChevronRight, Clock3, Crown, DoorOpen, Flag, LockKeyhole, Plus, Search, Shield, ShieldCheck, SlidersHorizontal, Trash2, UserRound, Users } from "lucide-react";
@@ -122,6 +123,7 @@ export function AdminRooms() {
 }
 
 function CaseDetail({ item }: { item: AdminCase }) {
+  const platform=usePlatform();
   const { members } = useAdminOperations();
   const [response, setResponse] = useState(item.response);
   const [feedback, setFeedback] = useState("");
@@ -130,7 +132,7 @@ function CaseDetail({ item }: { item: AdminCase }) {
   async function update(status: AdminCase["status"]) { const result = await updateAdminCase(item.id, status, response); setFeedback(resultText(result, status === "resolved" ? "Melding afgesloten en beslissing vastgelegd." : "Behandelstatus bijgewerkt.")); setError(!result.ok); }
   return <section className="ops-case-detail">
     <div className="ops-case-detail-top"><span className={`ops-pill case-${item.status}`}>{caseLabel[item.status]}</span><span>{item.id}</span></div><h3>{item.reason}</h3><div className="ops-case-subject"><div className="ops-avatar"><UserRound size={20}/></div><span><strong>{item.player}</strong><small>Gemeld door {item.reporter} · {dateTime(item.at)}</small></span></div>
-    <dl className="ops-context-grid"><div><dt>Kamer</dt><dd>{item.room || "Niet opgegeven"}</dd></div><div><dt>Game ID</dt><dd>{item.gameId ? `#${item.gameId.replace(/^#/, "")}` : "Geen wedstrijd"}</dd></div><div><dt>Bron</dt><dd>{item.source === "demo" ? "Fictief voorbeeld" : "Spelermelding"}</dd></div></dl>
+    <dl className="ops-context-grid"><div><dt>Kamer</dt><dd>{item.room || "Niet opgegeven"}</dd></div><div><dt>Game ID</dt><dd>{item.gameId ? publicGameLabel(platform,item.gameId) : "Geen wedstrijd"}</dd></div><div><dt>Bron</dt><dd>{item.source === "demo" ? "Fictief voorbeeld" : "Spelermelding"}</dd></div></dl>
     <div className="ops-evidence"><h4>Context & bewijs</h4><p>{item.context || "De melder heeft geen aanvullende context meegestuurd."}</p></div>
     {item.response && <div className="ops-decision"><Check size={16}/><p>{item.response}</p></div>}
     <form className="ops-form" onSubmit={event => { event.preventDefault(); update("resolved"); }}><label>Behandelnotitie<textarea value={response} onChange={event => setResponse(event.target.value)} rows={3} maxLength={1200} placeholder="Beschrijf je bevinding en de gekozen vervolgstap…"/></label><div className="ops-actions">{item.status === "open" && <button type="button" className="ops-button" onClick={() => update("review")}><Clock3 size={15}/>In behandeling</button>}{item.status !== "resolved" ? <button type="submit" className="ops-button primary"><Check size={15}/>Afsluiten zonder maatregel</button> : <button type="button" className="ops-button" onClick={() => update("review")}>Melding heropenen</button>}</div><Message text={feedback} error={error}/></form>
@@ -139,6 +141,7 @@ function CaseDetail({ item }: { item: AdminCase }) {
 }
 
 export function AdminModeration() {
+  const platform=usePlatform();
   const { cases } = useAdminOperations();
   const social = useDartsSocial();
   useEffect(() => syncAdminReports(social.reports), [social.reports]);
@@ -149,6 +152,6 @@ export function AdminModeration() {
   const selectedCase = filtered.find(item => item.id === selected) ?? filtered[0];
   return <div className="ops-module">
     <div className="ops-toolbar"><label className="ops-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Speler, melding of Game ID…" aria-label="Zoek melding"/></label><select aria-label="Filter meldingstatus" value={status} onChange={event => { setStatus(event.target.value as typeof status); setSelected(""); }}><option value="all">Alle meldingen</option><option value="open">Nieuw</option><option value="review">In behandeling</option><option value="resolved">Afgesloten</option></select><span className="ops-count"><Flag size={16}/>{cases.filter(item => item.status !== "resolved").length} open</span></div>
-    <div className="ops-moderation-layout"><div className="ops-case-list">{filtered.map(item => <button key={item.id} className={selectedCase?.id === item.id ? "selected" : ""} onClick={() => setSelected(item.id)}><span className="ops-case-list-head"><span className={`ops-pill case-${item.status}`}>{caseLabel[item.status]}</span><small>{item.source === "demo" ? "VOORBEELD" : "MELDING"}</small></span><strong>{item.reason}</strong><span>{item.player} · {item.room}</span><small>{item.id} {item.gameId ? `· #${item.gameId.replace(/^#/, "")}` : ""}</small><ChevronRight size={16}/></button>)}{!filtered.length && <Empty>Geen meldingen bij dit filter.</Empty>}</div>{selectedCase ? <CaseDetail item={selectedCase} key={selectedCase.id}/> : <div className="ops-case-detail ops-empty"><ShieldCheck size={30}/><h3>Alles bijgewerkt</h3><p>Nieuwe meldingen vanuit het spel verschijnen hier.</p></div>}</div>
+    <div className="ops-moderation-layout"><div className="ops-case-list">{filtered.map(item => <button key={item.id} className={selectedCase?.id === item.id ? "selected" : ""} onClick={() => setSelected(item.id)}><span className="ops-case-list-head"><span className={`ops-pill case-${item.status}`}>{caseLabel[item.status]}</span><small>{item.source === "demo" ? "VOORBEELD" : "MELDING"}</small></span><strong>{item.reason}</strong><span>{item.player} · {item.room}</span><small>{item.id} {item.gameId ? `· ${publicGameLabel(platform,item.gameId)}` : ""}</small><ChevronRight size={16}/></button>)}{!filtered.length && <Empty>Geen meldingen bij dit filter.</Empty>}</div>{selectedCase ? <CaseDetail item={selectedCase} key={selectedCase.id}/> : <div className="ops-case-detail ops-empty"><ShieldCheck size={30}/><h3>Alles bijgewerkt</h3><p>Nieuwe meldingen vanuit het spel verschijnen hier.</p></div>}</div>
   </div>;
 }

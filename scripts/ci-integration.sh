@@ -131,6 +131,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/player-visibility.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-send-batching.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/render-sample-timing.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/match-room-expansion.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/competitions.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/restore.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/drain.ts
@@ -156,3 +157,5 @@ python3 tests/integration/landing-proxy.py
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-read.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-chat.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-density.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/match-room-expansion.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/room-activity.ts

@@ -36,7 +36,7 @@ async function keyboardAttempt(page:Page,axis:Axis,baseline:any,actorId:string,f
  Object.assign(attempt,{receivedAt,windowMs,latencyMs:Number(row.latency_ms),sampleAgeAtIngressMs:receivedAt-sampleAt,violations});
  if(violations.length===0){
   assert.equal(acknowledged.status(),200,'An admissible keyboard stop must be accepted: '+receipt.code);assert.equal(receipt.commandId,request.commandId);assert.equal(receipt.timing.admittedAt,sampleAt);assert.equal(receipt.timing.receivedAt,receivedAt);
-  assert.equal(axis==='horizontal'?receipt.state.lockedX:receipt.state.lockedY,meterPosition(sampleAt,baseline.state.phaseStartedAt,axis),'Keyboard stop uses the exact drawn sample');assert.equal(receipt.state.phase,axis==='horizontal'?'vertical':'flying');
+  assert.equal(axis==='horizontal'?receipt.state.lockedX:receipt.state.lockedY,meterPosition(sampleAt,baseline.state.phaseStartedAt,axis,baseline.state.meterSpeedVersion),'Keyboard stop uses the exact drawn sample');assert.equal(receipt.state.phase,axis==='horizontal'?'vertical':'flying');
   Object.assign(attempt,{outcome:'accepted-exact-sample',resultingPhase:receipt.state.phase});return receipt;
  }
  assert.equal(acknowledged.status(),409);assert.equal(receipt.code,'invalid_render_sample');await expect(page.getByRole('alert').filter({hasText:'timingmeting'})).toBeVisible();

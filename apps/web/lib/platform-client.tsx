@@ -42,6 +42,30 @@ export function PlatformProvider({initial,children}:{initial:PlatformSnapshot;ch
   }catch{if(!disposed)retry=setTimeout(connect,5000);}}
   void connect();return ()=>{disposed=true;clearTimeout(retry);clearInterval(renew);void room?.leave();};
  },[initial.actor.id]);
- useEffect(()=>{snapshot=initial;listeners.forEach(fn=>fn());setReady(true);const poll=setInterval(()=>{if(Date.now()-lastChatActivity<500){schedulePlatformRefresh();return;}void refreshPlatform().catch(e=>{if(e instanceof ApiError&&[401,403].includes(e.status))window.location.assign('/inloggen');});},3000);const pulse=setInterval(()=>{void api('heartbeat',{}).catch(()=>{});},20000);return ()=>{clearInterval(poll);clearInterval(pulse);clearTimeout(deferredRefresh);deferredAt=0;snapshot=EMPTY_PLATFORM;};},[initial]);
+ useEffect(()=>{
+  snapshot=initial;listeners.forEach(fn=>fn());setReady(true);
+  let disposed=false,activityVersion=0,reportedActivityVersion=0,quietPulseInFlight=false,activePulseInFlight=false,lastActivePulse=-Infinity;
+  let activityPulse:ReturnType<typeof setTimeout>|undefined;
+  const scheduleActivityPulse=()=>{
+   if(disposed||activityPulse)return;
+   // Run after the throw's local frame budget, and coalesce ongoing typing.
+   // A quiet heartbeat must not delay a new action near the idle deadline.
+   activityPulse=setTimeout(()=>{activityPulse=undefined;void heartbeat();},Math.max(100,5000-(performance.now()-lastActivePulse)));
+  };
+  const activity=(event:Event)=>{if(event.isTrusted){activityVersion++;scheduleActivityPulse();}};
+  for(const name of ['pointerdown','keydown','wheel'])window.addEventListener(name,activity,{capture:true,passive:true});
+  const heartbeat=async()=>{
+   if(disposed)return;
+   const captured=activityVersion,active=captured>reportedActivityVersion;
+   if(active){if(activePulseInFlight){scheduleActivityPulse();return;}activePulseInFlight=true;lastActivePulse=performance.now();}
+   else{if(quietPulseInFlight||activePulseInFlight)return;quietPulseInFlight=true;}
+   try{const result=await api('heartbeat',{active});if(!disposed&&result.ok===true){if(active)reportedActivityVersion=Math.max(reportedActivityVersion,captured);if(activityVersion>reportedActivityVersion)scheduleActivityPulse();}}
+   catch{/* Keep unacknowledged user activity for the next heartbeat. */}
+   finally{if(active)activePulseInFlight=false;else quietPulseInFlight=false;}
+  };
+  const poll=setInterval(()=>{if(Date.now()-lastChatActivity<500){schedulePlatformRefresh();return;}void refreshPlatform().catch(e=>{if(e instanceof ApiError&&[401,403].includes(e.status))window.location.assign('/inloggen');});},3000);
+  const pulse=setInterval(()=>{void heartbeat();},20000);
+  return ()=>{disposed=true;for(const name of ['pointerdown','keydown','wheel'])window.removeEventListener(name,activity,true);clearTimeout(activityPulse);clearInterval(poll);clearInterval(pulse);clearTimeout(deferredRefresh);deferredAt=0;snapshot=EMPTY_PLATFORM;};
+ },[initial]);
  return ready?<>{children}<IncomingInvites/><RequiredRename/></>:<main className="dp-entry-loading" role="status" style={{minHeight:'100dvh',display:'grid',placeItems:'center',color:'#9fbcaa'}}>DartsPoint wordt geopend…</main>;
 }

@@ -3,6 +3,7 @@ import {authAdmin} from '../../../packages/data/src/auth';
 import {maintainMatches,scheduleReminders} from '../../../packages/data/src/lifecycle';
 import {settlePractice} from '../../../packages/data/src/practice';
 import {settleImpacts,expireDisconnects} from '../../../packages/data/src/matches';
+import {expireRoomMemberships} from '../../../packages/data/src/community';
 import {renderDartsEmail,type DartsEmailInput} from '../../../packages/emails/src/templates';
 import {readiness} from '../../../packages/data/src/health';
 import {scheduleCompetitions,competitionResult} from '../../../packages/data/src/competitions';
@@ -57,7 +58,7 @@ let lastMail=0,lastHeartbeat=0;
 while(!stopping){
  try{
   await settleImpacts();await settlePractice();
-  if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
+  if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await expireRoomMemberships();await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
   if(Date.now()-lastMail>1000){await outbox();await advanceQueues();await scheduleCompetitions();await scheduleReminders();lastMail=Date.now();}
  }catch{console.error(JSON.stringify({event:'worker_tick_failed'}));}
  await new Promise(resolve=>setTimeout(resolve,50));

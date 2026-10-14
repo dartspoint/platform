@@ -1,5 +1,6 @@
 "use client";
 import {api,mutate,getPlatform,playerId,selfName,usePlatform} from "@/lib/platform-client";
+import {publicGameLabel} from '@/lib/public-game-label';
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, Flag, MessageCircle, ShieldCheck, Target, UserMinus, UserPlus, UserRound, Volume2, VolumeX, X } from "lucide-react";
@@ -95,7 +96,7 @@ export function PlayerActionMenu({ name:providedName, userId, roomId, channelId,
           {dialog === "report" ? <label>Reden<select value={reportReason} onChange={event => setReportReason(event.target.value)}>{["Onvriendelijk gedrag", "Spam of ongewenste berichten", "Vermoeden van valsspelen", "Ongepaste gebruikersnaam", "Anders"].map(value => <option key={value}>{value}</option>)}</select></label> : <div className="dp-player-action-fields"><label>Actie<select value={kind} onChange={event => setKind(event.target.value as ModerationKind)}><option value="warn">Waarschuwen</option><option value="mute">Tijdelijk muten in kamer</option><option value="remove">Uit kamer verwijderen</option></select></label>{kind !== "warn" && <label>Duur<select value={minutes} onChange={event => setMinutes(Number(event.target.value))}>{[5, 10, 30, 60].map(value => <option key={value} value={value}>{value} minuten</option>)}</select></label>}</div>}
           <label>{dialog === "report" ? "Toelichting · optioneel" : "Reden"}<textarea rows={3} maxLength={dialog === "report" ? 600 : 300} required={dialog === "moderation"} minLength={dialog === "moderation" ? 5 : undefined} placeholder={dialog === "report" ? "Wat gebeurde er?" : "Leg kort uit waarom je ingrijpt…"} value={reason} onChange={event => setReason(event.target.value)}/></label>
           {error && <p className="dp-player-action-error" role="alert">{error}</p>}
-          <span className="dp-player-action-context">{roomName||'Privégesprek'}{gameId&&` · Wedstrijd ${gameId}`}</span>
+          <span className="dp-player-action-context">{roomName||'Privégesprek'}{gameId&&` · Wedstrijd ${publicGameLabel(platform,gameId)}`}</span>
           <button type="submit" className="dp-social-primary" disabled={dialog === "moderation" && reason.trim().length < 5}>{dialog === "report" ? "Melding opslaan" : "Maatregel toepassen"}</button>
           <small>Je actie wordt op de server gecontroleerd en vastgelegd.</small>
         </form>

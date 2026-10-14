@@ -6,7 +6,7 @@ import {z} from 'zod';
 import {currentActor,currentActorForLogout,serverAuth} from '@/lib/server/auth';
 import {bootstrap,publicProjection} from '../../../../../../packages/data/src/projections';
 import {onboard,joinRoom,heartbeat,preferences,social,privateChannel,chatHistory,sendMessage,chatPreference,resolveChannel} from '../../../../../../packages/data/src/community';
-import {invite,respondInvite,matchAccess} from '../../../../../../packages/data/src/matches';
+import {invite,respondInvite,matchAccess,spectateMatch} from '../../../../../../packages/data/src/matches';
 import {tournamentAction,divisionAction,startDivisionMatch} from '../../../../../../packages/data/src/competitions';
 import {adminAction,moderate,report,revokeSanction,moderationCapabilities,moderateMessage} from '../../../../../../packages/data/src/admin';
 import {moderationSettings,filterAction,renameProfile} from '../../../../../../packages/data/src/content-filter';
@@ -50,9 +50,9 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
   const auth=await serverAuth();
   if(path[1]==='request'){
    const {email,captchaToken}=z.object({email:z.string().email().max(254).transform(e=>e.trim().toLowerCase()),captchaToken:z.string().max(4096).optional()}).strict().parse(input);
+   requireThat(process.env.APP_ENV==='development'||captchaToken,'captcha_required',403,'Bevestig dat je geen robot bent.');
    const hash=createHash('sha256').update(email).digest('hex');await rateLimit('otp-email:'+hash,6,3600);
    const r=await redis();requireThat(await r.set('dartspoint:otp-resend:'+hash,'1',{NX:true,EX:60}),'resend_too_soon',429,'Wacht 60 seconden voordat je een nieuwe code aanvraagt.');
-   requireThat(process.env.APP_ENV==='development'||captchaToken,'captcha_required',403,'Bevestig dat je geen robot bent.');
    const {error}=await auth.auth.signInWithOtp({email,options:{shouldCreateUser:(await db().query("select data->'platform'->>'registrationOpen' enabled from private.system_settings where key='settings'")).rows[0]?.enabled!=='false',captchaToken}});
    if(error){await r.del('dartspoint:otp-resend:'+hash);throw new DomainError('auth_provider',503,'De inlogcode kon niet worden verstuurd. Probeer het later opnieuw.');}
    return response({ok:true});
@@ -71,6 +71,6 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
  if(path.join('/')==='timing/ping')return response(await timingPing(actor,receivedAt,input));
  if(path.join('/')==='timing/echo')return response(await timingEcho(actor,input,receivedAt));
  if(path[0]==='practice'){const capture=()=>practiceIngress(actor,receivedAt,input?.renderSample?.connectionId).then(ingress=>capturePracticeIngress(actor,input,ingress)),registered=practiceTicket?await practiceTicket.run(capture):await capture();return response(await practiceCommand(actor,input,{receivedAt},registered));}
- const actions:Record<string,(actor:any,input:unknown)=>Promise<unknown>>={onboard,room:joinRoom,heartbeat,preferences,social,'private-channel':privateChannel,'chat/send':sendMessage,'chat/preference':chatPreference,'chat/resolve':resolveChannel,'profile/rename':renameProfile,'moderation/filter':filterAction,'moderation/message':moderateMessage,invite,'invite/respond':respondInvite,tournament:tournamentAction,division:divisionAction,'division/start':startDivisionMatch,admin:adminAction,moderation:moderate,"moderation/revoke":revokeSanction,report,settings:saveSettings,queue,'queue/advance':advanceQueue,'match/rematch':rematch};
+ const actions:Record<string,(actor:any,input:unknown)=>Promise<unknown>>={onboard,room:joinRoom,heartbeat,preferences,social,'private-channel':privateChannel,'chat/send':sendMessage,'chat/preference':chatPreference,'chat/resolve':resolveChannel,'profile/rename':renameProfile,'moderation/filter':filterAction,'moderation/message':moderateMessage,invite,'invite/respond':respondInvite,tournament:tournamentAction,division:divisionAction,'division/start':startDivisionMatch,admin:adminAction,moderation:moderate,"moderation/revoke":revokeSanction,report,settings:saveSettings,queue,'queue/advance':advanceQueue,'match/rematch':rematch,'match/spectate':spectateMatch};
  const action=actions[path.join('/')];if(!action)return response({code:'not_found'},404);return response(await action(actor,input));
 }catch(e){return failure(e);}finally{practiceTicket?.release();}}
