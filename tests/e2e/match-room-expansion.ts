@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {chromium,expect,type Page} from '@playwright/test';
 import {Room} from '@colyseus/sdk';
@@ -7,6 +7,7 @@ import {Pool} from 'pg';
 import {postgresOptions} from '../../packages/data/src/postgres';
 import {login,get,post,origin} from './helpers';
 import {forfeitGame} from './game-command';
+import {commandSchema} from '../../packages/contracts/src/index';
 
 // Three real Auth sessions, native menu/chat/stop input, and only owned local
 // fixture rows. This behavioral suite does not replace the 50 ms throw proofs.
@@ -19,9 +20,16 @@ let matchId:string|undefined,failed=false,originalError:unknown;
 const checks:Record<string,boolean>={},attempts:any[]=[];
 const proof:any={ok:false,localOnly:true,newRealAuthSessions:3,browserEnvironment:{engine:'chromium-headless-shell',channel:'default',headless:true,version:browser.version(),physicalHardwareTested:false},throwLatencyAcceptance:'independent normal timing fixtures remain unchanged',checks,attempts,cleanup:{forfeit:false,browser:false,ownedRows:false}};
 const outcomes=new Map<string,{type:string;payload:any}>();
+const sentCommands=new Map<string,{page:Page;payload:any}>(),connections=new Map<Page,any>();
 function wire(page:Page){
  page.on('websocket',socket=>{
-  const received=new Room('qa-observer-outcomes');received.onMessage('*',(type,payload:any)=>{if(['error','receipt'].includes(String(type))&&payload?.commandId)outcomes.set(payload.commandId,{type:String(type),payload});});
+  const sent=new Room('qa-observer-commands'),received=new Room('qa-observer-outcomes');
+  sent.onMessage('*',(type,payload:any)=>{if(type==='command'&&payload?.type?.startsWith('dart.stop_'))sentCommands.set(payload.commandId,{page,payload});});
+  received.onMessage('*',(type,payload:any)=>{
+   if(['error','receipt'].includes(String(type))&&payload?.commandId)outcomes.set(payload.commandId,{type:String(type),payload});
+   if(['clock.ready','clock.sample'].includes(String(type))&&payload?.connectionId)connections.set(page,{connectionId:payload.connectionId,ready:payload.ready===true,messageType:String(type),serverAt:payload.serverAt??null,serverReceivedAt:payload.serverReceivedAt??null});
+  });
+  socket.on('framesent',frame=>{if(Buffer.isBuffer(frame.payload)&&(frame.payload[0]&31)===13)(sent as any).onMessageCallback({data:frame.payload});});
   socket.on('framereceived',frame=>{if(Buffer.isBuffer(frame.payload)&&(frame.payload[0]&31)===13)(received as any).onMessageCallback({data:frame.payload});});
  });
 }
@@ -34,16 +42,39 @@ async function meters(page:Page){return page.locator('.dp-fullscreen-stage .dp-g
  return {horizontal:xr.left+xr.width/2,vertical:yr.top+yr.height/2,left:x.style.left,top:y.style.top};
 });}
 async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizontal'|'vertical'){
+ // This is a disposable, owned-state observation before the unchanged native
+ // driver; no provider call, admission value, sample or command is injected.
+ assert.ok(matchId&&owned.includes(actor.id)&&actors.some(value=>value.page===actor.page&&value.id===actor.id));
+ const row=(await privileged.query('select m.state_version,m.lifecycle,m.state,mp.seat from matches m join match_players mp on mp.match_id=m.id and mp.user_id=$2 where m.id=$1',[matchId,actor.id])).rows[0];assert.ok(row,'Pre-input snapshot belongs to this owned match/player');
+ const baseline={matchId,stateVersion:Number(row.state_version),lifecycle:row.lifecycle,seat:row.seat,turn:row.state.turn,phase:row.state.phase,phaseToken:row.state.phaseToken,phaseStartedAt:row.state.phaseStartedAt,lastAcceptedAt:row.state.lastAcceptedAt??0,meterSpeedVersion:row.state.meterSpeedVersion??'standard-v1',dartCount:row.state.dartCount,timeoutStrikes:row.state.timeoutStrikes,timeoutWarning:row.state.timeoutWarning??null};
  const button=actor.page.getByRole('button',{name:axis==='horizontal'?'Stop horizontale indicator':'Stop verticale indicator en gooi',exact:true});await actor.page.bringToFront();await expect(button).toBeEnabled({timeout:15000});
  const selector=axis==='horizontal'?'.dp-fullscreen-stage .dp-meter-row .dp-meter-indicator':'.dp-fullscreen-stage .dp-meter-track-vertical .dp-meter-indicator',property=axis==='horizontal'?'left':'top';
  const previous=await actor.page.locator(selector).evaluate((element,property)=>(element as HTMLElement).style.getPropertyValue(property),property);
  await actor.page.waitForFunction(({selector,property,previous})=>{const element=document.querySelector(selector) as HTMLElement|null;return !!element&&element.style.getPropertyValue(property)!==previous;},{selector,property,previous},{polling:'raf',timeout:15000});
  await actor.page.evaluate(()=>{performance.clearMarks('dp-local-stop');});
+ const connectionBefore=connections.get(actor.page)?{...connections.get(actor.page)}:null;
  await button.click();
- const trace=await actor.page.evaluate(()=>{const detail=(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail;return detail?{commandId:detail.commandId,phase:detail.phase,renderSampleAt:detail.rendered?.sampleAt,meterSpeedVersion:detail.rendered?.meterSpeedVersion}:null;});
- const attempt:any={axis,trace,actualOutcome:null};attempts.push(attempt);await checkpoint();assert.ok(trace?.commandId,'A native stop captured its real app command UUID');
- const value=await outcome(trace.commandId);assert.ok(value);attempt.actualOutcome={type:value.type,code:value.payload.code??null,snapshot:value.type==='receipt'?publicSnapshot(value.payload):null};await checkpoint();
- assert.equal(value.type,'receipt','The one normal input is accepted; no new UUID retry is generated');assert.equal(value.payload.commandId,trace.commandId);assert.equal(value.payload.timing.admittedAt,trace.renderSampleAt);assert.equal(value.payload.state.meterSpeedVersion,trace.meterSpeedVersion);
+ const observed=await actor.page.evaluate(()=>{const mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined;return {timeOrigin:performance.timeOrigin,mark:mark?{name:mark.name,startTime:mark.startTime,duration:mark.duration}:null,trace:mark?.detail??null};});
+ const trace=observed.trace,attempt:any={axis,baseline,connectionBefore,performance:observed.mark,timeOrigin:observed.timeOrigin,trace,renderSampleAt:trace?.rendered?.sampleAt,meterSpeedVersion:trace?.rendered?.meterSpeedVersion,nativeEventTimestampAvailable:false,nativeEventTimestampLimitation:'The existing mark records app handler times, not native event.timeStamp',actualOutcome:null,ingress:{status:'not_checked'}};attempts.push(attempt);await checkpoint();assert.ok(trace?.commandId,'A native stop captured its real app command UUID');
+ const value=await outcome(trace.commandId);assert.ok(value);attempt.actualOutcome={type:value.type,code:value.payload.code??null,snapshot:value.type==='receipt'?publicSnapshot(value.payload):null};
+ await checkpoint();
+ try{
+  const sent=sentCommands.get(trace.commandId);
+  if(!sent||sent.page!==actor.page||sent.payload.matchId!==matchId||trace.matchId!==matchId)attempt.ingress={status:'owned_wire_identity_unavailable'};
+  else{
+   const payload=commandSchema.parse(sent.payload),payloadHash=createHash('sha256').update(JSON.stringify(payload)).digest('hex');attempt.wireCommand=payload;
+   const original=(await privileged.query("select ci.received_at,ci.latency_ms,ci.admission_window_ms,ci.timing_version,ci.connection_id,ci.payload_hash=$4 payload_matches from private.command_ingress ci where ci.scope='match' and ci.actor_id=$1 and ci.command_id=$2 and exists(select 1 from match_players own where own.match_id=$3 and own.user_id=ci.actor_id)",[actor.id,trace.commandId,matchId,payloadHash])).rows[0];
+   if(!original)attempt.ingress={status:'original_ingress_unavailable'};
+   else{
+    const receivedAt=new Date(original.received_at).getTime(),sampleAt=payload.renderSample?.sampleAt,windowMs=Number(original.admission_window_ms),phaseStartedAt=Number(baseline.phaseStartedAt),lastAcceptedAt=Number(baseline.lastAcceptedAt);
+    attempt.ingress={status:'found',source:'immutable-owned-local-ingress',receivedAt,latencyMs:Number(original.latency_ms),windowMs,timingVersion:original.timing_version,connectionId:original.connection_id,payloadMatches:original.payload_matches===true,connectionMatches:original.connection_id===payload.renderSample?.connectionId,connectionBeforeMatches:connectionBefore?.connectionId===payload.renderSample?.connectionId,sampleAt,sampleAgeAtIngressMs:Number.isFinite(sampleAt)?receivedAt-sampleAt!:null,phaseStartedAt,lastAcceptedAt,baselineVersionMatches:payload.expectedStateVersion===baseline.stateVersion,baselinePhaseMatches:payload.phaseToken===baseline.phaseToken,tracePhaseMatches:payload.phaseToken===trace.phaseToken,traceSampleMatches:sampleAt===trace.rendered?.sampleAt,violations:{future:Number.isFinite(sampleAt)?sampleAt!>receivedAt:null,old:Number.isFinite(sampleAt)?sampleAt!<receivedAt-windowMs:null,beforePhase:Number.isFinite(sampleAt)&&Number.isFinite(phaseStartedAt)?sampleAt!<phaseStartedAt:null,beforeLastAccepted:Number.isFinite(sampleAt)&&Number.isFinite(lastAcceptedAt)?sampleAt!<lastAcceptedAt:null}};
+   }
+  }
+ }catch{attempt.ingress={status:'diagnostic_read_failed'};}
+ // Persist outcome and original bounds before the unchanged acceptance assertion
+ // and before forfeit/owned-row cleanup. Missing ingress never replaces its error.
+ await checkpoint();
+ assert.equal(value.type,'receipt','The one normal input is accepted; no new UUID retry is generated');assert.equal(value.payload.commandId,trace.commandId);assert.equal(value.payload.timing.admittedAt,trace.rendered.sampleAt);assert.equal(value.payload.state.meterSpeedVersion,trace.rendered.meterSpeedVersion);
  return value.payload;
 }
 async function forgedSpectatorCommand(page:Page,snapshot:any,extra:Record<string,unknown>={}){

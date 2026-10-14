@@ -25,7 +25,7 @@ export async function maintainMatches(){return transaction(async c=>{
    const s={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:m.state.turn}),...timeout,phaseToken:randomUUID(),lastResult:'Wedstrijd verloren na drie opeenvolgende beurttijdoverschrijdingen.'};
    await finishMatch(c,m,s,'forfeit',s.winner);await persist(c,m,s,'turn-timeout',null);await audit(c,null,'match.turn-timeout',m.id,{player:m.state.turn,strike:3,intervalMs});
   }else{
-   await persist(c,m,{...m.state,...timeout},'turn-timeout-warning',null);
+   await persist(c,m,{...m.state,...timeout,phaseToken:randomUUID(),phaseStartedAt:now},'turn-timeout-warning',null);
    await audit(c,null,'match.turn-timeout-warning',m.id,{player:m.state.turn,strike:timeout.timeoutWarning!.strike,deadlineAt:timeout.timeoutWarning!.deadlineAt,intervalMs});
   }
  }

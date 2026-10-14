@@ -6,7 +6,7 @@ import {postgresOptions} from '../../packages/data/src/postgres';
 import {db,redis,transaction} from '../../packages/data/src/db';
 import {actorById} from '../../packages/data/src/auth';
 import {joinRoom,heartbeat,expireRoomMemberships,sendMessage,chatHistory,resolveChannel,social} from '../../packages/data/src/community';
-import {createMatch,matchAccess,matchAccessBatch,matchCommand,acquireMatch,spectateMatch} from '../../packages/data/src/matches';
+import {createMatch,matchAccess,matchAccessBatch,matchCommand,captureMatchIngress,acquireMatch,spectateMatch} from '../../packages/data/src/matches';
 import {maintainMatches} from '../../packages/data/src/lifecycle';
 import {bootstrap,chatChannelsProjection} from '../../packages/data/src/projections';
 import {matchHistory} from '../../packages/data/src/history';
@@ -55,6 +55,13 @@ async function command(seat:number,type:string,extra:any={}){
  return {payload,ingress:timing.ingress,receipt:await matchCommand(actors[seat],payload,writer,fence,timing.ingress)};
 }
 async function expireTurn(){await privileged.query("update matches set state=jsonb_set(state,'{turnStartedAt}',to_jsonb($2::bigint)) where id=$1",[mainMatch,Date.now()-31000]);await Promise.all([maintainMatches(),maintainMatches()]);return matchAccess(actors[0],mainMatch);}
+function assertWarningRenewal(before:any,after:any,strike:number){
+ assert.equal(after.state.timeoutWarning.strike,strike);assert.notEqual(after.state.phaseToken,before.state.phaseToken,'Each warning starts a fresh authoritative render phase');
+ assert.equal(after.state.phaseStartedAt,after.state.timeoutWarning.at);assert.equal(after.state.turnStartedAt,after.state.timeoutWarning.at);
+ assert.equal(after.state.timeoutWarning.deadlineAt-after.state.phaseStartedAt,30000,'Every renewed phase receives the whole configured interval');
+ assert.equal(after.stateVersion,before.stateVersion+1);assert.equal(after.seat,before.seat);assert.equal(after.publicGameId,before.publicGameId);
+ for(const field of ['phase','turn','lockedX','lockedY','scores','dartCount','pendingDart','lastAcceptedAt','meterSpeedVersion','timingVersion'])assert.deepEqual(after.state[field],before.state[field],field+' survives a timeout warning');
+}
 try{
  await privileged.query('insert into auth.users(id) select unnest($1::uuid[])',[ids]);
  await privileged.query('update profiles p set username=fixture.name,onboarded_at=now() from unnest($1::uuid[],$2::text[]) fixture(id,name) where p.id=fixture.id',[ids,ids.map((_,index)=>prefix+index)]);
@@ -72,10 +79,10 @@ try{
  for(const value of allocated)assert.equal(value.publicGameId,Number(storedNumbers.find(row=>row.id===value.matchId).game_number));checks.concurrentUniquePublicNumberInternalUuid=true;
  writer=randomUUID();fence=await acquireMatch(mainMatch,writer);
  await command(0,'match.ready');await command(1,'match.ready');
- let current=await expireTurn();assert.equal(current.lifecycle,'playing');assert.equal(current.state.turn,0);assert.deepEqual(current.state.timeoutStrikes,[1,0]);assert.equal(current.state.timeoutWarning?.strike,1);assert.equal(current.publicGameId,numbers[0]);
+ const beforeFirstWarning=await matchAccess(actors[0],mainMatch);let current=await expireTurn();assertWarningRenewal(beforeFirstWarning,current,1);assert.equal(current.lifecycle,'playing');assert.equal(current.state.turn,0);assert.deepEqual(current.state.timeoutStrikes,[1,0]);assert.equal(current.state.timeoutWarning?.strike,1);assert.equal(current.publicGameId,numbers[0]);
  assert.equal((await privileged.query('select 1 from match_results where match_id=$1',[mainMatch])).rowCount,0);
  await maintainMatches();assert.deepEqual((await matchAccess(actors[0],mainMatch)).state.timeoutStrikes,[1,0],'repeated maintenance does not duplicate a warning');
- current=await expireTurn();assert.deepEqual(current.state.timeoutStrikes,[2,0]);assert.equal(current.state.timeoutWarning?.strike,2);assert.equal(current.state.timeoutWarning!.deadlineAt-current.state.timeoutWarning!.at,30000);
+ const beforeSecondWarning=current;current=await expireTurn();assertWarningRenewal(beforeSecondWarning,current,2);assert.deepEqual(current.state.timeoutStrikes,[2,0]);assert.equal(current.state.timeoutWarning?.strike,2);assert.equal(current.state.timeoutWarning!.deadlineAt-current.state.timeoutWarning!.at,30000);checks.warningRenewalStartsFreshPhaseWithWholeInterval=true;
  const beforeRejected=current.stateVersion,valid=domainTiming(current.state,'dart.stop_horizontal');
  for(const sampleAt of [valid.ingress.receivedAt+100,valid.ingress.receivedAt-500]){
   await assert.rejects(matchCommand(actors[0],{protocolVersion:1,commandId:randomUUID(),matchId:mainMatch,expectedStateVersion:beforeRejected,type:'dart.stop_horizontal',phaseToken:current.state.phaseToken,renderSample:{...valid.renderSample!,sampleAt}},writer,fence,valid.ingress),{code:'invalid_render_sample'});
@@ -85,12 +92,23 @@ try{
  }
  assert.equal((await matchAccess(actors[0],mainMatch)).stateVersion,beforeRejected);assert.deepEqual((await matchAccess(actors[0],mainMatch)).state.timeoutStrikes,[2,0]);checks.rejectedAndCachedOldClientDoNotResetStrikesOrScore=true;
  const accepted=await command(0,'dart.stop_horizontal');assert.deepEqual(accepted.receipt.state.timeoutStrikes,[0,0]);assert.equal(accepted.receipt.state.timeoutWarning,null);checks.onlyValidStopResetsOwnConsecutiveWarnings=true;
+ const beforeVerticalWarning=await matchAccess(actors[0],mainMatch),queuedTiming=domainTiming(beforeVerticalWarning.state,'dart.stop_vertical');
+ assert.equal(beforeVerticalWarning.state.phase,'vertical');assert.notEqual(beforeVerticalWarning.state.lockedX,null);
+ const queuedVertical={protocolVersion:1 as const,commandId:randomUUID(),matchId:mainMatch,expectedStateVersion:beforeVerticalWarning.stateVersion,type:'dart.stop_vertical' as const,phaseToken:beforeVerticalWarning.state.phaseToken,renderSample:queuedTiming.renderSample};
+ await captureMatchIngress(actors[0],queuedVertical,queuedTiming.ingress);
  // An earlier accepted UUID is retried after a later warning: the receipt must
  // remain immutable and must not clear the newly accrued authoritative strike.
- current=await expireTurn();assert.deepEqual(current.state.timeoutStrikes,[1,0]);
+ current=await expireTurn();assertWarningRenewal(beforeVerticalWarning,current,1);assert.deepEqual(current.state.timeoutStrikes,[1,0]);
+ const afterVerticalWarning=structuredClone(current),freshTiming=domainTiming(current.state,'dart.stop_vertical');
+ await assert.rejects(matchCommand(actors[0],queuedVertical,writer,fence,queuedTiming.ingress),{code:'stale_state'});
+ await assert.rejects(matchCommand(actors[0],{...queuedVertical,commandId:randomUUID(),expectedStateVersion:current.stateVersion,renderSample:freshTiming.renderSample},writer,fence,freshTiming.ingress),{code:'stale_phase'});
+ const beforePhaseTiming=domainTiming(current.state,'dart.stop_vertical');
+ await assert.rejects(matchCommand(actors[0],{...queuedVertical,commandId:randomUUID(),expectedStateVersion:current.stateVersion,phaseToken:current.state.phaseToken,renderSample:{...beforePhaseTiming.renderSample!,sampleAt:current.state.phaseStartedAt-1}},writer,fence,beforePhaseTiming.ingress),{code:'invalid_render_sample'});
+ const unchanged=await matchAccess(actors[0],mainMatch);assert.equal(unchanged.stateVersion,afterVerticalWarning.stateVersion);assert.deepEqual(unchanged.state,afterVerticalWarning.state,'Late pre-warning commands cannot score, clear warnings or change locks');
+ assert.equal((await privileged.query('select count(*)::int n from match_darts where match_id=$1',[mainMatch])).rows[0].n,0);checks.verticalWarningPreservesHorizontalLockAndRejectsPreWarningInputs=true;
  assert.deepEqual(await matchCommand(actors[0],accepted.payload,writer,fence,accepted.ingress),accepted.receipt);
  assert.deepEqual((await matchAccess(actors[0],mainMatch)).state.timeoutStrikes,[1,0]);checks.retryCannotClearLaterWarnings=true;
- current=await expireTurn();assert.deepEqual(current.state.timeoutStrikes,[2,0]);current=await expireTurn();assert.equal(current.lifecycle,'completed');assert.equal(current.state.winner,1);assert.equal(current.state.timeoutStrikes![0],3);
+ const beforeSecondVerticalWarning=await matchAccess(actors[0],mainMatch);current=await expireTurn();assertWarningRenewal(beforeSecondVerticalWarning,current,2);assert.deepEqual(current.state.timeoutStrikes,[2,0]);current=await expireTurn();assert.equal(current.lifecycle,'completed');assert.equal(current.state.winner,1);assert.equal(current.state.timeoutStrikes![0],3);
  assert.equal((await privileged.query('select count(*)::int n from match_results where match_id=$1',[mainMatch])).rows[0].n,1);await maintainMatches();assert.equal((await privileged.query('select count(*)::int n from match_results where match_id=$1',[mainMatch])).rows[0].n,1);checks.exactThirdTimeoutForfeitsOnce=true;
  assert.equal((await matchHistory(actors[0],{})).find(value=>value.id===mainMatch)!.publicGameId,numbers[0]);checks.publicNumberStableThroughReceiptsWarningsAndHistory=true;
  const postgame=(await resolveChannel(actors[0],{kind:'match',target:mainMatch})).channelId;

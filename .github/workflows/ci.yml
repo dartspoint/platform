@@ -82,6 +82,8 @@ jobs:
               'artifacts/https-sdk-progress.json': 'https-sdk-progress.json',
               'artifacts/https-proxy-result.json': 'https-proxy-result.json',
               'artifacts/match-room-expansion-result.json': 'match-room-expansion-result.json',
+              'artifacts/match-room-expansion-browser/progress.json': 'match-room-expansion-browser-progress.json',
+              'artifacts/match-room-expansion-browser/result.json': 'match-room-expansion-browser-result.json',
               'artifacts/room-activity/results.json': 'room-activity-result.json',
           }
           omitted = {
@@ -215,6 +217,8 @@ jobs:
             artifacts/ci-safe/https-proxy-result.json
             artifacts/ci-safe/test-host-capacity.json
             artifacts/ci-safe/match-room-expansion-result.json
+            artifacts/ci-safe/match-room-expansion-browser-progress.json
+            artifacts/ci-safe/match-room-expansion-browser-result.json
             artifacts/ci-safe/room-activity-result.json
       - name: Preserve encrypted private QA input diagnostics
         if: ${{ always() && env.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' }}
