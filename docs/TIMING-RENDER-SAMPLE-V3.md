@@ -4,6 +4,29 @@ Nieuwe wedstrijden en oefensessies gebruiken `render-sample-v3`. Bestaande
 partijen behouden `receive-v1` of `bounded-latency-v2`, inclusief hun eerdere
 ontvangsttijdbeleid. Er worden geen historische worpen of scores herschreven.
 
+## Actuele acceptatie vanaf 14 oktober 2026
+
+De gebruiker vraagt: **vastzetten strikt toetsen en frametijd rapporteren**.
+Voor iedere oorspronkelijke stop geldt daarom hard
+`0 <= stopAppliedAt - event.timeStamp <= 50 ms`: de directe lokale freeze
+bewaart de laatst getekende sample met dezelfde native inputklok.
+Native tot de eerstvolgende RAF is een gerapporteerd **50 ms-streefdoel**;
+een overschrijding alleen veroorzaakt geen test- of releasefailure.
+
+Alle individuele input-, capture-, hook-, freeze-, handlercompletion-,
+RAF-entry- en frozen-geometrietijden blijven in het rapport, inclusief p95,
+maximum en streefdoeloverschrijdingen. Ontbrekende verplichte metingen,
+verkeerde samples en functionele fouten blijven fouten. Maximaal **1 CSS px**
+afwijking, oorspronkelijke UUID, ingress- en servervensters, statebehoud bij
+weigering en reconnect zonder extra pijl blijven verplicht. Geen samples
+worden opnieuw gekozen, weggefilterd of opnieuw gemeten.
+
+De meetverslagen verderop beschrijven de toen geldende acceptatiecriteria.
+Hun harde framefailures blijven historische failures; de oorspronkelijke
+rapporten worden niet herschreven. Ook een afzonderlijke profielsuite met
+een afgewezen stop en slechts drie bereikte inputs blijft mislukt.
+RAF of DOM-geometrie bewijst geen fysieke schermpresentatie binnen 50 ms.
+
 De browser schrijft de indicator in zijn RAF rechtstreeks naar de DOM en
 bewaart daarbij de servergerelateerde sampletijd, fractie en fase. Primary
 pointerdown of een enkele Enter/Spatie bewaart precies deze sample. De handler

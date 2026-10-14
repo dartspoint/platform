@@ -10,7 +10,8 @@ import {forfeitGame} from './game-command';
 import {commandSchema} from '../../packages/contracts/src/index';
 
 // Three real Auth sessions, native menu/chat/stop input, and only owned local
-// fixture rows. This behavioral suite does not replace the 50 ms throw proofs.
+// fixture rows. Native event to local freeze is a hard 50 ms gate; first RAF
+// timings are reported with an advisory 50 ms target alongside the throw proofs.
 assert.equal(process.env.APP_ENV,'development');assert.equal(new URL(origin).hostname,'127.0.0.1');assert.equal(process.env.E2E_STAGING_FIXTURE,undefined);
 for(const key of ['DATABASE_URL','MIGRATION_DATABASE_URL'])assert.equal(new URL(process.env[key]!).hostname,'127.0.0.1');
 const browser=await chromium.launch({headless:true}),privileged=new Pool({...postgresOptions(process.env.MIGRATION_DATABASE_URL!),max:1});
@@ -18,7 +19,7 @@ const directory='artifacts/match-room-expansion-browser',room=randomUUID(),roomC
 const actors:Awaited<ReturnType<typeof login>>[]=[],owned:string[]=[];
 let matchId:string|undefined,failed=false,originalError:unknown;
 const checks:Record<string,boolean>={},attempts:any[]=[];
-const proof:any={ok:false,localOnly:true,newRealAuthSessions:3,browserEnvironment:{engine:'chromium-headless-shell',channel:'default',headless:true,version:browser.version(),physicalHardwareTested:false},throwLatencyAcceptance:'independent normal timing fixtures remain unchanged',checks,attempts,cleanup:{forfeit:false,browser:false,ownedRows:false}};
+const proof:any={ok:false,localOnly:true,newRealAuthSessions:3,browserEnvironment:{engine:'chromium-headless-shell',channel:'default',headless:true,version:browser.version(),physicalHardwareTested:false},throwLatencyAcceptance:{nativeToLocalFreezeLimitMs:50,nativeToFirstRAFTargetMs:50,nativeToFirstRAFGate:'reported-only-user-request-2026-10-14',independentNormalTimingWorkloads:'unchanged'},checks,attempts,cleanup:{forfeit:false,browser:false,ownedRows:false}};
 const outcomes=new Map<string,{type:string;payload:any}>();
 const sentCommands=new Map<string,{page:Page;payload:any}>(),connections=new Map<Page,any>();
 function wire(page:Page){
@@ -150,8 +151,15 @@ async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizont
  attempt.passiveTelemetry=attempt.passiveContextTelemetry.find((value:any)=>actors[value.index].id===actor.id)?.snapshot??observed.passive;
  const native=attempt.passiveTelemetry?.nativeInput;
  attempt.nativeEventTimestampAvailable=!!native;
- attempt.nativeTiming=native?{nativeToCaptureMs:native.captureAt-native.eventTimeStamp,nativeToCaptureEndMs:native.captureEndAt-native.eventTimeStamp,captureOwnDurationMs:native.captureEndAt-native.captureAt,captureEndToHookMs:trace.inputAt-native.captureEndAt,nativeToHookMs:trace.inputAt-native.eventTimeStamp,hookOwnDurationMs:trace.handlerCompletedAt-trace.inputAt,nativeToHandlerCompletedMs:trace.handlerCompletedAt-native.eventTimeStamp,nativeToFirstRAFMs:native.firstRAF?native.firstRAF.at-native.eventTimeStamp:null,latestChosenDrawAfterNativeMs:trace.rendered.renderedAt-native.eventTimeStamp}:null;
+ attempt.nativeTiming=native?{nativeToCaptureMs:native.captureAt-native.eventTimeStamp,nativeToCaptureEndMs:native.captureEndAt-native.eventTimeStamp,captureOwnDurationMs:native.captureEndAt-native.captureAt,captureEndToHookMs:trace.inputAt-native.captureEndAt,nativeToHookMs:trace.inputAt-native.eventTimeStamp,hookOwnDurationMs:trace.handlerCompletedAt-trace.inputAt,nativeToHandlerCompletedMs:trace.handlerCompletedAt-native.eventTimeStamp,nativeToLocalFreezeMs:trace.stopAppliedAt-native.eventTimeStamp,nativeToFirstRAFMs:native.firstRAF?native.firstRAF.at-native.eventTimeStamp:null,latestChosenDrawAfterNativeMs:trace.rendered.renderedAt-native.eventTimeStamp}:null;
+ attempt.frameTiming={targetMs:50,gate:'reported-only-user-request-2026-10-14',targetMet:Number.isFinite(attempt.nativeTiming?.nativeToFirstRAFMs)&&attempt.nativeTiming.nativeToFirstRAFMs>=0?attempt.nativeTiming.nativeToFirstRAFMs<=50:null};
  await checkpoint();
+ if(attempt.frameTiming.targetMet===false)console.warn('Observer '+axis+' native-to-first-RAF '+attempt.nativeTiming.nativeToFirstRAFMs+' ms exceeds the advisory 50 ms target; native-to-local-freeze remains a hard gate.');
+ assert.ok(native,'Every native stop retains its original input capture');assert.equal(native.isTrusted,true,'Observer stop uses genuine native browser input');assert.equal(native.axis,axis);
+ assert.ok(Number.isFinite(native.eventTimeStamp)&&native.eventTimeStamp>=0&&Number.isFinite(native.captureAt)&&native.eventTimeStamp<=native.captureAt,'Observer native event time precedes capture on the same monotone clock');
+ assert.ok(Number.isFinite(trace.stopAppliedAt)&&Number.isFinite(attempt.nativeTiming.nativeToLocalFreezeMs)&&attempt.nativeTiming.nativeToLocalFreezeMs>=0&&attempt.nativeTiming.nativeToLocalFreezeMs<=50,'Observer native event to local freeze <=50ms');
+ assert.ok(Number.isFinite(trace.handlerCompletedAt)&&trace.stopAppliedAt<=trace.handlerCompletedAt&&Number.isFinite(attempt.nativeTiming.nativeToHandlerCompletedMs)&&attempt.nativeTiming.nativeToHandlerCompletedMs>=0,'Observer native-to-handler completion duration is valid');
+ assert.ok(native.firstRAF&&Number.isFinite(native.firstRAF.at)&&Number.isFinite(attempt.nativeTiming.nativeToFirstRAFMs)&&attempt.nativeTiming.nativeToFirstRAFMs>=0,'Observer native-to-first-RAF duration is finite and nonnegative');
  assert.equal(value.type,'receipt','The one normal input is accepted; no new UUID retry is generated');assert.equal(value.payload.commandId,trace.commandId);assert.equal(value.payload.timing.admittedAt,trace.rendered.sampleAt);assert.equal(value.payload.state.meterSpeedVersion,trace.rendered.meterSpeedVersion);
  return value.payload;
 }

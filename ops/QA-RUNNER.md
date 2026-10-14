@@ -21,6 +21,28 @@ Account en daemon gebruiken cgroup v2/systemd. De runnerunit en zijn eigen rootl
 
 Het QA-account krijgt geen algemene sudo, Docker-groep, deploymentgroep, app-socket of staging/production Environmentsecrets. CI maakt uitsluitend tijdelijke lokale providercredentials. `scripts/qa-runner-context.py` controleert de feitelijke account-UID, home, workspace, eigen socket, data-root, rootless SecurityOptions en cgroup. De socketgroep moet de eigen primaire groep zijn of vallen binnen de exclusieve eigen, root-owned `/etc/subgid`-toewijzing; de eigenaar-UID en private runtime-directory blijven verplicht. Container-user `0:0` wordt alleen op deze geverifieerde rootless daemon gebruikt en correspondeert daar met het QA-account op de host. Browserbibliotheken worden eenmalig door de beheerder geïnstalleerd; de QA-job installeert geen apt-packages.
 
+## Werpacceptatie en frametijd
+
+Volgens de expliciete gebruikerskeuze van 14 oktober 2026 moet **iedere
+oorspronkelijke stop binnen 50 ms lokaal vaststaan**, gemeten als
+`stopAppliedAt - event.timeStamp`. De native inputklok en de directe freeze
+van precies de laatst getekende sample blijven ongewijzigd.
+
+Native tot de eerstvolgende RAF heeft een **gerapporteerd streefdoel van
+50 ms**. Alleen een overschrijding van die frametijd laat de test of release
+niet falen. Bewaar alle individuele frametijden, p95, maximum en
+streefdoeloverschrijdingen, naast capture-, hook-, handlercompletion-,
+RAF-entry- en afgeronde frozen-geometriemetingen. Een ontbrekende verplichte
+meting blijft een fout; langzame pogingen worden niet uitgesloten,
+herhaald of met een andere stopwatch gemeten.
+
+De exacte sample en oorspronkelijke UUID, servertoelating, statebehoud bij
+weigering, reconnect zonder extra pijl en maximaal **1 CSS px** afwijking
+blijven harde controles. Het servervenster wordt niet verruimd. Eerdere
+failures en hun oorspronkelijke rapporten blijven behouden; een afgewezen
+stop of onvolledige profielsuite wordt door deze criteriawijziging geen PASS.
+RAF en DOM-geometrie bewijzen geen fysieke schermpresentatie.
+
 ## Routering
 
 Een afzonderlijke Chrome-inputdiagnose is uitsluitend toegestaan na de normale

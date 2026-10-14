@@ -14,7 +14,7 @@ const runId=randomUUID().slice(0,6),oldFetchBody='Nieuwe regel tijdens oude fetc
 const dir='artifacts/workspace-chat';await mkdir(dir,{recursive:true});
 let cleanupMatch:string|undefined,cleanupPage:Page|undefined,cleanupPages:Page[]=[],cleanupPersonal:{leave:()=>Promise<unknown>}|undefined;
 let ingressPool:import('pg').Pool|undefined;
-const report:any={physicalDevices:false,browserEnvironment,desktop:[],mobile:[],chat:[],checks:{}};
+const report:any={physicalDevices:false,browserEnvironment,desktop:[],mobile:[],chat:[],checks:{},floodTimingAcceptance:{nativeToLocalFreezeLimitMs:50,nativeHandlerLimitMs:50,firstFrozenRAFTargetMs:50,firstFrozenRAFGate:'reported-only-user-request-2026-10-14'}};
 function p95(values:number[]){return values.slice().sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1];}
 const epochNow=()=>performance.timeOrigin+performance.now();
 const pageState=(page:Page)=>page.evaluate(()=>({focused:document.hasFocus(),visibility:document.visibilityState}));
@@ -56,9 +56,9 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  Object.assign(attempt,{browserTimeOrigin:local.timeOrigin,captureEpoch:local.input?.epoch,inputEpoch:local.trace?local.timeOrigin+local.trace.inputAt:undefined,floodStartedAt:local.flood?.floodStartedAt,captureState:local.input?.state,preInput:local.input?.geometry,firstFrozen:local.first,trace:local.trace});
  attempt.nativeInput=local.input;
  assert.ok(local.trace,'A genuine flood stop captures its rendered v3 sample');
- assert.equal(local.input.isTrusted,true,'Flood stop uses genuine native browser input');assert.ok(Number.isFinite(local.input.eventTimeStamp)&&local.input.eventTimeStamp>=0&&local.input.eventTimeStamp<=local.input.captureStartedAt,'Native event time precedes capture on the same monotone clock');
+ assert.ok(local.input&&local.first,'Flood stop retains its native capture and first frozen RAF');assert.equal(local.input.isTrusted,true,'Flood stop uses genuine native browser input');assert.ok(Number.isFinite(local.input.eventTimeStamp)&&local.input.eventTimeStamp>=0&&Number.isFinite(local.input.captureStartedAt)&&local.input.eventTimeStamp<=local.input.captureStartedAt&&local.input.at===local.input.eventTimeStamp,'Native event time precedes capture on the same monotone clock');
  assert.ok(local.trace.stopAppliedAt<=local.trace.sendAt&&local.trace.sendAt<=local.trace.sendReturnedAt&&local.trace.sendReturnedAt<=local.trace.handlerCompletedAt,'Freeze precedes dispatch and handler completion');
- Object.assign(attempt,{handlerMs:local.trace.handlerCompletedAt-local.input.at,stopMs:local.trace.stopAppliedAt-local.input.at,firstFrameMs:local.first.at-local.input.at,rafEntryMs:local.first.rafEntryAt-local.input.at,rafGeometryMs:local.first.geometryCompletedAt-local.first.geometryStartedAt,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
+ Object.assign(attempt,{handlerMs:local.trace.handlerCompletedAt-local.input.at,stopMs:local.trace.stopAppliedAt-local.input.at,nativeToLocalFreezeMs:local.trace.stopAppliedAt-local.input.eventTimeStamp,firstFrameMs:local.first.at-local.input.at,rafEntryMs:local.first.rafEntryAt-local.input.at,rafGeometryMs:local.first.geometryCompletedAt-local.first.geometryStartedAt,freezeJumpPx:Math.abs(local.first.indicator-local.input.geometry.indicator),freezeJumpFraction:Math.abs(local.first.indicator-local.input.geometry.indicator)/local.input.geometry.trackSize});
  console.log(JSON.stringify({event:'workspace_flood_stop_attempt',axis,clientMessageId,commandId:local.trace.commandId,captureEpoch:attempt.captureEpoch,inputEpoch:attempt.inputEpoch,floodStartedAt:attempt.floodStartedAt,handlerMs:attempt.handlerMs,firstFrameMs:attempt.firstFrameMs}));
  await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.trace.commandId);
  const observed=await page.evaluate(commandId=>({receipt:((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),at:performance.now(),state:{focused:document.hasFocus(),visibility:document.visibilityState}}),local.trace.commandId),receipt=observed.receipt;
@@ -87,8 +87,12 @@ async function stopDuringFlood(page:Page,channelId:string,axis:'horizontal'|'ver
  },local.input.at);
  // Keep the complete metadata-only attempt in hosted stdout before a hard
  // gate can fail. The runner's private report may not otherwise survive.
+ attempt.frameTiming={targetMs:50,gate:'reported-only-user-request-2026-10-14',targetMet:Number.isFinite(attempt.firstFrameMs)&&attempt.firstFrameMs>=0?attempt.firstFrameMs<=50:null};
  console.log(JSON.stringify({event:'workspace_flood_complete_attempt',...attempt}));
- assert.ok(attempt.handlerMs>=0&&attempt.handlerMs<=50,'Flood handler freeze <=50ms');assert.ok(attempt.firstFrameMs>=0&&attempt.firstFrameMs<=50,'Flood first frozen RAF <=50ms');
+ if(attempt.frameTiming.targetMet===false)console.warn('Flood '+axis+' native-to-first-frozen-RAF '+attempt.firstFrameMs+' ms exceeds the advisory 50 ms target; native-to-local-freeze remains a hard gate.');
+ assert.ok(Number.isFinite(local.trace.stopAppliedAt)&&Number.isFinite(attempt.nativeToLocalFreezeMs)&&attempt.nativeToLocalFreezeMs>=0&&attempt.nativeToLocalFreezeMs<=50,'Flood native event to local freeze <=50ms');
+ assert.ok(Number.isFinite(attempt.handlerMs)&&attempt.handlerMs>=0&&attempt.handlerMs<=50,'Flood handler freeze <=50ms');
+ for(const duration of [attempt.firstFrameMs,attempt.rafEntryMs,attempt.rafGeometryMs])assert.ok(Number.isFinite(duration)&&duration>=0,'Flood frame durations are finite and nonnegative');
  assert.equal(acknowledged.sameNode,true);assert.equal(acknowledged.sameBoard,true);
  if(violations.length){
   assert.equal(receipt.event,'rejected');assert.equal(receipt.code,'invalid_render_sample');await expect(page.locator('.dp-connection-note').filter({hasText:'timingmeting'})).toBeVisible();
