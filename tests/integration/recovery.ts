@@ -23,7 +23,13 @@ try{
  await adminAction(owner,{action:'room-close',args:[room]});await assert.rejects(adminAction(owner,{action:'room-delete',args:[room]}),{code:'active_matches'});
  assert.equal(launch.receipt.state.events.length,0);await db().query("update matches set lease_until=now()-interval '1 second' where id=$1",[matchId]);
  await new Promise(r=>setTimeout(r,600));await Promise.all([settleImpacts(),settleImpacts()]);await maintainMatches();
- let recovered=await matchAccess(actors[0],matchId);assert.equal(recovered.state.events.length,1);assert.equal(recovered.lifecycle,'paused');assert.deepEqual(recovered.state.ready,[false,false]);assert.equal((await db().query('select 1 from rating_ledger where match_id=$1',[matchId])).rowCount,0);
+ // Maintenance may skip this match while the real worker holds its row lock.
+ // Await the committed pause, preserving the single maintenance call and every
+ // recovery invariant; no game command or lifecycle transition is retried here.
+ const recoveryDeadline=performance.now()+10000;
+ let recovered=await matchAccess(actors[0],matchId);
+ while(recovered.lifecycle!=='paused'&&performance.now()<recoveryDeadline){await new Promise(resolve=>setTimeout(resolve,50));recovered=await matchAccess(actors[0],matchId);}
+ assert.equal(recovered.state.events.length,1);assert.equal(recovered.lifecycle,'paused');assert.deepEqual(recovered.state.ready,[false,false]);assert.equal((await db().query('select 1 from rating_ledger where match_id=$1',[matchId])).rowCount,0);
  await assert.rejects(command(actors[0],'dart.stop_horizontal'),{code:'stale_writer'});
  writer=crypto.randomUUID();fence=await acquireMatch(matchId,writer);
  const retry=await matchCommand(actors[0],launch.payload,writer,fence);assert.deepEqual(retry,launch.receipt,'Committed receipt survives writer replacement');assert.equal((await matchAccess(actors[0],matchId)).state.events.length,1);
