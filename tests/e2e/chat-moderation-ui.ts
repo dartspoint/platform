@@ -47,7 +47,21 @@ try{
   await limitEditor.getByLabel('Slow mode · seconden',{exact:true}).fill('5');await limitEditor.getByLabel('Reden',{exact:true}).fill('Browsercontrole van zichtbare langzame chat');
   const changed=admin.waitForResponse(response=>response.url().endsWith('/moderation/filter')&&response.request().postDataJSON()?.action==='limits');await limitEditor.getByRole('button',{name:'Limieten opslaan',exact:true}).click();assert.equal((await changed).status(),200);assert.equal((await get(admin,'moderation/settings')).limits.chatSlowMode,5);
   const notice=fixture.page.getByText('Langzame chat actief · maximaal één nieuw bericht per 5 seconden.',{exact:true});await notice.waitFor();
-  for(const viewport of [{width:1280,height:640},{width:390,height:844}]){await fixture.page.setViewportSize(viewport);await notice.waitFor();const box=await notice.boundingBox();assert.ok(box&&box.y>=0&&box.y+box.height<=viewport.height+1,'Slow-mode notice remains visible in compact desktop/mobile chat');}
+  for(const viewport of [{width:1280,height:640},{width:390,height:844}]){
+   await fixture.page.setViewportSize(viewport);
+   // The browser resize acknowledgement does not wait for the app's viewport
+   // and React updates. Await that state before checking the original bounds.
+   await fixture.page.waitForFunction(({width,height})=>{
+    const root=document.documentElement,app=document.querySelector('.darts-app');
+    const zoom=Number.parseFloat(getComputedStyle(root).zoom)||1;
+    const expectedHeight=height/zoom;
+    const appliedHeight=Number.parseFloat(root.style.getPropertyValue('--dp-viewport-height'));
+    return innerWidth===width&&innerHeight===height&&Number.isFinite(appliedHeight)
+     &&Math.abs(appliedHeight-expectedHeight)<.5
+     &&!!app&&app.classList.contains('is-desktop-workspace')===matchMedia('(min-width: 1024px)').matches;
+   },viewport,{timeout:5000});
+   await notice.waitFor();const box=await notice.boundingBox();assert.ok(box&&box.y>=0&&box.y+box.height<=viewport.height+1,'Slow-mode notice remains visible in compact desktop/mobile chat');
+  }
   await fixture.page.setViewportSize({width:1366,height:768});await fixture.page.waitForTimeout(5100);
   const allowedBody='Langzame chat toegestaan '+randomUUID().slice(0,6),allowedAck=fixture.page.waitForResponse(response=>response.url().endsWith('/chat/send'));await fixture.page.getByLabel('Chatbericht',{exact:true}).fill(allowedBody);await fixture.page.getByLabel('Chatbericht',{exact:true}).press('Enter');assert.equal((await allowedAck).status(),200);
   const refusedBody='Langzame chat concept behouden '+randomUUID().slice(0,6),refusedAck=fixture.page.waitForResponse(response=>response.url().endsWith('/chat/send'));await fixture.page.getByLabel('Chatbericht',{exact:true}).fill(refusedBody);await fixture.page.getByLabel('Chatbericht',{exact:true}).press('Enter');const refused=await refusedAck;assert.equal(refused.status(),429);const refusal=await refused.json();assert.equal(refusal.code,'chat_slow_mode');assert.ok(refusal.retryAfter>=1&&refusal.retryAfter<=5);
