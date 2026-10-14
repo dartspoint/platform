@@ -125,6 +125,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/unit/domain.test.
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/multiplayer.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/practice.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/practice-preset-keyboard.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/practice-auth-outage.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/services.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/update-2026-10-13.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/chat-moderation.ts

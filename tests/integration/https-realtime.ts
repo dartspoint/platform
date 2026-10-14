@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
+import {commandSchema} from '../../packages/contracts/src/index';
 import {writeFileSync} from 'node:fs';
 import {createClient} from '@supabase/supabase-js';
 import {Client,type Room} from '@colyseus/sdk';
@@ -10,6 +11,8 @@ import {invite,respondInvite,matchAccess} from '../../packages/data/src/matches'
 
 assert.equal(process.env.APP_ENV,'development');
 assert.equal(new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname,'127.0.0.1');
+assert.equal(new URL(process.env.DATABASE_URL!).hostname,'127.0.0.1');
+assert.equal(new URL(process.env.MIGRATION_DATABASE_URL!).hostname,'127.0.0.1');
 const endpoint='https://127.0.0.1:49443',sdk=new Client(endpoint),rooms:Room[]=[];
 const prefix='qahttps'+randomUUID().replaceAll('-','').slice(0,8);
 let id:string|undefined;
@@ -40,11 +43,14 @@ async function phase<T>(name:Phase,action:()=>Promise<T>,timeoutMs?:number):Prom
   checkpoint(name,'done');return result;
  }catch(error){checkpoint(name,'failed',category(error));throw error;}finally{if(timer)clearTimeout(timer);}
 }
+const clocks=new Map<Room,{ready:boolean;connectionId?:string}>();
+const ingressProof:any={ok:false,checks:{}};
 const ownedRooms=new Map<Room,{closed:boolean;onLeave:()=>void;offMessage:Array<()=>void>}>();
 function own(room:Room){
  const tracked={closed:false,onLeave:()=>{},offMessage:[] as Array<()=>void>};
  tracked.onLeave=()=>{tracked.closed=true;};room.onLeave(tracked.onLeave);
- tracked.offMessage.push(room.onMessage('snapshot',()=>{}),room.onMessage('error',()=>{}));ownedRooms.set(room,tracked);return room;
+ const clock={ready:false,connectionId:undefined as string|undefined};clocks.set(room,clock);
+ tracked.offMessage.push(room.onMessage('clock.challenge',(value:any)=>room.send('clock.echo',{nonce:value.nonce})),room.onMessage('clock.ready',(value:any)=>{clock.ready=value.ready===true;clock.connectionId=value.connectionId;}),room.onMessage('snapshot',()=>{}),room.onMessage('error',()=>{}));ownedRooms.set(room,tracked);return room;
 }
 async function leaveOwnRoom(room:Room){
  const tracked=ownedRooms.get(room)!;room.reconnection.enabled=false;
@@ -74,6 +80,31 @@ async function send(room:Room,actor:any,type:string){
   room.send('command',{protocolVersion:1,commandId,matchId:id,expectedStateVersion:state.stateVersion,phaseToken:state.state.phaseToken,type});
  });}finally{if(timer)clearTimeout(timer);offReceipt();offError();}
 }
+async function stopOutcome(room:Room,payload:any){
+ let timer:ReturnType<typeof setTimeout>|undefined,offReceipt:()=>void=()=>{},offError:()=>void=()=>{};
+ try{return await new Promise<{type:'receipt'|'error';payload:any}>((resolve,reject)=>{
+  timer=setTimeout(()=>reject(new FixtureFailure('phase_timeout')),10000);
+  offReceipt=room.onMessage('receipt',(value:any)=>{if(value.commandId===payload.commandId)resolve({type:'receipt',payload:value});});
+  offError=room.onMessage('error',(value:any)=>{if(value.commandId===payload.commandId)resolve({type:'error',payload:value});});room.send('command',payload);
+ });}finally{if(timer)clearTimeout(timer);offReceipt();offError();}
+}
+async function proveOriginalRejectionIngress(actor0:any,actor1:any){
+ const clock=clocks.get(rooms[0])!,deadline=performance.now()+10000;
+ while(!clock.ready&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));assert.equal(clock.ready,true);assert.ok(clock.connectionId);
+ const baseline=await matchAccess(actor0,id!);assert.equal(baseline.lifecycle,'playing');assert.equal(baseline.state.phase,'horizontal');assert.equal(baseline.state.turn,0);
+ const payload=commandSchema.parse({protocolVersion:1,commandId:randomUUID(),matchId:id,expectedStateVersion:baseline.stateVersion,type:'dart.stop_horizontal',phaseToken:baseline.state.phaseToken,renderSample:{sampleAt:Date.now()-300,connectionId:clock.connectionId,dartNumber:1,meterSpeedVersion:baseline.state.meterSpeedVersion}});
+ const first=await stopOutcome(rooms[0],payload);assert.equal(first.type,'error');assert.equal(first.payload.code,'invalid_render_sample');
+ const metadata=first.payload.ingress;assert.ok(metadata);assert.equal(metadata.source,'server-original-command-ingress-v1');assert.equal(metadata.scope,'match');assert.equal(metadata.actorId,actor0.id);assert.equal(metadata.commandId,payload.commandId);assert.equal(metadata.matchId,id);
+ const row=(await db().query("select * from private.command_ingress where scope='match' and actor_id=$1 and command_id=$2",[actor0.id,payload.commandId])).rows[0];assert.ok(row);
+ assert.equal(metadata.payloadHash,createHash('sha256').update(JSON.stringify(payload)).digest('hex'));assert.equal(metadata.payloadHash,row.payload_hash);assert.equal(metadata.receivedAt,new Date(row.received_at).getTime());assert.equal(metadata.latencyMs,Number(row.latency_ms));assert.equal(metadata.admissionWindowMs,Number(row.admission_window_ms));assert.equal(metadata.connectionId,row.connection_id);assert.equal(metadata.connectionId,clock.connectionId);assert.equal(metadata.timingVersion,'render-sample-v3');assert.equal(metadata.timingVersion,row.timing_version);assert.ok(metadata.receivedAt-payload.renderSample!.sampleAt>metadata.admissionWindowMs);
+ ingressProof.checks.ownOriginalTupleMatchesDatabase=true;ingressProof.sampleAgeAtOriginalIngressMs=metadata.receivedAt-payload.renderSample!.sampleAt;ingressProof.originalWindowMs=metadata.admissionWindowMs;
+ await new Promise(resolve=>setTimeout(resolve,20));const retry=await stopOutcome(rooms[0],payload);assert.equal(retry.type,'error');assert.equal(retry.payload.code,'invalid_render_sample');assert.deepEqual(retry.payload.ingress,metadata,'Same UUID retry preserves its original receive time/window and binding');ingressProof.checks.sameUuidRetryPreservesOriginalTuple=true;
+ const conflict=await stopOutcome(rooms[0],{...payload,renderSample:{...payload.renderSample,sampleAt:payload.renderSample!.sampleAt+1}});assert.equal(conflict.type,'error');assert.equal(conflict.payload.code,'idempotency_conflict');assert.equal(conflict.payload.ingress,undefined);ingressProof.checks.conflictingPayloadDoesNotReceiveIngress=true;
+ const peer=await stopOutcome(rooms[1],{...payload,commandId:randomUUID()});assert.equal(peer.type,'error');assert.equal(peer.payload.code,'not_your_turn');assert.equal(peer.payload.ingress,undefined);ingressProof.checks.peerPolicyErrorDoesNotReceiveIngress=true;
+ const stale=await stopOutcome(rooms[0],{...payload,commandId:randomUUID(),phaseToken:randomUUID()});assert.equal(stale.type,'error');assert.equal(stale.payload.code,'stale_phase');assert.equal(stale.payload.ingress,undefined);ingressProof.checks.stalePhaseDoesNotReceiveIngress=true;
+ const forged=await stopOutcome(rooms[0],{...payload,commandId:randomUUID(),ingress:{receivedAt:Date.now(),actorId:actor1.id}});assert.equal(forged.type,'error');assert.equal(forged.payload.code,'invalid_command');assert.equal(forged.payload.ingress,undefined);ingressProof.checks.clientCannotSupplyTrustedIngress=true;
+ const after=await matchAccess(actor0,id!);assert.equal(after.stateVersion,baseline.stateVersion);assert.equal(after.lifecycle,baseline.lifecycle);assert.deepEqual(after.state,baseline.state);assert.equal(Number((await db().query('select count(*) from match_darts where match_id=$1',[id])).rows[0].count),0);ingressProof.checks.allRejectedCommandsPreserveAuthoritativeState=true;ingressProof.ok=true;
+}
 let originalError:unknown;const cleanupErrors:unknown[]=[];
 try{
  const actors=await Promise.all([phase('auth_actor_0',()=>actor(0)),phase('auth_actor_1',()=>actor(1))]);
@@ -84,7 +115,7 @@ try{
  await phase('invalid_join',()=>assert.rejects(sdk.joinOrCreate('match',{matchId:id,token:'invalid-local-test-token'})),10000);
  for(const [index,value] of actors.entries())rooms.push(await joinedPhase(index?'join_seat_1':'join_seat_0',()=>sdk.joinOrCreate('match',{matchId:id,token:value.token})));
  await phase('ready_seat_0',()=>send(rooms[0],actors[0].actor,'match.ready'));await phase('ready_seat_1',()=>send(rooms[1],actors[1].actor,'match.ready'));
- await phase('verify_playing',async()=>assert.equal((await matchAccess(actors[0].actor,id!)).lifecycle,'playing'));
+ await phase('verify_playing',async()=>{assert.equal((await matchAccess(actors[0].actor,id!)).lifecycle,'playing');await proveOriginalRejectionIngress(actors[0].actor,actors[1].actor);});
  const reconnection=rooms[0].reconnectionToken;
  rooms[0].reconnection.enabled=false;
  let dropListener:()=>void=()=>{};
@@ -110,6 +141,7 @@ try{
  }
  await cleanup('cleanup_database',()=>db().end());await cleanup('cleanup_redis',async()=>{await(await redis()).quit();});
  progress.ok=originalError===undefined&&cleanupErrors.length===0&&metadataFailure===undefined;
+ ingressProof.cleanupPassed=cleanupErrors.length===0;ingressProof.ok=ingressProof.ok&&progress.ok;writeFileSync('artifacts/https-command-ingress-result.json',JSON.stringify(ingressProof,null,2),{mode:0o600});
  persistProgress();
 }
 if(originalError!==undefined)throw new FixtureFailure(category(originalError));

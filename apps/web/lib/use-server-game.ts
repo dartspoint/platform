@@ -64,11 +64,11 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  },[actualId,apply,readOnly]);
  useEffect(()=>{let frame:number;const tick=()=>{
   const view=current.current,state=view?.state;
-  if(view&&state){const frozen=pending.current?.phaseToken===state.phaseToken,calibrated=clock.current.ready&&serverCalibrated.current,now=calibrated?clock.current.phaseNow(state.phaseToken,performance.now(),state.timingVersion??'receive-v1'):0,canDraw=!readOnly&&active&&view.seat!==null&&view.seat===state.turn&&view.lifecycle==='playing'&&calibrated&&(state.timingVersion!==TIMING_VERSION||now>=state.phaseStartedAt);
+  if(view&&state){const frozen=pending.current?.phaseToken===state.phaseToken,calibrated=clock.current.ready&&serverCalibrated.current,moving=!frozen&&!readOnly&&active&&['horizontal','vertical'].includes(state.phase)&&view.seat!==null&&view.seat===state.turn&&view.lifecycle==='playing'&&calibrated,drawAt=moving?performance.now():0,version=state.timingVersion??'receive-v1',now=moving?clock.current.phaseNow(state.phaseToken,drawAt,version):0,canDraw=moving&&(state.timingVersion!==TIMING_VERSION||now>=state.phaseStartedAt);
    if(state.lockedX!==null){const f=(state.lockedX+1.14)/2.28;xMeter.set(f);lockMeter(xIndicator.current,'horizontal',f);}
-   else if(state.phase==='horizontal'&&!frozen&&canDraw){const sample=drawMeter(xIndicator.current,'horizontal',now,state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);if(sample){drawn.current.horizontal=sample;xMeter.set(sample.fraction);}}
+   else if(state.phase==='horizontal'&&canDraw&&xIndicator.current){const sample=drawMeter(xIndicator.current,'horizontal',clock.current.movingPhaseNow(state.phaseToken,drawAt,version),state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);if(sample){drawn.current.horizontal=sample;xMeter.set(sample.fraction);}}
    if(state.lockedY!=null){const f=(state.lockedY+1.14)/2.28;yMeter.set(f);lockMeter(yIndicator.current,'vertical',f);}
-   else if(state.phase==='vertical'&&!frozen&&canDraw){const sample=drawMeter(yIndicator.current,'vertical',now,state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);if(sample){drawn.current.vertical=sample;yMeter.set(sample.fraction);}}
+   else if(state.phase==='vertical'&&canDraw&&yIndicator.current){const sample=drawMeter(yIndicator.current,'vertical',clock.current.movingPhaseNow(state.phaseToken,drawAt,version),state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);if(sample){drawn.current.vertical=sample;yMeter.set(sample.fraction);}}
    else if(state.phase==='horizontal'&&canDraw){yMeter.set(.5);lockMeter(yIndicator.current,'vertical',.5);}
   }
   frame=requestAnimationFrame(tick);

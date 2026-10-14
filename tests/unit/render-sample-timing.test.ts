@@ -65,3 +65,76 @@ test('V3 drawing and admission agree when fractional browser time reaches intege
  assert.equal(clock.phaseNow('sub-ms-phase',at+.01),drawn);assert.equal(clock.phaseNow('sub-ms-phase',at+1),drawn+1,'The fixed phase mapping stays nondecreasing');assert.throws(()=>admittedSample(drawn+1,receivedAt,54,1_000_000,0,receivedAt+100),'A genuinely future claim still fails');
  for(const version of ['receive-v1','bounded-latency-v2'] as const){const legacy=clock.phaseNow(version,at,version);assert.equal(Number.isInteger(legacy),false);assert.ok(Math.abs(legacy-(clock.offset!+at))<1e-9,'Legacy versions preserve their floating midpoint mapping');}
 });
+test('New moving draws gradually adopt measured lower bounds after a same-phase server window shrinks',()=>{
+ // Controlled equal-rate clocks: true server UTC is epoch + client monotone
+ // time. These are simulated newly drawn samples, not browser paint evidence
+ // or an attribution of the preserved live 97ms rejection.
+ const epoch=1_000_000,clock=new ServerClock(),rtts:number[]=[];
+ const exchange=(sent:number,up:number,down:number)=>{clock.sample(epoch+sent+up,sent,sent+up+down,epoch+sent+up);rtts.push(up+down);if(rtts.length>12)rtts.shift();};
+ for(const sent of [0,200,400])exchange(sent,50,50);
+ const token='moving-phase',phaseStart=epoch+1000,firstAt=2000;
+ const frozen={sampleAt:clock.movingPhaseNow(token,firstAt),fraction:meterFraction(epoch+firstAt-50,phaseStart,'horizontal','faster-v2')};
+ assert.equal(frozen.sampleAt,epoch+firstAt-50);assert.equal(sampleWindow(rtts),124);
+ assert.equal(admittedSample(frozen.sampleAt,epoch+firstAt+21,124,phaseStart,0,epoch+firstAt+31),frozen.sampleAt);
+ for(let i=0;i<12;i++)exchange(5000+i*20,1,1);
+ const window=sampleWindow(rtts);assert.equal(window,54);
+ assert.equal(clock.phaseOffset(token),epoch-50,'Pings alone cannot shift an active phase');
+ const staleCurrentDraw=clock.phaseNow(token,7000);
+ assert.equal(epoch+7021-staleCurrentDraw,71);assert.throws(()=>admittedSample(staleCurrentDraw,epoch+7021,window,phaseStart,0,epoch+7031));
+ const observations:{age:number;accepted:boolean}[]=[];let previous=firstAt;
+ for(let i=0;i<98;i++){
+  const at=7000+i*16,offsetBefore=clock.phaseOffset(token)!,withoutCorrection=Math.floor(offsetBefore+at),sampleAt=clock.movingPhaseNow(token,at),offsetAfter=clock.phaseOffset(token)!;
+  assert.ok(offsetAfter>=offsetBefore&&offsetAfter-offsetBefore<=.5,'A new draw cannot jump its epoch by more than0.5ms');
+  assert.ok(offsetAfter-offsetBefore<=(at-previous)*.05,'Correction uses elapsed monotone draw time');
+  assert.ok(offsetAfter<=epoch-1,'Correction never exceeds the actually measured conservative bound');
+  assert.equal(sampleAt,Math.floor(offsetAfter+at),'Draw and trace use the same corrected phase mapping');
+  assert.ok(sampleAt>=withoutCorrection&&sampleAt<=withoutCorrection+1,'Integer draw quantization is included in the extra movement bound');
+  for(const axis of ['horizontal','vertical'] as const)assert.ok(Math.abs(meterFraction(sampleAt,phaseStart,axis,'faster-v2')-meterFraction(withoutCorrection,phaseStart,axis,'faster-v2'))*900<=1,'Extra clock correction stays below1CSSpx on the tested900px track');
+  const receivedAt=epoch+at+21;let admitted:number|undefined;
+  try{admitted=admittedSample(sampleAt,receivedAt,window,phaseStart,0,receivedAt+10);}catch(error){assert.equal((error as Error).message,'invalid_render_sample');}
+  const accepted=admitted!==undefined;if(accepted)assert.equal(admitted,sampleAt);
+  assert.equal(accepted,receivedAt-sampleAt<=window,'Every simulated new draw is classified by its unchanged actual ingress boundary');
+  observations.push({age:receivedAt-sampleAt,accepted});previous=at;
+ }
+ assert.equal(observations.length,98);assert.ok(observations.some(row=>!row.accepted),'Early truly old draws still reject under the unchanged54ms window');
+ assert.equal(observations.at(-1)!.age,22);assert.equal(observations.at(-1)!.accepted,true);assert.equal(clock.phaseOffset(token),epoch-1);
+ assert.equal(frozen.sampleAt,epoch+firstAt-50,'A previously frozen claim is never refreshed by better measurements or later draws');
+ assert.throws(()=>admittedSample(frozen.sampleAt,epoch+firstAt+21,window,phaseStart,0,epoch+firstAt+31),'The same old claim and original ingress remain rejected after recovery of new moving draws');
+});
+test('Moving clock correction has no ping step, reverse step, accumulated idle jump or catch-up plateau',()=>{
+ const epoch=1_000_000,clock=new ServerClock();
+ for(const sent of [0,200,400])clock.sample(epoch+sent+50,sent,sent+100,epoch+sent+50);
+ const token='smooth',first=clock.movingPhaseNow(token,1000),initialOffset=clock.phaseOffset(token)!;
+ for(const sent of [1200,1400,1600])clock.sample(epoch+sent+1,sent,sent+2,epoch+sent+1);
+ assert.equal(clock.movingPhaseNow(token,1000),first,'The same draw timestamp cannot adopt a new ping epoch');
+ assert.equal(clock.phaseOffset(token),initialOffset);
+ const before=clock.phaseOffset(token)!;clock.movingPhaseNow(token,1005);assert.equal(clock.phaseOffset(token)!-before,.25,'Short draw intervals use the5% monotone slew rate');
+ const beforeIdle=clock.phaseOffset(token)!;const afterIdle=clock.movingPhaseNow(token,10000);
+ assert.equal(clock.phaseOffset(token)!-beforeIdle,.5,'A long suspension cannot accumulate a large offset jump');
+ assert.ok(afterIdle>first,'The clock continues moving rather than waiting for an offset step to catch up');
+ assert.throws(()=>clock.movingPhaseNow(token,9999));assert.throws(()=>clock.movingPhaseNow(token,NaN));
+ const continuous=clock.phaseOffset(token)!;
+ for(let i=0;i<12;i++)clock.sample(epoch+11000+i*100+1,11000+i*100,11000+i*100+101,epoch+11000+i*100+1);
+ const later=clock.movingPhaseNow(token,13000);
+ assert.equal(clock.phaseOffset(token),continuous,'A worse newer lower bound cannot send a phase backwards');
+ assert.equal(later-afterIdle,3000,'There is no slowdown or plateau after a worse ping');
+});
+test('Moving draw history resets only at explicit recovery, eviction or reconnect and leaves legacy clocks exact',()=>{
+ const epoch=1_000_000,clock=new ServerClock();
+ for(const sent of [0,200,400])clock.sample(epoch+sent+50,sent,sent+100,epoch+sent+50);
+ clock.movingPhaseNow('recover',1000);
+ for(const sent of [1200,1400,1600])clock.sample(epoch+sent+1,sent,sent+2,epoch+sent+1);
+ clock.movingPhaseNow('recover',1700);clock.recoverPhase('recover');
+ assert.equal(clock.movingPhaseNow('recover',1700),epoch+1699,'Explicit rejected-input recovery adopts the new measured phase bound with fresh draw history');
+ for(const version of ['receive-v1','bounded-latency-v2'] as const){
+  const token='legacy-'+version,before=clock.movingPhaseNow(token,1800.25,version),offset=clock.phaseOffset(token)!;
+  for(const sent of [1900,2000,2100])clock.sample(epoch+sent+31,sent,sent+36,epoch+sent+31);
+  assert.equal(clock.movingPhaseNow(token,2200.25,version),before+400);assert.equal(clock.phaseOffset(token),offset,'Moving API never changes an already anchored legacy phase');
+ }
+ for(let i=0;i<9;i++)clock.movingPhaseNow('eviction-'+i,2400+i*16);
+ assert.equal(clock.phaseOffset('recover'),undefined,'Evicted phases have no retained epoch');
+ assert.doesNotThrow(()=>clock.movingPhaseNow('recover',2300),'An evicted draw has no stale monotone history');
+ clock.restartCalibration();assert.throws(()=>clock.movingPhaseNow('after-reconnect',3000),'Reconnect still requires three genuine fresh samples');
+ for(const sent of [3000,3100,3200])clock.sample(epoch+sent+1,sent,sent+2,epoch+sent+1);
+ assert.equal(clock.movingPhaseNow('after-reconnect',3300),epoch+3299);
+});

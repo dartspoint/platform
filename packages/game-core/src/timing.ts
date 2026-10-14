@@ -4,6 +4,8 @@ export const METER_SPEED_VERSION='faster-v2' as const;
 export type MeterSpeedVersion='standard-v1'|typeof METER_SPEED_VERSION;
 export const MAX_COMPENSATION_MS=90;
 export const MAX_RENDER_AGE_MS=34;
+export const MOVING_CLOCK_SLEW_RATE=.05;
+export const MAX_MOVING_CLOCK_CORRECTION_MS=.5;
 export type RenderSampleClaim={sampleAt:number;connectionId:string;dartNumber:number;meterSpeedVersion?:MeterSpeedVersion};
 // Missing markers preserve the periods of already stored matches and practice.
 export function meterPeriod(axis:'horizontal'|'vertical',version:MeterSpeedVersion='standard-v1'){
@@ -39,6 +41,7 @@ export function admittedSample(sampleAt:number,receivedAt:number,windowMs:number
 }
 export class ServerClock {
  private epoch:number|null=null;private conservativeEpoch:number|null=null;private samples:{rtt:number;epoch:number;lowerEpoch:number}[]=[];private phases=new Map<string,number>();
+ private movingDraws=new Map<string,number>();
  seed(serverAt:number,at=performance.now()){if(this.epoch===null)this.epoch=serverAt-at;}
  sample(serverAt:number,sentAt:number,receivedAt=performance.now(),serverReceivedAt=serverAt){
   const processing=serverAt-serverReceivedAt,rtt=receivedAt-sentAt-processing;if(!Number.isFinite(serverAt)||processing<0||rtt<0||rtt>5000)return;
@@ -51,16 +54,36 @@ export class ServerClock {
   this.conservativeEpoch=Math.max(...best.map(sample=>sample.lowerEpoch));
  }
  get ready(){return this.samples.length>=3;}
- restartCalibration(){this.samples=[];this.epoch=null;this.conservativeEpoch=null;}
+ restartCalibration(){this.samples=[];this.epoch=null;this.conservativeEpoch=null;this.movingDraws.clear();}
  get offset(){return this.epoch;}
- recoverPhase(phaseToken:string){this.phases.delete(phaseToken);}
+ recoverPhase(phaseToken:string){this.phases.delete(phaseToken);this.movingDraws.delete(phaseToken);}
  phaseOffset(phaseToken:string){return this.phases.get(phaseToken);}
  phaseNow(phaseToken:string,at=performance.now(),version:TimingVersion=TIMING_VERSION){
   if(!this.ready)throw new Error('clock_not_calibrated');
-  let epoch=this.phases.get(phaseToken);if(epoch===undefined){epoch=version===TIMING_VERSION?this.conservativeEpoch!:this.epoch!;this.phases.set(phaseToken,epoch);if(this.phases.size>8)this.phases.delete(this.phases.keys().next().value!);}
+  let epoch=this.phases.get(phaseToken);if(epoch===undefined){epoch=version===TIMING_VERSION?this.conservativeEpoch!:this.epoch!;this.phases.set(phaseToken,epoch);if(this.phases.size>8){const oldest=this.phases.keys().next().value!;this.phases.delete(oldest);this.movingDraws.delete(oldest);}}
   // Date.now ingress is integer milliseconds. Quantize the v3 render before
   // drawing so a sub-ms loopback cannot make its exact claim appear future.
   const mapped=epoch+at;return version===TIMING_VERSION?Math.floor(mapped):mapped;
+ }
+ // Call only when drawing a new moving frame, never for a pending stop, a
+ // handler or a retry. Pings alone cannot change the phase mapping. A better
+ // measured lower bound is approached without a backwards step or catch-up
+ // plateau, at <=5% of monotone elapsed time and <=0.5ms per actual draw.
+ movingPhaseNow(phaseToken:string,at=performance.now(),version:TimingVersion=TIMING_VERSION){
+  if(version!==TIMING_VERSION)return this.phaseNow(phaseToken,at,version);
+  if(!Number.isFinite(at))throw new Error('invalid_clock_sample');
+  const previous=this.movingDraws.get(phaseToken);
+  if(previous!==undefined&&at<previous)throw new Error('invalid_clock_sample');
+  const mapped=this.phaseNow(phaseToken,at,version);
+  if(previous===at)return mapped;
+  this.movingDraws.set(phaseToken,at);
+  if(previous===undefined)return mapped;
+  const epoch=this.phases.get(phaseToken)!;
+  const correction=Math.min(Math.max(0,this.conservativeEpoch!-epoch),(at-previous)*MOVING_CLOCK_SLEW_RATE,MAX_MOVING_CLOCK_CORRECTION_MS);
+  if(correction===0)return mapped;
+  const corrected=Math.min(this.conservativeEpoch!,epoch+correction);
+  this.phases.set(phaseToken,corrected);
+  return Math.floor(corrected+at);
  }
  now(at=performance.now()){return (this.epoch??Date.now()-at)+at;}
 }

@@ -1,7 +1,8 @@
 import {providerFetch} from './fetch';
 import { createClient } from '@supabase/supabase-js';
-import { createRemoteJWKSet, jwtVerify, decodeProtectedHeader } from 'jose';
+import { createRemoteJWKSet, jwtVerify, decodeProtectedHeader, decodeJwt } from 'jose';
 import { db } from './db';
+import {authenticationFailure,authenticationStage} from './auth-failures';
 import { requireThat, DomainError, uuid } from '../../contracts/src/index';
 export type Actor={id:string;username:string|null;role:'owner'|'admin'|'vip'|'player';sessionVersion:number;expiresAt:number;onboarded:boolean;renameRequired?:boolean;sessionId?:string};
 export function publicPlayerName(id:string,name:string|null,renameRequired:boolean){return renameRequired?'Speler-'+id.replaceAll('-','').slice(0,12):name;}
@@ -24,29 +25,40 @@ async function loadActor(id:string,expiresAt:number,complete:boolean,scope:'acce
 export async function verifyToken(token:string,complete=true):Promise<Actor>{return verifyIdentity(token,complete,'access');}
 // A suspended player may revoke a verified session; this grants no application access.
 export async function verifyLogoutToken(token:string):Promise<Actor>{return verifyIdentity(token,false,'revoke');}
+async function confirmedProviderUser(token:string,expectedId?:string){
+ const {data,error}=await authenticationStage('provider',()=>authAdmin().auth.getUser(token));
+ if(error)throw authenticationFailure(error,'provider');
+ requireThat(data.user?.email_confirmed_at&&(!expectedId||data.user.id===expectedId),'unauthenticated',401);
+ return data.user!;
+}
 async function verifyIdentity(token:string,complete:boolean,scope:'access'|'revoke'):Promise<Actor> {
+ let id:string,expiry:number,sessionId:string;
  try {
   requireThat(typeof token==='string' && token.length>20 && token.length<8192,'unauthenticated',401);
   const url=process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const header=decodeProtectedHeader(token);
-  let id:string,expiry:number,sessionId:string;
+  let header:ReturnType<typeof decodeProtectedHeader>;
+  // This decoder reports malformed caller input as a TypeError. Keep that
+  // narrow parsing boundary separate from network/configuration TypeErrors.
+  try{header=decodeProtectedHeader(token);}catch{throw new DomainError('unauthenticated',401);}
   if(header.alg==='HS256') {
    // Local/legacy projects: Auth verifies signing material and session validity.
-   const {data,error}=await authAdmin().auth.getUser(token);
-   requireThat(!error && data.user?.email_confirmed_at,'unauthenticated',401);
-   id=data.user.id;
-   const claims=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());
-   requireThat(claims.aud==='authenticated' && claims.role==='authenticated' && claims.iss===url+'/auth/v1' && claims.exp>Date.now()/1000,'unauthenticated',401);
-   expiry=claims.exp*1000;sessionId=uuid.parse(claims.session_id);
+   const user=await confirmedProviderUser(token);id=user.id;
+   const claims=decodeJwt(token);
+   requireThat(claims.aud==='authenticated' && claims.role==='authenticated' && claims.iss===url+'/auth/v1' && typeof claims.exp==='number' && claims.exp>Date.now()/1000,'unauthenticated',401);
+   expiry=claims.exp*1000;requireThat(uuid.safeParse(claims.session_id).success,'unauthenticated',401);sessionId=claims.session_id as string;
   } else {
+   requireThat(['ES256','RS256'].includes(header.alg??''),'unauthenticated',401);
    jwks??=createRemoteJWKSet(new URL(url+'/auth/v1/.well-known/jwks.json'));
    const {payload}=await jwtVerify(token,jwks,{issuer:url+'/auth/v1',audience:'authenticated',algorithms:['ES256','RS256']});
    requireThat(payload.sub && payload.role==='authenticated' && payload.exp,'unauthenticated',401);
-   id=payload.sub; expiry=payload.exp*1000;sessionId=uuid.parse(payload.session_id);
-   const {data,error}=await authAdmin().auth.getUser(token);requireThat(!error&&data.user?.id===id&&data.user.email_confirmed_at,'unauthenticated',401);
+   id=payload.sub; expiry=payload.exp*1000;requireThat(uuid.safeParse(payload.session_id).success,'unauthenticated',401);sessionId=payload.session_id as string;
+   await confirmedProviderUser(token,id);
   }
-  return {...await loadActor(id,expiry,complete,scope,sessionId),sessionId};
- } catch(e) { if(e instanceof DomainError) throw e; throw new DomainError('unauthenticated',401); }
+  requireThat(uuid.safeParse(id).success,'unauthenticated',401);
+ } catch(error) {throw authenticationFailure(error,'keys');}
+ // Keep fresh profile/sanction/revocation checks mandatory. A failed lookup
+ // never returns an actor and cannot be reclassified as an invalid JWT.
+ return {...await authenticationStage('storage',()=>loadActor(id,expiry,complete,scope,sessionId)),sessionId};
 }
 export function staff(actor:Actor,owner=false) { requireThat(owner?actor.role==='owner':['owner','admin'].includes(actor.role),'forbidden',403); }
 

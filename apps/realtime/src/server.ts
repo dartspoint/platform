@@ -1,6 +1,6 @@
 import {createServer} from 'node:http';
 import {monitorEventLoopDelay} from 'node:perf_hooks';
-import {timingSafeEqual,randomUUID} from 'node:crypto';
+import {timingSafeEqual,randomUUID,createHash} from 'node:crypto';
 import {Room,Server,matchMaker,type Client} from '@colyseus/core';
 import {WebSocketTransport} from '@colyseus/ws-transport';
 import {db,redis,transaction} from '../../../packages/data/src/db';
@@ -11,7 +11,7 @@ import {readiness} from '../../../packages/data/src/health';
 import {acquireMatch,renewMatch,matchAccess,matchAccessBatch,captureMatchIngress,matchCommand,connection} from '../../../packages/data/src/matches';
 import {trustedLatency,sampleWindow} from '../../../packages/game-core/src/timing';
 import {IngressOrder} from '../../../packages/data/src/ingress-order';
-import {DomainError,requireThat,uuid} from '../../../packages/contracts/src/index';
+import {DomainError,requireThat,uuid,commandSchema} from '../../../packages/contracts/src/index';
 
 const writerId=randomUUID();
 const eventLoop=monitorEventLoopDelay({resolution:20});eventLoop.enable();
@@ -42,10 +42,24 @@ class DartsMatch extends Room {
    this.pendingCommands++;
    // Reserve receive order before asynchronous policy/DB reads. Capture has its
    // own short queue; snapshots and clocks never enter either command queue.
-   const captured=this.ingressOrder.reserve('commands').run(()=>captureMatchIngress(actor,input,{receivedAt,latencyMs,connectionId,admissionWindowMs})).then(()=>({ok:true as const}),error=>({ok:false as const,error}));
+   const captured=this.ingressOrder.reserve('commands').run(()=>captureMatchIngress(actor,input,{receivedAt,latencyMs,connectionId,admissionWindowMs})).then(value=>({ok:true as const,value}),error=>({ok:false as const,error}));
    this.queue=this.queue.then(async()=>{
-    try{const capture=await captured;if(!capture.ok)throw capture.error;const result=await matchCommand(actor,input,writerId,this.fence,{receivedAt,latencyMs,connectionId,admissionWindowMs});client.send('receipt',result);void this.publish();}
-    catch(e){client.send('error',{commandId,code:e instanceof DomainError?e.code:'invalid_command',message:e instanceof DomainError?e.message:'De actie kon niet worden uitgevoerd.'});}
+    let original:Awaited<ReturnType<typeof captureMatchIngress>>|undefined;
+    try{const capture=await captured;if(!capture.ok)throw capture.error;original=capture.value;const result=await matchCommand(actor,input,writerId,this.fence,{receivedAt,latencyMs,connectionId,admissionWindowMs});client.send('receipt',result);void this.publish();}
+    catch(e){
+     let ingress;
+     // Only this authenticated player's invalid-sample rejection gets its
+     // immutable capture. Successful registration already verified the prior
+     // row's actor/UUID keys and this exact canonical payload hash. Never use a
+     // retry's current receive time/window or label a rejection as a receipt.
+     if(original&&e instanceof DomainError&&e.code==='invalid_render_sample'){
+      const parsed=commandSchema.safeParse(input);
+      if(parsed.success&&parsed.data.matchId===this.matchId&&parsed.data.type.startsWith('dart.stop_')){
+       ingress={source:'server-original-command-ingress-v1',scope:'match',actorId:actor.id,commandId:parsed.data.commandId,matchId:parsed.data.matchId,payloadHash:createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex'),...original};
+      }
+     }
+     client.send('error',{commandId,code:e instanceof DomainError?e.code:'invalid_command',message:e instanceof DomainError?e.message:'De actie kon niet worden uitgevoerd.',...(ingress?{ingress}:{})});
+    }
     finally{this.pendingCommands--;}
    });
   });

@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';import {chromium,expect,type Page} from '@playwright/test';import {writeFile} from 'node:fs/promises';import {login,origin,get,post} from './helpers';
+import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {commandSchema} from '../../packages/contracts/src/index';import {chromium,expect,type Page} from '@playwright/test';import {writeFile} from 'node:fs/promises';import {login,origin,get,post} from './helpers';
 import {forfeitGame} from './game-command';
 import {Room} from '@colyseus/sdk';
 import type {Pool} from 'pg';
@@ -17,21 +17,39 @@ function retainProfileCleanupFailure(scope:string,error:unknown){
 const wireCommands=new Map<string,any>(),wireOutcomes=new Map<string,any>();
 function trackGameWire(page:Page,actorId:string){
  page.on('websocket',socket=>{
-  const sent=new Room('qa-wire-command'),received=new Room('qa-wire-outcome');
-  sent.onMessage('*',(type,payload:any)=>{if(type==='command'&&payload?.type?.startsWith('dart.stop_'))wireCommands.set(payload.commandId,{actorId,payload});});
+  const sent=new Room('qa-wire-command'),received=new Room('qa-wire-outcome');let actualFrameBinding:string|undefined;
+  sent.onMessage('*',(type,payload:any)=>{if(type==='command'&&payload?.type?.startsWith('dart.stop_')){assert.ok(actualFrameBinding,'The SDK command UUID is decoded from its actual sent binary frame');const prior=wireCommands.get(payload.commandId);wireCommands.set(payload.commandId,{actorId,payload,frameBindings:[...(prior?.frameBindings??[]),actualFrameBinding]});}});
   received.onMessage('*',(type,payload:any)=>{if(['receipt','error'].includes(String(type))&&payload?.commandId)wireOutcomes.set(payload.commandId,{type,at:performance.now(),payload});});
   const decode=(room:Room,frame:{payload:string|Buffer})=>{if(typeof frame.payload==='string'||(frame.payload[0]&31)!==13)return;(room as any).onMessageCallback({data:frame.payload});};
-  socket.on('framesent',frame=>decode(sent,frame));socket.on('framereceived',frame=>decode(received,frame));
+  socket.on('framesent',frame=>{actualFrameBinding=typeof frame.payload==='string'?undefined:frame.payload.toString('base64');try{decode(sent,frame);}finally{actualFrameBinding=undefined;}});socket.on('framereceived',frame=>decode(received,frame));
  });
+}
+function originalErrorIngress(outcome:any,actorId:string,request:any){
+ assert.equal(outcome.type,'error');assert.equal(outcome.payload.code,'invalid_render_sample');
+ const ingress=outcome.payload.ingress;assert.ok(ingress,'Rejected stops require trusted original server ingress, never response-arrival time');
+ assert.equal(ingress.source,'server-original-command-ingress-v1');assert.equal(ingress.scope,'match');
+ assert.equal(ingress.actorId,actorId);assert.equal(ingress.commandId,request.commandId);assert.equal(ingress.matchId,request.matchId);
+ assert.equal(ingress.payloadHash,createHash('sha256').update(JSON.stringify(commandSchema.parse(request))).digest('hex'),'The original tuple binds the actual canonical wire command');
+ return {receivedAt:ingress.receivedAt,latencyMs:ingress.latencyMs,windowMs:ingress.admissionWindowMs,timingVersion:ingress.timingVersion,connectionId:ingress.connectionId,source:ingress.source};
+}
+async function outgoingStopTimeline(page:Page,commandId:string){
+ const command=wireCommands.get(commandId);assert.ok(command,'Timeline UUID comes from the actual SDK-decoded frame');
+ const value=await page.evaluate(({commandId,bindings})=>({records:((window as any).__qaOutgoingStopAttempts??[]).filter((record:any)=>bindings.includes(record.privateFrameBinding)).map(({privateFrameBinding,...record}:any)=>({...record,commandId})),bindingFailures:(window as any).__qaOutgoingStopBindingFailures??0}),{commandId,bindings:command.frameBindings});
+ assert.equal(value.bindingFailures,0,'Every measured stop binds the actual binary commandId field');assert.ok(value.records.length>0,'Each stop records its actual native WebSocket.send call');
+ for(const record of value.records){assert.equal(record.commandId,commandId);assert.equal(record.clockDomain,'browser-monotonic-ms');assert.equal(record.nativeSendMeaning,'WebSocket.send-call-not-physical-transmission');
+  for(const key of ['browserTimeOrigin','queuedAt','requestedUplinkMs','timerFiredAt','nativeSendCalledAt','nativeSendReturnedAt','bufferedAmountBefore','bufferedAmountAfter'])assert.ok(Number.isFinite(record[key])&&record[key]>=0,'Finite actual send-call metadata: '+key);
+  assert.ok(record.queuedAt<=record.timerFiredAt&&record.timerFiredAt<=record.nativeSendCalledAt&&record.nativeSendCalledAt<=record.nativeSendReturnedAt,'Outgoing timer and native send call preserve their monotone order');
+ }
+ return value.records;
 }
 async function ingressDiagnostic(local:any){
  const command=wireCommands.get(local.commandId),outcome=wireOutcomes.get(local.commandId);
  const diagnostic:any={commandId:local.commandId,phase:local.phase,phaseToken:local.phaseToken,phaseStartedAt:local.phaseStartedAt,sampleAt:local.rendered.sampleAt,localSampleAgeMs:local.at-local.rendered.renderedAt,wireOutcome:outcome?.type,code:outcome?.payload.code};
  if(command&&process.env.APP_ENV==='development'&&new URL(origin).hostname==='127.0.0.1'&&new URL(process.env.DATABASE_URL!).hostname==='127.0.0.1'){
   if(!ingressPool){const {db}=await import('../../packages/data/src/db');ingressPool=db();}
-  const row=(await ingressPool.query("select received_at,latency_ms,admission_window_ms,timing_version,connection_id from private.command_ingress where scope='match' and actor_id=$1 and command_id=$2",[command.actorId,local.commandId])).rows[0];
+  const row=(await ingressPool.query("select received_at,latency_ms,admission_window_ms,timing_version,connection_id,payload_hash from private.command_ingress where scope='match' and actor_id=$1 and command_id=$2",[command.actorId,local.commandId])).rows[0];
   if(row){Object.assign(diagnostic,{receivedAt:new Date(row.received_at).getTime(),windowMs:Number(row.admission_window_ms),latencyMs:Number(row.latency_ms),timingVersion:row.timing_version,connectionMatches:row.connection_id===command.payload.renderSample.connectionId});diagnostic.sampleAgeAtIngressMs=diagnostic.receivedAt-diagnostic.sampleAt;diagnostic.violations=[diagnostic.sampleAt>diagnostic.receivedAt?'future':null,diagnostic.sampleAgeAtIngressMs>diagnostic.windowMs?'old':null,diagnostic.sampleAt<diagnostic.phaseStartedAt?'before-phase':null].filter(Boolean);}
- }else if(outcome?.type==='receipt'){const timing=outcome.payload.timing;Object.assign(diagnostic,{receivedAt:timing.receivedAt,windowMs:timing.admissionWindowMs,latencyMs:timing.latencyMs,sampleAgeAtIngressMs:timing.receivedAt-diagnostic.sampleAt});}
+ }else if(outcome?.type==='receipt'){const timing=outcome.payload.timing;Object.assign(diagnostic,{receivedAt:timing.receivedAt,windowMs:timing.admissionWindowMs,latencyMs:timing.latencyMs,sampleAgeAtIngressMs:timing.receivedAt-diagnostic.sampleAt});}else if(command&&outcome?.type==='error'&&outcome.payload.code==='invalid_render_sample'){try{const metadata=originalErrorIngress(outcome,command.actorId,command.payload);Object.assign(diagnostic,metadata,{sampleAgeAtIngressMs:metadata.receivedAt-diagnostic.sampleAt});}catch{diagnostic.originalIngressBindingValid=false;}}
  return diagnostic;
 }
 type Axis='horizontal'|'vertical';
@@ -79,16 +97,17 @@ async function captureStop(page:Page,axis:Axis,options:any,afterInput?:()=>Promi
 async function classifyStop(local:any,baseline:any,actorId:string,outcome:any){
  const observed=wireCommands.get(local.commandId);assert.ok(observed,'Actual stop bytes contain the measured command UUID');assert.equal(observed.actorId,actorId);
  const request=observed.payload,claim=request.renderSample;assert.equal(request.matchId,baseline.matchId);assert.equal(request.expectedStateVersion,baseline.stateVersion);assert.equal(request.phaseToken,baseline.state.phaseToken);assert.equal(local.phaseToken,baseline.state.phaseToken);assert.equal(local.phaseStartedAt,baseline.state.phaseStartedAt);assert.equal(request.type,'dart.stop_'+local.phase);assert.equal(local.timingVersion,'render-sample-v3');assert.equal(claim.sampleAt,local.rendered.sampleAt);assert.equal(claim.dartNumber,baseline.state.dartCount[0]+baseline.state.dartCount[1]+1);
+ const rejectedMetadata=outcome.type==='error'?originalErrorIngress(outcome,actorId,request):undefined;
  let metadata:any;
  if(process.env.APP_ENV==='development'&&new URL(origin).hostname==='127.0.0.1'){
   // The actual pool uses DATABASE_URL. Refuse all non-disposable DB hosts.
   assert.equal(new URL(process.env.DATABASE_URL!).hostname,'127.0.0.1');assert.equal(new URL(process.env.MIGRATION_DATABASE_URL!).hostname,'127.0.0.1');
   if(!ingressPool){const {db}=await import('../../packages/data/src/db');ingressPool=db();}
-  const row=(await ingressPool.query("select received_at,latency_ms,admission_window_ms,timing_version,connection_id from private.command_ingress where scope='match' and actor_id=$1 and command_id=$2",[actorId,local.commandId])).rows[0];assert.ok(row,'Each attempted stop has its immutable original ingress');
+  const row=(await ingressPool.query("select received_at,latency_ms,admission_window_ms,timing_version,connection_id,payload_hash from private.command_ingress where scope='match' and actor_id=$1 and command_id=$2",[actorId,local.commandId])).rows[0];assert.ok(row,'Each attempted stop has its immutable original ingress');
   metadata={receivedAt:new Date(row.received_at).getTime(),latencyMs:Number(row.latency_ms),windowMs:Number(row.admission_window_ms),timingVersion:row.timing_version,connectionId:row.connection_id,source:'immutable-disposable-local-ingress'};
+  if(rejectedMetadata){assert.equal(row.payload_hash,createHash('sha256').update(JSON.stringify(commandSchema.parse(request))).digest('hex'));for(const key of ['receivedAt','latencyMs','windowMs','timingVersion','connectionId'] as const)assert.equal(rejectedMetadata[key],metadata[key],'Wire rejection preserves original database '+key);metadata.source=rejectedMetadata.source;}
  }else{
-  assert.equal(outcome.type,'receipt','A staging rejection needs trusted original ingress metadata; browser response arrival cannot establish its boundaries');
-  const timing=outcome.payload.timing;metadata={receivedAt:timing.receivedAt,latencyMs:timing.latencyMs,windowMs:timing.admissionWindowMs,timingVersion:timing.timingVersion,connectionId:timing.connectionId,source:'authoritative-receipt'};
+  if(rejectedMetadata)metadata=rejectedMetadata;else{assert.equal(outcome.type,'receipt');const timing=outcome.payload.timing;metadata={receivedAt:timing.receivedAt,latencyMs:timing.latencyMs,windowMs:timing.admissionWindowMs,timingVersion:timing.timingVersion,connectionId:timing.connectionId,source:'authoritative-receipt'};}
  }
  assert.equal(metadata.connectionId,claim.connectionId);assert.equal(metadata.timingVersion,'render-sample-v3');assert.ok(Number.isInteger(metadata.receivedAt));assert.ok(Number.isFinite(claim.sampleAt));assert.ok(metadata.latencyMs>=0&&metadata.latencyMs<=90);assert.equal(metadata.windowMs,Math.min(90,Math.max(20,metadata.latencyMs*3))+34,'The original measured network allowance and render age stay separate');
  const violations=[claim.sampleAt>metadata.receivedAt?'future':null,claim.sampleAt<metadata.receivedAt-metadata.windowMs?'old':null,claim.sampleAt<baseline.state.phaseStartedAt?'before-phase':null,claim.sampleAt<(baseline.state.lastAcceptedAt??0)?'before-last-accepted':null].filter(Boolean);
@@ -96,7 +115,7 @@ async function classifyStop(local:any,baseline:any,actorId:string,outcome:any){
 }
 async function finishStop(page:Page,actorId:string,captured:any){
  const {sample,baseline}=captured,local=sample.trace;await page.waitForFunction(commandId=>((window as any).__dpTimingTraces??[]).some((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.commandId);
- const ui=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.commandId),outcome=wireOutcomes.get(local.commandId);assert.ok(outcome,'An actual WS outcome was observed');assert.ok(Number.isFinite(ui.monotonicAt)&&ui.monotonicAt>=local.sendReturnedAt,'Actual outcome callback has its browser-local timestamp');sample.actualOutcome={type:outcome.type,code:outcome.payload.code};sample.ingress=await classifyStop(local,baseline,actorId,outcome);
+ const ui=await page.evaluate(commandId=>((window as any).__dpTimingTraces??[]).find((event:any)=>['receipt','rejected'].includes(event.event)&&event.commandId===commandId),local.commandId),outcome=wireOutcomes.get(local.commandId);assert.ok(outcome,'An actual WS outcome was observed');assert.ok(Number.isFinite(ui.monotonicAt)&&ui.monotonicAt>=local.sendReturnedAt,'Actual outcome callback has its browser-local timestamp');sample.outgoingStopCalls=await outgoingStopTimeline(page,local.commandId);sample.actualOutcome={type:outcome.type,code:outcome.payload.code};sample.ingress=await classifyStop(local,baseline,actorId,outcome);
  if(!sample.ingress.admissible){
   assert.equal(outcome.type,'error');assert.equal(outcome.payload.code,'invalid_render_sample');assert.equal(ui.event,'rejected');assert.equal(ui.code,'invalid_render_sample');await expect(page.locator('.dp-connection-note').filter({hasText:'timingmeting'})).toBeVisible();
   const unchanged=await get(page,'match/'+baseline.matchId);assert.equal(unchanged.stateVersion,baseline.stateVersion);assert.equal(unchanged.lifecycle,baseline.lifecycle);assert.deepEqual(unchanged.state,baseline.state,'Invalid sample preserves every authoritative phase, lock, score, result and dart');
@@ -135,7 +154,15 @@ try{
  for(const actor of [a,b])await actor.page.addInitScript(`
  const descriptor=Object.getOwnPropertyDescriptor(WebSocket.prototype,'onmessage');
  Object.defineProperty(WebSocket.prototype,'onmessage',{configurable:true,get:descriptor.get,set:function(handler){const socket=this;socket.__qaHandler=handler;descriptor.set.call(this,function(event){const text=event.data instanceof ArrayBuffer?new TextDecoder().decode(event.data):'';if(window.__qaDrop&&text.includes('receipt')){window.__qaDrop=false;socket.close(4000,'QA lost acknowledgement');return;}if(text.includes('receipt'))socket.__qaReceipt=event;if(text.includes('receipt')||text.includes('snapshot'))setTimeout(function(){handler.call(socket,event);if(window.__qaReplayFlight&&text.includes('snapshot')&&text.includes('flight')){window.__qaReplayFlight=false;setTimeout(function(){handler.call(socket,event);window.__qaFlightReplayAt=performance.now();},100);}},window.__qaDelay||0);else handler.call(socket,event);});}});
- const nativeSend=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const socket=this,text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))window.__qaGameSocket=socket;if(text.includes('dart.stop_')){if(window.__qaReplayReceipt&&socket.__qaReceipt){window.__qaReplayReceipt=false;setTimeout(()=>socket.__qaHandler.call(socket,socket.__qaReceipt),5);}setTimeout(()=>nativeSend.call(socket,data),window.__qaUplink||0);}else nativeSend.call(socket,data);};
+ const nativeSend=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const socket=this,text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))window.__qaGameSocket=socket;if(text.includes('dart.stop_')){if(window.__qaReplayReceipt&&socket.__qaReceipt){window.__qaReplayReceipt=false;setTimeout(()=>socket.__qaHandler.call(socket,socket.__qaReceipt),5);}const queuedAt=performance.now(),requestedUplinkMs=window.__qaUplink||0;
+ // Keep the exact binary binding in memory only. Node's real SDK decoder
+ // supplies the commandId; report projection removes these transient bytes.
+ const bytes=data instanceof ArrayBuffer?new Uint8Array(data):ArrayBuffer.isView(data)?new Uint8Array(data.buffer,data.byteOffset,data.byteLength):null;
+ const privateFrameBinding=bytes&&bytes.length<=8192?btoa(String.fromCharCode(...bytes)):null;
+ const record={privateFrameBinding,clockDomain:'browser-monotonic-ms',nativeSendMeaning:'WebSocket.send-call-not-physical-transmission',browserTimeOrigin:performance.timeOrigin,queuedAt,requestedUplinkMs};
+ if(!privateFrameBinding)window.__qaOutgoingStopBindingFailures=(window.__qaOutgoingStopBindingFailures||0)+1;
+ (window.__qaOutgoingStopAttempts||(window.__qaOutgoingStopAttempts=[])).push(record);
+ setTimeout(()=>{record.timerFiredAt=performance.now();record.bufferedAmountBefore=socket.bufferedAmount;record.nativeSendCalledAt=performance.now();try{nativeSend.call(socket,data);}finally{record.nativeSendReturnedAt=performance.now();record.bufferedAmountAfter=socket.bufferedAmount;}},requestedUplinkMs);}else nativeSend.call(socket,data);};
  `);
  await page.setViewportSize({width:390,height:844});await page.goto(origin+'/spelen?match='+id);await b.page.goto(origin+'/spelen?match='+id);await page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await page.getByRole('button',{name:'Stop horizontale indicator',exact:true}).waitFor();await page.bringToFront();
  for(const actor of [a,b])await installInputCapture(actor.page);
@@ -178,7 +205,7 @@ try{
  assert.ok(recoveredVertical,'The recovered match completes one actual vertical stop');await proveGroundedImpact(b.page,recoveredVertical,recoveredVerticalSample);assert.equal((await get(page,'match/'+id)).state.events.length,before+1);result.reconnectNoExtraDart=true;result.originalStopRecovered=true;
  const frames=result.samples.map((sample:any)=>sample.frameMs).sort((a:number,b:number)=>a-b);result.frameOpportunity={attempts:frames.length,p95Ms:frames[Math.ceil(frames.length*.95)-1],maxMs:frames.at(-1),foreground:true,excludedAttempts:0};assert.ok(result.frameOpportunity.p95Ms<=50,'First frozen frame p95 <=50ms over every actual native attempt');console.log('All-attempt live-game timing '+JSON.stringify({frameOpportunity:result.frameOpportunity,cohorts:result.cohorts}));
  await forfeitGame(b.page,id,cleanupParticipants);result.fixtureMatchEnded=true;await writeFile('artifacts/game-timing-result.json',JSON.stringify(result,null,2));console.log('Real game pointer/keyboard freeze, delayed receipts, jitter, fixed flight and reconnect passed');
-}catch(error){testFailed=true;if(debugPage){const local=await debugPage.evaluate(()=>(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail);if(local){result.failureDiagnostic=await ingressDiagnostic(local);console.log(JSON.stringify({event:'game_timing_failed_stop',...result.failureDiagnostic}));}await debugPage.screenshot({path:'artifacts/game-timing-debug.png'});await writeFile('artifacts/game-timing-debug-private.txt',await debugPage.locator('body').innerText());}throw error;}finally{
+}catch(error){testFailed=true;if(debugPage){const local=await debugPage.evaluate(()=>(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail);if(local){const failedWire=wireCommands.get(local.commandId);result.failureOutgoingStopCalls=await debugPage.evaluate(({commandId,bindings}:any)=>((window as any).__qaOutgoingStopAttempts??[]).filter((record:any)=>bindings.includes(record.privateFrameBinding)).map(({privateFrameBinding,...record}:any)=>({...record,commandId})),{commandId:local.commandId,bindings:failedWire?.frameBindings??[]});result.failureDiagnostic=await ingressDiagnostic(local);console.log(JSON.stringify({event:'game_timing_failed_stop',...result.failureDiagnostic}));}await debugPage.screenshot({path:'artifacts/game-timing-debug.png'});await writeFile('artifacts/game-timing-debug-private.txt',await debugPage.locator('body').innerText());}throw error;}finally{
  let profileStopError:unknown;
  try{await chromeProfile?.stop();}catch(error){retainProfileCleanupFailure('chrome-trace',error);profileStopError=error;}
  await writeFile('artifacts/game-timing-progress.json',JSON.stringify(result,null,2));
