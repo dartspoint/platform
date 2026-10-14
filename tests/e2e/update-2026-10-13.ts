@@ -13,7 +13,7 @@ const practiceDiagnostics=new WeakMap<Page,any>();
 let ingressPool:Pool|undefined;
 function trackPractice(page:Page,label:string){const counts:any={label,ping:{},echo:{},reset:{},failures:[]};practiceDiagnostics.set(page,counts);page.on('response',async response=>{const path=new URL(response.url()).pathname,kind=path.endsWith('/timing/ping')?'ping':path.endsWith('/timing/echo')?'echo':practiceResponse(response,'reset')?'reset':null;if(!kind)return;const status=response.status();counts[kind][status]=(counts[kind][status]??0)+1;if(!response.ok()){let code:string|undefined;try{code=(await response.json()).code;}catch{}counts.failures.push({kind,status,code});}});return counts;}
 function practiceResponse(response:Response,type:string){if(!response.url().endsWith('/api/platform/practice')||response.request().method()!=='POST')return false;return response.request().postDataJSON()?.type===type;}
-function stopReceipt(page:Page,type:'horizontal'|'vertical'){return page.waitForResponse(async response=>{if(!practiceResponse(response,type))return false;const commandId=await page.evaluate(()=>(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail?.commandId);return response.request().postDataJSON().commandId===commandId;});}
+function stopReceipt(page:Page,type:'horizontal'|'vertical'){const pending=page.waitForResponse(async response=>{if(!practiceResponse(response,type))return false;const commandId=await page.evaluate(()=>(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined)?.detail?.commandId);return response.request().postDataJSON().commandId===commandId;});void pending.catch(()=>{});return pending;}
 async function readyPractice(page:Page,axis:'horizontal'|'vertical'){
  try{
  const button=page.getByRole('button',{name:axis==='horizontal'?'Stop de richting':'Stop de hoogte en gooi',exact:true});await expect(button).toBeEnabled({timeout:15000});
@@ -85,7 +85,9 @@ try{
  // Hold headers only after the native request reached the server and its
  // response arrived. Neither uplink nor clock calibration is proxied or delayed.
  await responseDelay.send('Fetch.enable',{patterns:[{urlPattern:origin+'/api/platform/practice',requestStage:'Response'}]});
- await page.goto(origin+'/oefenen');await page.bringToFront();await readyPractice(page,'horizontal');assert.equal(await page.evaluate(()=>document.visibilityState==='visible'&&document.hasFocus()),true,'Timing requires a focused foreground page');await page.evaluate(`const capture=function(){window.__dpInput=performance.now();window.__dpFrame=undefined;window.__dpFirstFrozen=undefined;requestAnimationFrame(function(){window.__dpFrame=performance.now()-window.__dpInput;const rect=document.querySelector('.practice-meter-x i').getBoundingClientRect();window.__dpFirstFrozen=rect.left+rect.width/2;});};window.addEventListener('pointerdown',capture,{capture:true});window.addEventListener('keydown',capture,{capture:true});`);
+ // Register the original capture before the app parser-time input dispatcher.
+ await page.addInitScript(`if(location.pathname==='/oefenen'){const capture=function(event){window.__dpInput=performance.now();window.__dpNativeInput={eventTimeStamp:event.timeStamp,isTrusted:event.isTrusted,captureStartedAt:window.__dpInput};window.__dpFrame=undefined;window.__dpFrameAt=undefined;window.__dpFirstFrozen=undefined;requestAnimationFrame(function(){window.__dpFrame=performance.now()-window.__dpInput;window.__dpFrameAt=window.__dpInput+window.__dpFrame;const rect=document.querySelector('.practice-meter-x i').getBoundingClientRect();window.__dpFirstFrozen=rect.left+rect.width/2;});};window.addEventListener('pointerdown',capture,{capture:true});window.addEventListener('keydown',capture,{capture:true});}`);
+ await page.goto(origin+'/oefenen');await page.bringToFront();await readyPractice(page,'horizontal');assert.equal(await page.evaluate(()=>document.visibilityState==='visible'&&document.hasFocus()),true,'Timing requires a focused foreground page');
  let baseline=await resetPractice(page);
  for(const delay of [100,300,1000])for(let i=0;i<10;i++){
   holdResponseMs=delay;
@@ -93,15 +95,22 @@ try{
   const ack=stopReceipt(page,'horizontal');const start=performance.now();const button=page.getByRole('button',{name:'Stop de richting',exact:true});if(i%2){await button.focus();await page.keyboard.press('Space');}else await button.click();
   await wait(30);const first=await page.locator('.practice-meter-x i').evaluate(e=>getComputedStyle(e).left);await wait(35);const pending=await page.locator('.practice-meter-x i').evaluate(e=>getComputedStyle(e).left);
   await page.waitForFunction(()=>Number.isFinite((window as any).__dpFrame),{},{timeout:1500});
-  const local=await page.evaluate(()=>{const mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark;return {handlerMs:mark.startTime-(window as any).__dpInput,frameMs:(window as any).__dpFrame,firstFrozen:(window as any).__dpFirstFrozen,detail:mark.detail};});
+  const local=await page.evaluate(()=>{const mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark;return {handlerMs:mark.startTime-(window as any).__dpInput,frameMs:(window as any).__dpFrame,frameAt:(window as any).__dpFrameAt,nativeInput:(window as any).__dpNativeInput,firstFrozen:(window as any).__dpFirstFrozen,detail:mark.detail};});
+  const native=local.nativeInput,nativeToLocalFreezeMs=local.detail.stopAppliedAt-native?.eventTimeStamp,nativeToFirstRAFMs=local.frameAt-native?.eventTimeStamp;
+  const sample:any={commandId:local.detail.commandId,status:null,trace:local.detail,nativeInput:native,delayMs:delay,input:i%2?'keyboard':'mouse',handlerMs:local.handlerMs,frameMs:local.frameMs,frameAt:local.frameAt,nativeToLocalFreezeMs,nativeToFirstRAFMs,pendingStable:first===pending,frameTiming:{targetMs:50,gate:'reported-only-user-request-2026-10-14',legacyTargetMet:local.frameMs<=50,nativeTargetMet:nativeToFirstRAFMs<=50}};
+  // Preserve this first attempt in progress even if a hard timing assertion fails.
+  result.timing.push(sample);
+  console.log(JSON.stringify({event:'legacy_foreground_stop_timing',attemptIndex:result.timing.length-1,delayMs:delay,keyboard:i%2===1,handlerMs:local.handlerMs,frameMs:local.frameMs,nativeToLocalFreezeMs,nativeToFirstRAFMs}));
+  assert.equal(native?.isTrusted,true,'Every foreground stop uses its original trusted native input');
+  assert.ok(Number.isFinite(native.eventTimeStamp)&&native.eventTimeStamp>=0&&Number.isFinite(native.captureStartedAt)&&Number.isFinite(local.detail.inputAt)&&native.eventTimeStamp<=native.captureStartedAt&&native.captureStartedAt<=local.detail.inputAt,'Native input capture precedes the product handler on the same clock');
+  assert.ok(Number.isFinite(nativeToLocalFreezeMs)&&nativeToLocalFreezeMs>=0&&nativeToLocalFreezeMs<=50,'Every original foreground native input freezes locally <=50ms');
+  assert.ok(Number.isFinite(nativeToFirstRAFMs)&&nativeToFirstRAFMs>=0&&Number.isFinite(local.frameMs)&&local.frameMs>=0,'Every foreground legacy and native frame duration is finite and nonnegative');
   assert.equal(first,pending,'Frozen horizontal indicator must not advance while receipt is delayed');
   assert.ok(local.handlerMs>=0&&local.handlerMs<=50,'Local input handler freeze <=50ms');
   const freezeJumpPx=Math.abs(local.firstFrozen-local.detail.geometry.indicator);
   assert.ok(freezeJumpPx<=1,'First frozen practice frame <=1 CSS pixel');assert.ok(Number.isFinite(local.frameMs),'Every stop records its next frame opportunity');
   const acknowledged=await ack,receipt=await acknowledged.json(),ingress=await classifyPracticeSample(acknowledged,local.detail,baseline,a.id);
-  const sample:any={commandId:local.detail.commandId,status:acknowledged.status(),freezeJumpPx,trace:local.detail,delayMs:delay,input:i%2?'keyboard':'mouse',handlerMs:local.handlerMs,frameMs:local.frameMs,confirmationMs:performance.now()-start,pendingStable:first===pending,ingress};
-  // Keep every attempt, including a rejected old sample, in the distribution.
-  result.timing.push(sample);
+  Object.assign(sample,{status:acknowledged.status(),freezeJumpPx,confirmationMs:performance.now()-start,ingress});
   if(ingress.admissible){
    assert.equal(acknowledged.status(),200,'An in-window foreground sample must be accepted: '+receipt.code);
    assert.equal(receipt.commandId,local.detail.commandId);assert.equal(receipt.timing.admittedAt,local.detail.rendered.sampleAt,'Accepted practice stop must keep its drawn sample');
@@ -116,12 +125,14 @@ try{
   }
   baseline=await resetPractice(page);
  }
- // The requirement is p95 over all 30 foreground stops, including slow samples.
- // Record the full distribution; do not retry/discard an individual late repaint.
+ // Report all original frame measurements; their 50ms target is informational.
+ const frameReport=(rawMs:number[])=>{const sorted=rawMs.slice().sort((a,b)=>a-b);return {samples:rawMs.length,rawMs,p50Ms:sorted[Math.ceil(sorted.length*.5)-1],p95Ms:sorted[Math.ceil(sorted.length*.95)-1],maxMs:sorted.at(-1),foreground:true,targetMs:50,gate:'reported-only-user-request-2026-10-14',overTargetAttempts:rawMs.map((ms,index)=>({index,ms})).filter(sample=>sample.ms>50),excludedAttempts:0};};
  const frames=result.timing.map((sample:any)=>sample.frameMs).sort((a:number,b:number)=>a-b);
- result.frameOpportunity={samples:frames.length,p95Ms:frames[Math.ceil(frames.length*.95)-1],maxMs:frames.at(-1),foreground:true};
- console.log('Foreground stop frame opportunities: '+JSON.stringify(result.frameOpportunity));
- assert.equal(frames.length,30);assert.ok(result.frameOpportunity.p95Ms<=50,'Next frame opportunity p95 <=50ms across all 30 foreground attempts');
+ result.frameOpportunity=frameReport(result.timing.map((sample:any)=>sample.frameMs));
+ result.nativeFrameOpportunity=frameReport(result.timing.map((sample:any)=>sample.nativeToFirstRAFMs));
+ console.log('Foreground stop frame opportunities: '+JSON.stringify({legacy:result.frameOpportunity,native:result.nativeFrameOpportunity}));
+ assert.equal(frames.length,30);assert.equal(result.nativeFrameOpportunity.samples,30);
+ if(result.frameOpportunity.overTargetAttempts.length||result.nativeFrameOpportunity.overTargetAttempts.length)console.warn('Foreground frame times exceed the informational50ms target; every original attempt is retained and native local freeze remains hard50.');
  result.acceptanceCoverage=[];
  for(const delayMs of [100,300,1000])for(const input of ['mouse','keyboard']){
   const cohort=result.timing.filter((sample:any)=>sample.delayMs===delayMs&&sample.input===input),accepted=cohort.filter((sample:any)=>sample.outcome==='accepted-exact-sample').length;

@@ -21,6 +21,15 @@ afwijking, oorspronkelijke UUID, ingress- en servervensters, statebehoud bij
 weigering en reconnect zonder extra pijl blijven verplicht. Geen samples
 worden opnieuw gekozen, weggefilterd of opnieuw gemeten.
 
+De oudere 30-stop-updateproef registreert zijn bestaande capture nu vóór
+navigatie naar `/oefenen`, zodat die vóór de producthandler meet. De oorspronkelijke
+`performance.now()`-capture en RAF-geometrie blijven behouden; native
+`event.timeStamp` tot `stopAppliedAt` wordt voor iedere poging hard aan 50 ms
+getoetst. Native frametijd gebruikt dezelfde oorspronkelijke RAF-timestamp.
+Alle oorspronkelijke pogingen blijven bewaard, ook in het gesaneerde
+voortgangsartifact bij een failure. Na 30 stops worden beide volledige
+frameverdelingen met p50/p95/max en overschrijdingen informatief gerapporteerd.
+
 De meetverslagen verderop beschrijven de toen geldende acceptatiecriteria.
 Hun harde framefailures blijven historische failures; de oorspronkelijke
 rapporten worden niet herschreven. Ook een afzonderlijke profielsuite met

@@ -88,6 +88,8 @@ jobs:
               'artifacts/room-activity/results.json': 'room-activity-result.json',
               'artifacts/practice-auth-outage/results.json': 'practice-auth-outage-result.json',
               'artifacts/https-command-ingress-result.json': 'https-command-ingress-result.json',
+              'artifacts/update-2026-10-13/after/results.json': 'update-2026-10-13-after-results.json',
+              'artifacts/update-2026-10-13/after/progress.json': 'update-2026-10-13-after-progress.json',
           }
           omitted = {
               'message', 'body', 'text', 'stack', 'headers', 'authorization',
@@ -226,6 +228,8 @@ jobs:
             artifacts/ci-safe/room-activity-result.json
             artifacts/ci-safe/practice-auth-outage-result.json
             artifacts/ci-safe/https-command-ingress-result.json
+            artifacts/ci-safe/update-2026-10-13-after-results.json
+            artifacts/ci-safe/update-2026-10-13-after-progress.json
       - name: Preserve encrypted private QA input diagnostics
         if: ${{ always() && env.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
