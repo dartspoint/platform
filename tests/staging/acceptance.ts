@@ -105,6 +105,8 @@ try{
    assert.equal(response.status(),200,'Measured staging send commits successfully');
    await second.page.waitForFunction(text=>(window as any).__stagingChatSeen[text],text);
    const recipient=await second.page.evaluate(text=>(window as any).__stagingChatSeen[text],text);
+   // Committed history may render before personal fanout; await the real event without replacing either original timestamp.
+   await second.page.waitForFunction(id=>Number.isFinite((window as any).__stagingChatPush[id]?.at),saved.id);
    const push=await second.page.evaluate(({id,body,clientId,senderId,channelId})=>{const observed=(window as any).__stagingChatPush[id];return {at:observed?.at??null,canonical:{observed:Number.isFinite(observed?.at),bodyMatches:observed?.message?.body===body,clientMessageIdMatches:observed?.message?.client_message_id===clientId,senderMatches:observed?.message?.sender_id===senderId,channelMatches:observed?.message?.channel_id===channelId}};},{id:saved.id,body:text,clientId:saved.client_message_id,senderId:first.id,channelId:channel.id});
    sample.recipientMs=recipient-started;sample.pushMs=push.at===null?null:push.at-started;sample.canonicalPush=push.canonical;sample.senderAfter=await pageState(first.page);sample.receiverAfter=await pageState(second.page);
   }
