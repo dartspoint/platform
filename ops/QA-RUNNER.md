@@ -38,7 +38,9 @@ de normale toeschouwertest bereikt was. Opname en uitvoer komen in een afzonderl
 private sandbox. Normale spel-, oefen-, chat- en toeschouwerbewijzen worden vóór en na
 de diagnose op inhoud en aanwezigheid gecontroleerd. Het nog lopende
 capaciteitsmeetbestand is hiervan uitgesloten. De observeropname gebruikt geen
-screenshots en meet ook de zichtbare eigen cgroup-ancestors vóór en na de opname.
+screenshots en beperkt de trace tot de inputroute, taken en JavaScriptmetingen;
+de afzonderlijke presentatiediagnose behoudt zijn compositorcategorieën.
+De observerdiagnose meet ook de zichtbare eigen cgroup-ancestors vóór en na de opname.
 Een profileresultaat vervangt nooit een normale acceptatietest en bewijst geen
 fysieke schermpresentatie. Schakel de opt-in na het onderzoek weer uit.
 

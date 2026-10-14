@@ -11,6 +11,10 @@ const CATEGORIES=[
  'disabled-by-default-devtools.timeline.inputs',
  'disabled-by-default-devtools.screenshot',
 ];
+const INPUT_CATEGORIES=[
+ 'devtools.timeline','blink.user_timing','input','toplevel',
+ 'disabled-by-default-devtools.timeline.inputs',
+];
 type Failure='trace_start_failed'|'trace_end_failed'|'trace_complete_timeout'|'trace_stop_timeout'|'trace_stream_missing'|'trace_stream_limit'|'trace_data_loss'|'trace_stream_read_failed'|'trace_stream_write_failed'|'trace_stream_close_failed'|'trace_detach_failed';
 class ProfileFailure extends Error {constructor(readonly category:Failure){super(category);}}
 type Completion={stream?:string;dataLossOccurred?:boolean};
@@ -28,9 +32,11 @@ async function writeMetadata(file:FileHandle,data:unknown){
 }
 
 /** Separate diagnostic run only. Default acceptance does not create a CDP session. */
-export async function startThrowPerformanceProfile(browser:Browser,proofDir:string,options:{screenshots?:boolean;cpuSampling?:boolean}={}):Promise<ThrowPerformanceProfile>{
+export async function startThrowPerformanceProfile(browser:Browser,proofDir:string,options:{screenshots?:boolean;cpuSampling?:boolean;purpose?:'presentation'|'input'}={}):Promise<ThrowPerformanceProfile>{
  if(process.env.DARTSPOINT_THROW_PROFILE!=='1')return {stop:async()=>{}};
- const categories=[...(options.screenshots===false?CATEGORIES.filter(category=>category!=='disabled-by-default-devtools.screenshot'):CATEGORIES),...(options.cpuSampling===true?['disabled-by-default-v8.cpu_profiler']:[])];
+ if(options.purpose==='input'&&options.screenshots!==false)throw new Error('Input-route profiling requires explicitly disabled screenshots');
+ const requested=options.purpose==='input'?INPUT_CATEGORIES:CATEGORIES;
+ const categories=[...(options.screenshots===false?requested.filter(category=>category!=='disabled-by-default-devtools.screenshot'):requested),...(options.cpuSampling===true?['disabled-by-default-v8.cpu_profiler']:[])];
  const artifacts=resolve('artifacts'),directory=resolve(proofDir),local=relative(artifacts,directory);
  if(local.startsWith('..')||isAbsolute(local))throw new Error('Throw profile requires an ignored artifacts directory');
  await mkdir(artifacts,{recursive:true});await mkdir(directory,{recursive:true,mode:0o700});
@@ -44,7 +50,7 @@ export async function startThrowPerformanceProfile(browser:Browser,proofDir:stri
  const nodeStartedAtMs=performance.now();
  const metadata:any={
   diagnostic:'separate_opt_in_chrome_performance_profile',complete:false,ok:false,
-  requestedCategories:categories,screenshotsRequested:options.screenshots!==false,cpuSamplingRequested:options.cpuSampling===true,traceBufferKiB:TRACE_BUFFER_KIB,recordMode:'recordUntilFull',maxTraceBytes:MAX_TRACE_BYTES,traceBytes:0,
+  purpose:options.purpose??'presentation',requestedCategories:categories,screenshotsRequested:options.screenshots!==false,cpuSamplingRequested:options.cpuSampling===true,traceBufferKiB:TRACE_BUFFER_KIB,recordMode:'recordUntilFull',maxTraceBytes:MAX_TRACE_BYTES,traceBytes:0,
   nodeTimeOriginMs:performance.timeOrigin,nodeStartedAtMs,nodeStoppedAtMs:null,nodeDurationMs:null,
   privateArtifact:true,automaticCiUpload:false,
   limitations:[

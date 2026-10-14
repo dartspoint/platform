@@ -187,7 +187,7 @@ try{
   const session=await browser.newBrowserCDPSession();
   try{const{arguments:args}=await session.send('Browser.getBrowserCommandLine');report.browserMetadata.syntheticPointerActionsExplicitlyEnabled=args.some((arg:string)=>arg.startsWith('--enable-features=')&&arg.slice(18).split(',').includes('SyntheticPointerActions'));report.browserMetadata.syntheticPointerActionsExplicitlyDisabled=args.some((arg:string)=>arg.startsWith('--disable-features=')&&arg.slice(19).split(',').includes('SyntheticPointerActions'));report.browserMetadata.fieldTrialConfigDisabled=args.includes('--disable-field-trial-config');}
   finally{await session.detach();}
-  if(diagnosticTarget==='observer')observerProfile=await startThrowPerformanceProfile(browser,'artifacts/observer-input-profile',{screenshots:false,cpuSampling:true});
+  if(diagnosticTarget==='observer')observerProfile=await startThrowPerformanceProfile(browser,'artifacts/observer-input-profile',{screenshots:false,cpuSampling:true,purpose:'input'});
   return browser;
   })();
  };

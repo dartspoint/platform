@@ -1,5 +1,5 @@
 "use client";
-import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {startTransition,useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ServerClock,TIMING_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../../packages/game-core/src/timing';
 import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} from './drawn-meter';
 import {useMotionValue} from 'motion/react';
@@ -112,7 +112,12 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
   const stopAppliedAt=performance.now(),sendAt=performance.now();
   // Submit the frozen sample before geometry reads, diagnostics or React work.
   socket.current.send('command',payload);const sendReturnedAt=performance.now();
-  readyRetries.current=0;setSending(true);
+  readyRetries.current=0;
+  // The pending ref already blocks duplicate input. This status update also
+  // renders the surrounding player tables, so keep that work out of the
+  // discrete stop event after the actual drawn sample is frozen and sent.
+  if(type.startsWith('dart.stop_'))startTransition(()=>setSending(true));
+  else setSending(true);
   if(axis&&sample){const geometry=element?meterGeometry(element,axis):undefined,trace={event:'local-stop',commandId:payload.commandId,matchId:s.matchId,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1,phase:axis,phaseToken:s.state.phaseToken,phaseStartedAt:s.state.phaseStartedAt,timingVersion:s.state.timingVersion,rendered:sample,geometry,inputAt:stoppedAt,stopAppliedAt,sendAt,sendReturnedAt,clockOffset:clock.current.phaseOffset(s.state.phaseToken),localLock:sample.fraction};timingTrace(trace);performance.mark('dp-local-stop',{detail:{...trace,axis:type,at:stoppedAt,x:xMeter.get(),y:yMeter.get(),handlerCompletedAt:performance.now()}});}
  },[readOnly,xMeter,yMeter,cancelFrame]);
  const startOrStop=useCallback(()=>{const s=current.current;if(readOnly||!active||!s||s.seat!==s.state.turn||s.lifecycle!=='playing'||pending.current)return;if(s.state.phase==='horizontal')command('dart.stop_horizontal');else if(s.state.phase==='vertical')command('dart.stop_vertical');if(preferences.haptics)navigator.vibrate?.(12);},[readOnly,active,preferences.haptics,command]);
