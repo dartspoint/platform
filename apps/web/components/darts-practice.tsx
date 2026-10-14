@@ -186,7 +186,14 @@ export function DartsPractice({ tutorial = false, onClose,embedded=false }: { tu
   },[apply,xMeter,yMeter]);
   useEffect(()=>{if(phase!=='flying')return;const timer=setInterval(()=>{const current=authoritative.current;if(current)void api('practice/'+current.id).then(apply).catch(()=>{setSessionReady(false);setInputError('Je kamerlidmaatschap is verlopen. Ga terug naar de kamer en sluit opnieuw aan.');});},100);return ()=>clearInterval(timer);},[phase,apply]);
   useEffect(() => {
-    const handle = async (event: KeyboardEvent) => { const element = event.target as HTMLElement; if (event.code !== "Space" || event.repeat || /INPUT|SELECT|TEXTAREA|BUTTON|A/.test(element.tagName) || element.isContentEditable) return; event.preventDefault(); await act(); };
+    const handle = async (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.code !== "Space" || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, button, a, [contenteditable=true], [role=textbox], [role=menuitem], [role=menu], [role=tab]")) return;
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]')) return;
+      event.preventDefault();
+      await act();
+    };
     window.addEventListener("keydown", handle); return () => window.removeEventListener("keydown", handle);
   }, [act]);
 
