@@ -1,3 +1,4 @@
+import type {HeroImage} from '../../contracts/src/hero';
 export type TournamentStatus = "draft" | "registration" | "checkin" | "live" | "completed" | "cancelled";
 export type ParticipantStatus = "waiting" | "confirmed" | "checkedin" | "withdrawn";
 export type TournamentSettings = {
@@ -20,11 +21,11 @@ export type TournamentMatch = {
   status: "pending" | "ready" | "playing" | "completed" | "skipped"; winnerId: string | null; result: TournamentResult | null; bestOf: number;
 };
 export type Tournament = {
-  id: string; name: string; description: string; organizer: "DartsPoint"; status: TournamentStatus; published: boolean;
+  id: string; name: string; description: string; organizer: "DartsPoint"; status: TournamentStatus; published: boolean; hero?: HeroImage; heroVersion?: number;
   settings: TournamentSettings; participants: TournamentParticipant[]; matches: TournamentMatch[];
   championId: string | null; createdAt: number; updatedAt: number;
 };
-export type TournamentInput = Partial<Pick<Tournament, "name" | "description" | "published">> & { settings?: Partial<TournamentSettings> };
+export type TournamentInput = Partial<Pick<Tournament, "name" | "description" | "published" | "hero">> & { settings?: Partial<TournamentSettings>; expectedHeroVersion?: number };
 export type TournamentResultInput = { score: [number, number]; kind?: "played" | "walkover"; winnerId?: string; reason?: string };
 export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings = {
   format: "knockout", boardCount: 4, scheduling: "automatic", restSeconds: 30, maxPlayers: 8, startScore: 501, doubleOut: true, bestOf: 3, finalBestOf: 5, turnSeconds: 30, reconnectSeconds: 90, spectators: true, checkoutHints: true, checkInMinutes: 15, seeding: "elo",

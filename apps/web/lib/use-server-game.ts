@@ -5,7 +5,7 @@ import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} fro
 import {useMotionValue} from 'motion/react';
 import {Client,type Room} from '@colyseus/sdk';
 import {browserAuth} from './supabase-client';
-import {getPlatform,usePlatform,api,mutate,refreshPlatform,selfName,playerId} from './platform-client';
+import {getPlatform,usePlatform,api,mutate,refreshPlatform,selfName,playerId,ApiError} from './platform-client';
 import {getMatchRecords} from './darts-match-records';
 import {initialGameState,type GameState} from './darts-game-state';
 import {useDartsPreferences} from './darts-preferences';
@@ -13,13 +13,18 @@ import type {MatchMode,MatchRatingChange} from './darts-match-records';
 import type {MatchSetup} from './darts-match-setup';
 import type {TurnTimeoutWarning} from '../../../packages/game-core/src/turn-timeout';
 
-type Snapshot={commandId?:string;timing?:Record<string,unknown>;matchId:string;publicGameId?:number;state:GameState&{timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;timeoutStrikes?:[number,number];timeoutWarning?:TurnTimeoutWarning|null;phaseToken:string;phaseStartedAt:number;lockedX:number|null;lockedY?:number|null;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};stateVersion:number;lifecycle:string;mode:string;seat:number|null;gameNumber:number;serverAt:number;remainingReconnectMs?:number};
+type Snapshot={commandId?:string;timing?:Record<string,unknown>;matchId:string;roomId?:string;canRematch?:boolean;publicGameId?:number;state:GameState&{timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;timeoutStrikes?:[number,number];timeoutWarning?:TurnTimeoutWarning|null;phaseToken:string;phaseStartedAt:number;lockedX:number|null;lockedY?:number|null;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};stateVersion:number;lifecycle:string;mode:string;seat:number|null;gameNumber:number;serverAt:number;remainingReconnectMs?:number};
 const empty=initialGameState(0,'',0);
 export function useServerGame(initialOpponentName='',explicitMatchId?:string,readOnly=false){
  const platform=usePlatform(),preferences=useDartsPreferences();
- const own=platform.matches.find(m=>m.players?.some((p:any)=>p.id===platform.actor?.id));
+ const dismissed=useRef(new Set<string>());
+ const own=platform.matches.find(m=>!dismissed.current.has(m.id)&&m.players?.some((p:any)=>p.id===platform.actor?.id));
  const [selected,setSelected]=useState('');
  useEffect(()=>{setSelected(new URLSearchParams(window.location.search).get('match')??'');},[]);
+ // Pin the accepted match until the player explicitly closes its result.
+ // Bootstrap intentionally lists only active matches; completion must not
+ // erase the final snapshot or unmount the summary.
+ useEffect(()=>{if(!explicitMatchId&&own?.id&&own.id!==selected)setSelected(own.id);},[explicitMatchId,own?.id,selected]);
  const matchId=explicitMatchId??selected??own?.id;
  const actualId=matchId||own?.id;
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[sending,setSending]=useState(false),[connectionMessage,setConnectionMessage]=useState(''),[offlineUntil,setOfflineUntil]=useState<number|null>(null),[reconnected,setReconnected]=useState(false),[active,setActiveState]=useState(true);
@@ -129,13 +134,19 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  const myTurn=!readOnly&&snapshot?.seat!==null&&snapshot?.seat===raw.turn;
  const warning=snapshot?.state.timeoutWarning;
  const state={...raw,scores:pair(raw.scores),legs:pair(raw.legs),sets:pair(raw.sets),totalLegs:pair(raw.totalLegs),opened:pair(raw.opened),dartCount:pair(raw.dartCount),pointsScored:pair(raw.pointsScored),visitScores:pair(raw.visitScores),visitBusts:pair(raw.visitBusts),highestVisit:pair(raw.highestVisit),highestCheckout:pair(raw.highestCheckout),timeoutStrikes:pair(snapshot?.state.timeoutStrikes??[0,0]),timeoutWarning:warning?{...warning,player:(swap?1-warning.player:warning.player) as 0|1}:null,turn,winner,phase:raw.phase==='won'||raw.phase==='flight'?raw.phase:myTurn?raw.phase:'opponent' as const,events:raw.events.map(e=>({...e,player:(swap?1-e.player:e.player) as 0|1})),history:[]};
- const rematch=useCallback(async()=>{if(readOnly||!actualId)return;try{const result=await mutate('match/rematch',{matchId:actualId});setConnectionMessage('Je uitnodiging voor een revanche is verstuurd.');return result;}catch{}},[readOnly,actualId]);
+ const rematch=useCallback(async()=>{if(readOnly||!actualId)throw new Error('Open eerst je eigen wedstrijdoverzicht.');return mutate<{id:string}>('match/rematch',{matchId:actualId});},[readOnly,actualId]);
  const startNewMatch=useCallback(async(name:string,setup?:MatchSetup)=>{if(readOnly)return;const p=getPlatform();const room=p.rooms.find(r=>r.name===sessionStorage.getItem('dartspoint-room-v1'))??p.rooms[0];await mutate('invite',{targetId:playerId(name),roomId:room.id,rules:setup?.rules??empty.rules,ranked:setup?.ranked===true});setConnectionMessage('De uitnodiging is verstuurd.');},[readOnly]);
  const reset=useCallback(()=>command('match.forfeit'),[command]);
  const reconnect=useCallback(()=>{void api<Snapshot>('match/'+actualId).then(apply);setReconnected(true);},[actualId,apply]);
  const simulateDisconnect=useCallback(()=>{void socket.current?.connection.close();},[]);
- const clearMatchSelection=useCallback(()=>{setSelected("");window.history.replaceState(null,"","/spelen");},[]);
+ const clearMatchSelection=useCallback(()=>{if(actualId)dismissed.current.add(actualId);setSelected("");window.history.replaceState(null,"","/spelen");},[actualId]);
+ const closeCompletedMatch=useCallback(async()=>{
+  const view=current.current;if(readOnly||!view||!['completed','abandoned'].includes(view.lifecycle))return;
+  // This is navigation after a settled result, never a forfeit/reset command.
+  if(view.roomId){try{await mutate('room',{roomId:view.roomId});}catch(error){if(error instanceof ApiError&&['room_unavailable','room_private','room_removed','room_rating_restricted','room_full'].includes(error.code)){clearMatchSelection();window.location.assign('/lobby?room-unavailable=1');return;}throw error;}}
+  clearMatchSelection();
+ },[readOnly,clearMatchSelection]);
  const noOp=useCallback(()=>{},[]);
  const mode:MatchMode=snapshot?.mode==='ranked'?'ranked-demo':'casual';
- return {...state,clearMatchSelection,id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage,ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
+ return {...state,clearMatchSelection,closeCompletedMatch,canRematch:snapshot?.canRematch!==false&&snapshot?.lifecycle==='completed',id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage,ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
 }

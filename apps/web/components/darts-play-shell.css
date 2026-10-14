@@ -257,6 +257,11 @@
 .dp-room-selection{overflow-y:auto;padding:16px;width:100%}
 .dp-social-fullscreen[data-slot=sheet-content]{top:var(--dp-viewport-top,0px);bottom:auto;height:var(--dp-viewport-height,100dvh);border-radius:0;padding-top:max(12px,env(safe-area-inset-top));padding-bottom:max(8px,env(safe-area-inset-bottom))}
 .dp-social-fullscreen .chat-panel{min-height:0}
+/* Room-lobby panels use the existing keyboard-aware visible viewport. */
+@media(max-width:1023px){
+ .dp-social-sheet[data-room-context="room-chat"]:is([data-social-panel="room"],[data-social-panel="chat"],[data-social-panel="ladder"])[data-slot=sheet-content]{top:calc(var(--dp-viewport-top,0px) + var(--dp-viewport-height,100dvh) * .1);height:calc(var(--dp-viewport-height,100dvh) * .9);max-height:calc(var(--dp-viewport-height,100dvh) * .9);border-radius:22px 22px 0 0;padding-top:max(17px,env(safe-area-inset-top,0px));padding-bottom:var(--dp-nav-height)}
+ .dp-social-sheet[data-room-context="active-match"][data-slot=sheet-content]{max-height:calc(var(--dp-viewport-height,100dvh) * .6)}
+}
 .dp-play-nav>button{position:relative}
 .dp-play-nav>button>.dp-unread-badge{position:absolute;top:3px;right:calc(50% - 23px)}
 @media(max-width:640px){.dp-room-home{padding:0}.dp-room-home .chat-panel{border:0;border-radius:0}}

@@ -1,5 +1,6 @@
 "use client";
 import {getPlatform,usePlatform,mutate,refreshPlatform} from "./platform-client";
+import type { HeroImage } from "./darts-hero-image";
 import type {Tournament,TournamentInput,TournamentStatus,TournamentParticipant,ParticipantStatus,TournamentResultInput} from "./darts-tournament-model";
 export type TournamentAuditEntry = { id: string; at: number; actor: string; action: string; target: string; detail: string };
 export type TournamentState = { tournaments: Tournament[]; audit: TournamentAuditEntry[] };
@@ -24,3 +25,5 @@ export async function refreshTournamentSchedule(id:string):Promise<Tournament>{c
 export async function assignTournamentBoard(id:string,matchId:string,boardId:number|null):Promise<Tournament>{const result=await mutate("tournament",{action:"assignTournamentBoard",args:[id,matchId,boardId]});return result.tournament??result;}
 export async function startTournamentMatch(id:string,matchId:string,options?:{actorName?:string}):Promise<Tournament>{const result=await mutate("tournament",{action:"startTournamentMatch",args:[id,matchId,options]});return result.tournament??result;}
 export async function recordParticipantTournamentResult(id:string,_matchId:string,_input:TournamentResultInput,_actorName:string){await refreshPlatform();return getPlatform().tournaments.find(t=>t.id===id) as Tournament;}
+
+export async function updateTournamentHero(id: string, hero: HeroImage, expectedHeroVersion: number): Promise<Tournament> { const result = await mutate("tournament", { action: "updateTournamentHero", args: [id, { hero, expectedHeroVersion }] }); return result.tournament ?? result; }

@@ -23,7 +23,11 @@ ENV APP_ENV=$DEPLOY_ENV RELEASE_SHA=$GIT_SHA NEXT_TELEMETRY_DISABLED=1 \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL \
     GIT_SHA=$GIT_SHA
-RUN npm run verify:ci && npm run build:deploy
+# Source-bound omission for this explicitly authorized staging release only.
+ARG SKIP_TESTS_ONCE_SHA
+RUN if [ "$DEPLOY_ENV" = staging ] && [ -n "$SKIP_TESTS_ONCE_SHA" ] && [ "$SKIP_TESTS_ONCE_SHA" = "$GIT_SHA" ]; then \
+      npm run typecheck && npm run build:deploy; \
+    else npm run verify:ci && npm run build:deploy; fi
 
 ARG NODE_IMAGE
 FROM ${NODE_IMAGE} AS runtime

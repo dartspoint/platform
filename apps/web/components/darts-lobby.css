@@ -178,3 +178,12 @@
 .lobby-chat-fullscreen .chat-compose-wrap{flex:none}
 .lobby-chat-fullscreen .lobby-chat-close{z-index:5}
 .lobby-mobile-nav .dp-unread-badge{position:absolute;top:-5px;right:-13px}
+
+.lobby-resume-card { margin-bottom:20px; padding:20px; border:2px solid #82d7a3; background:linear-gradient(115deg,#24523f,#142d20); box-shadow:0 5px 24px #0003; }
+.lobby-resume-card strong { font-size:18px; font-weight:800; color:#ecfff1; }
+.lobby-resume-card small { font-size:12px; white-space:normal; color:#bfdcca; }
+.lobby-resume-icon { width:48px; height:48px; border-radius:13px; background:#82d7a329; }
+.lobby-resume-explanation { font-size:12px; line-height:1.6; color:#bfdcca; }
+.lobby-resume-action { display:flex; width:fit-content; align-items:center; gap:8px; margin-top:6px; padding:9px 13px; border-radius:8px; background:#9be9b8; color:#123622; font-size:13px; font-weight:800; }
+.lobby-resume-card:focus-visible { outline:3px solid #ecfff1; outline-offset:4px; }
+@media(max-width:640px) { .lobby-resume-card { padding:16px; gap:12px; } .lobby-resume-card strong { font-size:16px; } }

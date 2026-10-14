@@ -1,0 +1,12 @@
+{
+  "prototypeCommit": "6d473a3de23835494e238b6428cd3d5c15f240dd",
+  "targetRepository": "dartspoint/platform",
+  "reviewedTargetCommit": "5817bd4ba4721195565b2cb87089ab6e1efcf545",
+  "exportedSourceFiles": 304,
+  "excludedTrackedFiles": {
+    ".openai/hosting.json": "Sites-projectidentiteit; geen productieconfiguratie",
+    "tsconfig.tsbuildinfo": "Gegenereerde TypeScript-cache"
+  },
+  "sourceModified": false,
+  "changedFilesBaseline": "df48a57f2ec03d46a50351f9e76708b136211d2e"
+}

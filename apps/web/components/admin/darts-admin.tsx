@@ -2,13 +2,14 @@
 import {formatAudit,dedupeAudit,type AuditRecord} from "../../../../packages/game-core/src/audit-presentation";
 import {getPlatform,selfName} from "@/lib/platform-client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowLeft, ArrowRight, ArrowUpRight, Bell, Check, ChevronRight, ClipboardList, Clock3, Download, Flag, Gamepad2, LayoutDashboard, ListChecks, Menu, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Target, Trophy, Users, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Activity, ArrowLeft, ArrowRight, ArrowUpRight, Bell, Check, ChevronRight, ClipboardList, Clock3, Download, Flag, Gamepad2, LayoutGrid, LayoutDashboard, ListChecks, Menu, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Target, Trophy, Users, X } from "lucide-react";
 import { MotionConfig, motion } from "motion/react";
 import { Brand } from "@/components/design-studio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AdminSeasons } from "./darts-seasons";
 import {AdminChatModeration} from './darts-chat-moderation';
+import { AdminLobbyContent } from "./darts-lobby-content";
 import { DartsTournaments } from "./darts-tournaments";
 import { AdminPlayers, AdminRooms, AdminModeration } from "./darts-operations";
 import { AdminGameSettings, AdminPlatformSettings, AdminEloSettings } from "./darts-settings";
@@ -30,6 +31,7 @@ const navigation = [
   { id: "chat-moderation", label: "Chat & moderatie", icon: ShieldCheck },
   { id: "game", label: "Spel & deelname", icon: SlidersHorizontal, group: "HET PLATFORM" },
   { id: "elo", label: "DP & competitie", icon: Target },
+  { id: "lobby", label: "Lobby & widgets", icon: LayoutGrid },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
   { id: "audit", label: "Actielogboek", icon: ClipboardList },
 ] as const;
@@ -45,6 +47,7 @@ const titles: Record<AdminTab, { title: string; description: string }> = {
   'chat-moderation': {title:'Chat & moderatie',description:'Beheer woorden, uitzonderingen, chatlimieten en verplichte naamwijzigingen.'},
   game: { title: "Jouw spelregels.", description: "Stel de basis in voor nieuwe toernooien en bepaal wie mag deelnemen." },
   elo: { title: "Een eerlijke plek op de ladder.", description: "Bekijk het actieve DP-beleid en reken een nieuw beleidsvoorstel door." },
+  lobby: { title: "Een clubhuis met karakter.", description: "Beheer lobbywidgets, nieuws, kamerselecties en gedeelde publicaties." },
   platform: { title: "DartsPoint, zoals jij het wilt.", description: "Beheer platformvoorkeuren, aankondigingen en de toegang tot jouw community." },
   audit: { title: "Iedere wijziging, inzichtelijk.", description: "Wie deed wat, wanneer en waarom? Volg je beheerhandelingen terug." },
 };
@@ -71,7 +74,7 @@ function AuditPanel({ entries }: { entries: AuditEntry[] }) {
   return <><div className="adm-toolbar"><label className="adm-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek een actie, speler of toernooi…" aria-label="Doorzoek actielogboek"/></label><select className="adm-filter-select" value={period} onChange={event => setPeriod(event.target.value)} aria-label="Periode"><option value="all">Alle periodes</option><option value="1">Afgelopen 24 uur</option><option value="7">Afgelopen 7 dagen</option><option value="30">Afgelopen 30 dagen</option></select><button className="adm-btn" disabled={!filtered.length} onClick={download}><Download size={15}/>Exporteer CSV</button></div><div className="adm-panel adm-table-wrap"><table className="adm-table"><thead><tr><th>Datum</th><th>Beheerder</th><th>Actie</th><th>Onderwerp & toelichting</th></tr></thead><tbody>{filtered.map(entry => <tr key={entry.id}><td className="adm-no-wrap">{formatTime(entry.at)}</td><td>{entry.actor}</td><td>{formatAudit(entry).action}</td><td>{formatAudit(entry).subject}<small>{formatAudit(entry).change}</small><details><summary>Technische details</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(formatAudit(entry).technical,null,2)}</pre></details></td></tr>)}{!filtered.length && <tr><td colSpan={4}>Nog geen acties gevonden voor deze selectie.</td></tr>}</tbody></table></div><p className="adm-audit-meta">{filtered.length} van {entries.length} acties · duurzaam opgeslagen op de server. Een export bevat alleen de huidige selectie.</p></>;
 }
 
-export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: string; initialTournamentId?: string }) {
+export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: { initialTab?: string; initialTournamentId?: string; initialRoomId?: string }) {
   const [tab, setTab] = useState<AdminTab>(validTab(initialTab));
   const [tournamentId, setTournamentId] = useState(initialTournamentId);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -82,6 +85,10 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
+  const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const navigating = useRef(false);
+  const registerNavigationGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
+  const visibleNavigation = navigation.filter(item => item.id !== "lobby" || getPlatform().actor?.role === "owner");
   const operations = useAdminOperations();
   const settings = useAdminSettings();
   const tournamentState = useTournaments();
@@ -94,12 +101,17 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
   const activeRooms = operations.rooms.filter(room => room.status !== "closed");
   const capacity = activeRooms.reduce((sum, room) => sum + room.capacity, 0);
   const population = activeRooms.reduce((sum, room) => sum + room.count, 0);
-  function navigate(next: AdminTab, id?: string) {
+  async function navigate(next: AdminTab, id?: string) {
+    if (navigating.current) return;
+    navigating.current = true;
+    try { if (navigationGuard.current && !await navigationGuard.current()) return;
+    navigationGuard.current = null;
     setTab(next); setTournamentId(id); setMenuOpen(false); setSearchOpen(false); setSearch("");
     const params = new URLSearchParams(); if (next !== "overview") params.set("tab", next); if (id) params.set("toernooi", id);
     window.history.replaceState(null, "", `/beheer${params.size ? `?${params}` : ""}`);
     window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
+    } finally { navigating.current = false; }
   }
   useEffect(() => {
     const query = window.matchMedia("(max-width: 950px)");
@@ -114,7 +126,7 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
   useEffect(() => { if (menuOpen) menuClose.current?.focus(); else if (menuWasOpen.current) menuTrigger.current?.focus(); menuWasOpen.current = menuOpen; }, [menuOpen]);
   const selected = navigation.find(item => item.id === tab)!;
   return <MotionConfig reducedMotion={preferences.lessMotion ? "always" : "user"}><div className="dp-admin">
-    <aside className={`adm-sidebar ${menuOpen ? "open" : ""}`} aria-label="Platformbeheer" inert={mobile && !menuOpen}><a className="adm-sidebar-brand" href="/beheer" aria-label="Beheeroverzicht"><Brand/></a><button ref={menuClose} className="adm-sidebar-close" onClick={() => setMenuOpen(false)} aria-label="Navigatie sluiten"><X size={17}/></button><span className="adm-owner-label"><ShieldCheck size={11}/> EIGENAREN · BACKOFFICE</span><nav>{navigation.map(item => <div key={item.id} style={{ display: "contents" }}>{"group" in item && <span className="adm-nav-label">{item.group}</span>}<button className={tab === item.id ? "active" : ""} onClick={() => navigate(item.id)} aria-current={tab === item.id ? "page" : undefined}><item.icon size={17}/><span>{item.label}</span>{item.id === "moderation" && openCases > 0 && <b>{openCases}</b>}</button></div>)}</nav><div className="adm-sidebar-footer"><a href="/lobby"><ArrowLeft size={15}/>Terug naar de club<ArrowUpRight size={13}/></a><div className="adm-owner-card"><span>N</span><div><strong>{selfName()}</strong><small>{getPlatform().actor?.role==="owner"?"Platformeigenaar":"Platformbeheerder"}</small></div></div></div></aside>
+    <aside className={`adm-sidebar ${menuOpen ? "open" : ""}`} aria-label="Platformbeheer" inert={mobile && !menuOpen}><a className="adm-sidebar-brand" href="/beheer" aria-label="Beheeroverzicht" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void navigate("overview"); }}><Brand/></a><button ref={menuClose} className="adm-sidebar-close" onClick={() => setMenuOpen(false)} aria-label="Navigatie sluiten"><X size={17}/></button><span className="adm-owner-label"><ShieldCheck size={11}/> EIGENAREN · BACKOFFICE</span><nav>{visibleNavigation.map(item => <div key={item.id} style={{ display: "contents" }}>{"group" in item && <span className="adm-nav-label">{item.group}</span>}<button className={tab === item.id ? "active" : ""} onClick={() => navigate(item.id)} aria-current={tab === item.id ? "page" : undefined}><item.icon size={17}/><span>{item.label}</span>{item.id === "moderation" && openCases > 0 && <b>{openCases}</b>}</button></div>)}</nav><div className="adm-sidebar-footer"><a href="/lobby" onClick={async event => { if (!navigationGuard.current) return; event.preventDefault(); if (await navigationGuard.current()) window.location.assign("/lobby"); }}><ArrowLeft size={15}/>Terug naar de club<ArrowUpRight size={13}/></a><div className="adm-owner-card"><span>{selfName().slice(0, 1).toUpperCase()}</span><div><strong>{selfName()}</strong><small>{getPlatform().actor?.role==="owner"?"Platformeigenaar":"Platformbeheerder"}</small></div></div></div></aside>
     <button className="adm-scrim" onClick={() => setMenuOpen(false)} tabIndex={menuOpen ? 0 : -1} aria-label="Navigatie sluiten"/>
     <div className="adm-workspace" inert={mobile && menuOpen}><header className="adm-topbar"><button ref={menuTrigger} className="adm-menu-button" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} aria-label="Beheermenu openen"><Menu size={18}/></button><div className="adm-breadcrumb"><ShieldCheck size={15}/><strong>Platformbeheer</strong></div><div className="adm-top-actions"><button className="adm-search-button" onClick={() => setSearchOpen(true)} aria-label="Zoek een beheeronderdeel"><Search size={14}/><span>Zoek onderdeel</span><kbd>⌘ K</kbd></button><span className="adm-prototype-pill">DARTSPOINT</span></div></header>
       <main className="adm-content"><div className="adm-page-title"><h1 ref={headingRef} tabIndex={-1}>{selected.label}</h1>{tab === "overview" && <button className="adm-btn adm-btn-primary" onClick={() => navigate("tournaments")}><Trophy size={16}/>Organiseer een toernooi<ArrowUpRight size={15}/></button>}</div>
@@ -125,14 +137,14 @@ export function DartsAdmin({ initialTab, initialTournamentId }: { initialTab?: s
           <section className="adm-panel"><div className="adm-panel-heading"><div><h2>Kameroverzicht</h2></div><button className="adm-text-btn" onClick={() => navigate("rooms")}>Beheer<ArrowRight size={13}/></button></div><div className="adm-room-bars">{operations.rooms.slice(0,6).map(room => <div key={room.id} className={room.status === "closed" ? "closed" : ""}><div><span>{room.name}{room.status === "closed" ? " · gesloten" : room.status === "private" ? " · privé" : ""}</span><small>{room.count} / {room.capacity}</small></div><i><span className={room.count / room.capacity > .9 ? "full" : ""} style={{ width: `${Math.min(100,room.count / room.capacity * 100)}%` }}/></i></div>)}</div></section>
           <section className="adm-panel"><div className="adm-panel-heading"><div><h2>Recente acties</h2></div><button className="adm-text-btn" onClick={() => navigate("audit")}>Alles<ArrowRight size={13}/></button></div><AuditPreview entries={audit.slice(0,4)}/></section>
         </div><div className="adm-dashboard-side">
-          <section className="adm-panel"><div className="adm-panel-heading"><h2>Snel geregeld</h2><Sparkles size={16} color="#b2bf94"/></div><div className="adm-quick-actions"><button onClick={() => navigate("tournaments")}><Trophy/><strong>Toernooi organiseren</strong><small>Inschrijven, plaatsen, spelen</small></button><button onClick={() => navigate("seasons")}><ListChecks/><strong>Seizoen organiseren</strong><small>Divisies, ladder en speelrondes</small></button><button onClick={() => navigate("platform")}><Bell/><strong>Aankondiging</strong><small>Zichtbaar in de lobby</small></button><button onClick={() => navigate("game")}><ListChecks/><strong>Deelname instellen</strong><small>DP, check-in en toelating</small></button></div></section>
+          <section className="adm-panel"><div className="adm-panel-heading"><h2>Snel geregeld</h2><Sparkles size={16} color="#b2bf94"/></div><div className="adm-quick-actions"><button onClick={() => navigate("tournaments")}><Trophy/><strong>Toernooi organiseren</strong><small>Inschrijven, plaatsen, spelen</small></button><button onClick={() => navigate("seasons")}><ListChecks/><strong>Seizoen organiseren</strong><small>Divisies, ladder en speelrondes</small></button><button onClick={() => navigate(getPlatform().actor?.role === "owner" ? "lobby" : "platform")}><Bell/><strong>{getPlatform().actor?.role === "owner" ? "Lobby & widgets" : "Aankondiging"}</strong><small>Zichtbaar in de lobby</small></button><button onClick={() => navigate("game")}><ListChecks/><strong>Deelname instellen</strong><small>DP, check-in en toelating</small></button></div></section>
           <section className="adm-panel"><div className="adm-panel-heading"><h2>Dit verdient aandacht</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? `${openCases} melding${openCases === 1 ? "" : "en"} open` : "Een rustige community"}</strong><p>Bekijk de context voordat je een maatregel neemt.</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} toernooiconcepten</strong><p>Controleer spelregels en deelname voordat je publiceert.</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>DP-beleid: K = 32</strong><p>10 wedstrijden en 5 verschillende tegenstanders voor plaatsing.</p></div></button></div></section>
 
         </div></div>
-      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "platform" ? <AdminPlatformSettings/> : <AuditPanel entries={audit}/>}
+      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : <AuditPanel entries={audit}/>}
       <footer className="adm-page-footer"><span>DARTSPOINT · OWNER BACKOFFICE</span><span>Beheerhandelingen worden op de server gecontroleerd en vastgelegd.</span></footer>
       </main>
     </div>
-    <Dialog open={searchOpen} onOpenChange={setSearchOpen}><DialogContent className="adm-command-dialog"><DialogHeader><DialogTitle>Waar wil je naartoe?</DialogTitle><DialogDescription>Zoek een onderdeel van platformbeheer.</DialogDescription></DialogHeader><label className="adm-search adm-command-search"><Search size={17}/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Bijvoorbeeld toernooien of spelregels" aria-label="Zoek beheeronderdeel"/></label><div className="adm-command-items">{navigation.filter(item => `${item.label} ${titles[item.id].title} ${titles[item.id].description}`.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} onClick={() => navigate(item.id)}><item.icon size={17}/>{item.label}<ArrowRight size={14}/></button>)}</div></DialogContent></Dialog>
+    <Dialog open={searchOpen} onOpenChange={setSearchOpen}><DialogContent className="adm-command-dialog"><DialogHeader><DialogTitle>Waar wil je naartoe?</DialogTitle><DialogDescription>Zoek een onderdeel van platformbeheer.</DialogDescription></DialogHeader><label className="adm-search adm-command-search"><Search size={17}/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Bijvoorbeeld toernooien of spelregels" aria-label="Zoek beheeronderdeel"/></label><div className="adm-command-items">{visibleNavigation.filter(item => `${item.label} ${titles[item.id].title} ${titles[item.id].description}`.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} onClick={() => navigate(item.id)}><item.icon size={17}/>{item.label}<ArrowRight size={14}/></button>)}</div></DialogContent></Dialog>
   </div></MotionConfig>;
 }

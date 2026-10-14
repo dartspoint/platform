@@ -261,7 +261,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
       </header>
       <div className="dp-workspace">
         <main ref={stageRef} tabIndex={-1} className="dp-fullscreen-stage" id="main-content" aria-label="Dartwedstrijd">
-          {hasGame?<GamePanel game={game} variant={variant} muted={muted} interactionBlocked={interactionBlocked} lessMotion={lessMotion}/>:room?<div className="dp-room-home">{desktop?<RoomCommunity roomId={roomId} onChooseRoom={()=>navigate("rooms")}/>:<ChatPanel {...chatProps}/>}</div>:<div className="dp-room-selection"><RoomList currentRoom="" onSelect={chooseRoom}/></div>}
+          {hasGame?<GamePanel game={game} variant={variant} muted={muted} interactionBlocked={interactionBlocked} lessMotion={lessMotion}/>:room?<div className="dp-room-home"><RoomCommunity roomId={roomId} onChooseRoom={()=>navigate("rooms")} onPlayers={()=>{if(desktop)document.querySelector<HTMLInputElement>(".dp-desktop-players .players-toolbar input")?.focus();else {setRoomView("players");setPanel("room");}}} onTournaments={()=>togglePanel("tournaments")} onProfile={openProfile}/></div>:<div className="dp-room-selection"><RoomList currentRoom="" onSelect={chooseRoom}/></div>}
         </main>
         {desktop && <DesktopCommunity {...chatProps} chatRef={desktopChatRef}/>}
       </div>
@@ -274,7 +274,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
       </nav>
 
       <Sheet open={overlayPanel} onOpenChange={open => !open && setPanel(null)} modal={false}>
-        <SheetContent id="dp-social-panel" side="bottom" className={`dp-social-sheet ${!hasGame?"dp-social-fullscreen":""} ${panel === "chat" ? "dp-social-sheet-chat" : ""} ${lessMotion ? "reduce-motion" : ""}`} showCloseButton={false}
+        <SheetContent id="dp-social-panel" data-room-context={roomContext} data-social-panel={panel} side="bottom" className={`dp-social-sheet ${!hasGame?"dp-social-fullscreen":""} ${panel === "chat" ? "dp-social-sheet-chat" : ""} ${lessMotion ? "reduce-motion" : ""}`} showCloseButton={false}
           onInteractOutside={event => event.preventDefault()}
           onOpenAutoFocus={event => { event.preventDefault(); closePanelButton.current?.focus({ preventScroll: true }); }}
           onCloseAutoFocus={event => { event.preventDefault(); (desktop ? stageRef.current : playButton.current)?.focus({ preventScroll: true }); }}>

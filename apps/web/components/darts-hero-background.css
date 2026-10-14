@@ -1,0 +1,6 @@
+.dp-hero-background { position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; border-radius:inherit; visibility:hidden; }
+.dp-hero-background.is-loaded { visibility:visible; }
+.dp-hero-background>img { display:block; width:100%; height:100%; object-fit:cover; }
+.dp-hero-photo-shade,.dp-hero-copy-shade { position:absolute; inset:0; }
+.dp-hero-photo-shade { background:#06150d; }
+.dp-hero-copy-shade { background:linear-gradient(90deg,#07170fd6 0%,#07170fcc 65%,#07170f73 85%,#07170f1f 100%); }

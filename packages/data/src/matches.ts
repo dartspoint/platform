@@ -74,6 +74,12 @@ export async function respondInvite(actor:Actor,input:unknown){
  });
  if('error' in result)throw result.error;return result;
 }
+export async function inviteStatus(actor:Actor,id:string){
+ uuid.parse(id);
+ const invitation=(await db().query('select id,state,match_id,expires_at from game_invites where id=$1 and $2 in(inviter_id,invitee_id)',[id,actor.id])).rows[0];
+ requireThat(invitation,'invite_not_found',404);
+ return {...invitation,state:invitation.state==='pending'&&new Date(invitation.expires_at).getTime()<=Date.now()?'expired':invitation.state,serverAt:Date.now()};
+}
 export async function matchAccess(actor:Actor,id:string){
  uuid.parse(id);return transaction(async c=>{
   const m=(await c.query('select * from matches where id=$1',[id])).rows[0];requireThat(m,'match_not_found',404);await roomAccess(c,actor,m.room_id);
@@ -81,7 +87,7 @@ export async function matchAccess(actor:Actor,id:string){
   requireThat(seat!==undefined || (await c.query('select 1 from room_memberships where user_id=$1 and room_id=$2 and lease_until>now()',[actor.id,m.room_id])).rowCount,'join_room_first',403);
   if(seat===undefined)requireThat(!(await c.query('select 1 from user_blocks b join match_players p on p.match_id=$2 where (b.blocker_id=$1 and b.blocked_id=p.user_id) or (b.blocked_id=$1 and b.blocker_id=p.user_id)',[actor.id,id])).rowCount,'blocked',403);
   const budget=(m.competition?.reconnectSeconds??RECONNECT_MS/1000)*1000;
-  return {matchId:id,roomId:m.room_id,state:await publicMatchState(c,id,m.state),stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:seat??null,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now(),remainingReconnectMs:Math.max(0,budget-Number(membership?.reconnect_used_ms??0)-(membership?.disconnected_at?Date.now()-new Date(membership.disconnected_at).getTime():0))};
+  return {matchId:id,roomId:m.room_id,state:await publicMatchState(c,id,m.state),stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:seat??null,canRematch:!m.competition,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now(),remainingReconnectMs:Math.max(0,budget-Number(membership?.reconnect_used_ms??0)-(membership?.disconnected_at?Date.now()-new Date(membership.disconnected_at).getTime():0))};
  });
 }
 export async function spectateMatch(actor:Actor,input:unknown){
@@ -121,7 +127,7 @@ export async function matchAccessBatch(actors:readonly Actor[],id:string){
   return new Map(actors.flatMap(actor=>{
    const p=rows.find(r=>r.id===actor.id);
    if(!p||actor.expiresAt<=now||p.session_version!==actor.sessionVersion||!p.rating_allowed||!p.room_allowed||!p.sanctions_allowed||!p.blocks_allowed||(actor.sessionId&&p.revoked_sessions.includes(actor.sessionId))||!p.membership_allowed)return [];
-   return [[actor.id,{matchId:id,roomId:m.room_id,state:publicState,stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:p.seat??null,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:now,remainingReconnectMs:Math.max(0,budget-Number(p.reconnect_used_ms??0)-(p.disconnected_at?now-new Date(p.disconnected_at).getTime():0))}]] as const;
+   return [[actor.id,{matchId:id,roomId:m.room_id,state:publicState,stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:p.seat??null,canRematch:!m.competition,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:now,remainingReconnectMs:Math.max(0,budget-Number(p.reconnect_used_ms??0)-(p.disconnected_at?now-new Date(p.disconnected_at).getTime():0))}]] as const;
   }));
  });
 }
@@ -251,8 +257,10 @@ export async function connection(actor:Actor,id:string,connected:boolean){return
  const m=(await c.query('select * from matches where id=$1 for update',[id])).rows[0];if(!m||m.lifecycle!=='playing')return;
  const p=(await c.query('select * from match_players where match_id=$1 and user_id=$2 for update',[id,actor.id])).rows[0];if(!p)return;
  if(connected){await c.query('update match_players set reconnect_used_ms=reconnect_used_ms+case when disconnected_at is null then 0 else floor(extract(epoch from now()-disconnected_at)*1000)::integer end,disconnected_at=null where match_id=$1 and user_id=$2',[id,actor.id]);
-  const state=m.state as ServerGame;if(!state.pendingDart)await persist(c,m,{...state,turnStartedAt:Date.now(),phaseStartedAt:Date.now(),phaseToken:randomUUID()},'reconnect',actor.id);
- }else{await c.query('update match_players set disconnected_at=coalesce(disconnected_at,now()) where match_id=$1 and user_id=$2',[id,actor.id]);await persist(c,m,m.state,'disconnected',actor.id);}
+  // Presence never changes a gameplay version, phase token or turn deadline.
+  // The opponent's in-flight command remains valid when a player navigates away
+  // or repeatedly reconnects. Actual gameplay and expiry remain authoritative.
+ }else{await c.query('update match_players set disconnected_at=coalesce(disconnected_at,now()) where match_id=$1 and user_id=$2',[id,actor.id]);}
 });}
 export async function expireDisconnects(){return transaction(async c=>{
  const rows=(await c.query("select m.* from matches m where m.lifecycle='playing' and exists(select 1 from match_players p where p.match_id=m.id and p.disconnected_at is not null and p.reconnect_used_ms+extract(epoch from now()-p.disconnected_at)*1000>=coalesce((m.competition->>'reconnectSeconds')::integer*1000,$1)) for update skip locked",[RECONNECT_MS])).rows;

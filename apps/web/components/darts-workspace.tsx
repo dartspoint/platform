@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useState,type RefObject} from 'react';
-import {ArrowUpRight,Target,Users} from 'lucide-react';
+import {Users} from 'lucide-react';
 import {ChatPanel,FriendsPanel,PlayersTable,ProfileView,openPrivateChatTab} from './darts-community';
 import {DartsPractice} from './darts-practice';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './ui/dialog';
@@ -8,6 +8,8 @@ import {MatchInviteDialog} from './darts-match-invite';
 import {mutate,playerId,usePlatform} from '@/lib/platform-client';
 import {invitationReason} from '@/lib/darts-social';
 import {Brand} from './design-studio';
+import {RoomLobbyFeed} from './darts-room-feed';
+import {PublishedTournaments} from './admin/darts-tournaments';
 import './darts-app.css';
 import './darts-play-shell.css';
 import './darts-desktop.css';
@@ -20,10 +22,10 @@ export function DesktopCommunity({roomId='',roomName='',gameId='',opponentName='
  return <aside className="dp-desktop-community" aria-label="Spelers, vrienden en gesprekken"><div className="dp-desktop-community-top"><section className="dp-desktop-players" aria-label={room?'Spelers in '+room.name:'Kies een kamer'}><div className="dp-desktop-room-toolbar"><Users size={17}/><div><strong>{room?.name??'Kamergebruikers'}</strong><span>{room?`${room.count} / ${room.capacity} spelers`:'Kies een kamer'}</span></div>{room&&<span className="dp-desktop-live-dot" aria-label="Kamer actief"/>}</div><div className="dp-desktop-room-content">{room?<PlayersTable roomName={room.name} gameId={gameId} {...actions} compact embedded/>:<div className="community-empty"><Users size={22}/><p>Kies een kamer</p><small>De actuele spelers verschijnen hier zodra je een kamer binnenkomt.</small></div>}</div></section><div className="dp-desktop-friends"><FriendsPanel roomName={roomName} gameId={gameId} {...actions} compact embedded/></div></div><div ref={chatRef} className="dp-desktop-chat"><ChatPanel roomId={roomId} roomName={roomName} gameId={gameId} opponentName={opponentName} lobby={!room} activeTab={activeTab} onTabChange={onTabChange} readEnabled={readEnabled} quiet={quiet} {...actions} embedded/></div></aside>;
 }
 
-export function RoomCommunity({roomId,onChooseRoom}:{roomId:string;onChooseRoom:()=>void}){
- const p=usePlatform(),room=p.rooms.find(r=>r.id===roomId),announcement=p.settings?.platform;
- const tournaments=p.tournaments.filter(t=>t.published&&['registration','checkin','live'].includes(t.status));
- return <section className="dp-room-community" aria-label="Kameroverzicht"><span className="community-eyebrow">JOUW COMMUNITY</span><h1>{room?.name??'Kies je kamer'}</h1><p>{room?.subtitle??'Schuif aan en ontmoet andere spelers.'}</p><div className="dp-room-community-actions"><a href="/oefenen"><Target size={17}/>Oefenen in deze kamer</a><button type="button" onClick={onChooseRoom}><Users size={17}/>Andere kamer</button></div><section><h2>Aankondigingen</h2>{announcement?.announcementActive&&announcement.announcement?<p>{announcement.announcement}</p>:<p className="dp-room-empty">Er zijn nog geen gepubliceerde aankondigingen.</p>}</section><section><h2>Toernooien</h2>{tournaments.length?tournaments.map(t=><a className="dp-room-tournament" key={t.id} href={'/toernooi/'+encodeURIComponent(t.id)}><strong>{t.name}</strong><span>{t.settings?.room??''}<ArrowUpRight size={15}/></span></a>):<p className="dp-room-empty">Er staan nog geen aankomende toernooien klaar.</p>}</section></section>;
+export function RoomCommunity({roomId,onChooseRoom,onPlayers,onTournaments,onProfile}:{roomId:string;onChooseRoom:()=>void;onPlayers?:()=>void;onTournaments?:()=>void;onProfile?:(name:string)=>void}){
+ const p=usePlatform(),room=p.rooms.find(r=>r.id===roomId),[profile,setProfile]=useState<string|null>(null),[tournaments,setTournaments]=useState(false);
+ function findPlayer(){const input=document.querySelector<HTMLInputElement>('.dp-desktop-players .players-toolbar input');if(input){input.focus();input.scrollIntoView({block:'nearest'});}}
+ return <section className="dp-room-community dp-room-community-feed" aria-label="Kameroverzicht"><RoomLobbyFeed roomId={room?.id} roomName={room?.name??'Kies je kamer'} roomCount={room?.count??0} onChooseRoom={onChooseRoom} onPlayers={onPlayers??findPlayer} onTournaments={onTournaments??(()=>setTournaments(true))} onProfile={onProfile??setProfile} managementHref={p.actor?.role==='owner'?'/beheer?tab=lobby&kamer='+encodeURIComponent(roomId):undefined}/><Dialog open={!!profile} onOpenChange={open=>!open&&setProfile(null)}><DialogContent className="dp-dialog profile-dialog"><DialogHeader className="sr-only"><DialogTitle>Spelersprofiel</DialogTitle><DialogDescription>Statistieken en contact.</DialogDescription></DialogHeader>{profile&&<ProfileView name={profile} roomName={room?.name}/>}</DialogContent></Dialog><Dialog open={tournaments} onOpenChange={setTournaments}><DialogContent className="dp-dialog"><DialogHeader><DialogTitle>Toernooien</DialogTitle><DialogDescription>Gepubliceerde toernooien en inschrijvingen.</DialogDescription></DialogHeader><PublishedTournaments/></DialogContent></Dialog></section>;
 }
 
 export function PracticeWorkspace({tutorial=false}:{tutorial?:boolean}){

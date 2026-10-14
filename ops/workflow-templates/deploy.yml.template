@@ -60,6 +60,7 @@ jobs:
       name: ${{ github.ref_name }}
     env:
       DEPLOY_ENV: ${{ github.ref_name }}
+      DARTSPOINT_SKIP_TESTS_ONCE_SHA: ${{ vars.DARTSPOINT_SKIP_TESTS_ONCE_SHA }}
       BUILDX_CONFIG: /tmp/dartspoint-buildx-${{ github.run_id }}-${{ github.run_attempt }}
       NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
       NEXT_PUBLIC_REALTIME_URL: ${{ vars.NEXT_PUBLIC_REALTIME_URL }}

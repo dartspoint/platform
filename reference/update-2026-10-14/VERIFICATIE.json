@@ -1,0 +1,51 @@
+{
+  "checkedAt": "2026-10-14T09:19:28.808338+00:00",
+  "prototypeCommit": "6d473a3de23835494e238b6428cd3d5c15f240dd",
+  "checks": [
+    {
+      "command": "node --experimental-strip-types scripts/check-hero-images.mjs",
+      "exitCode": 0,
+      "output": "Hero checks passed: defaults and no-image state, safe image sources, placement/overlay bounds, legacy migration, live result preservation, cloning, widget overrides, draft/publication isolation, storage failure and aggregate size limits."
+    },
+    {
+      "command": "node --experimental-strip-types scripts/check-lobby-content.mjs",
+      "exitCode": 0,
+      "output": "Lobby checks passed: isolated drafts, immutable publication, widget order, stable room targeting, validation, safe internal links, persistence/reload, failed storage, cross-tab refresh and corrupt storage fallback."
+    },
+    {
+      "command": "node --experimental-strip-types scripts/check-tournaments.mjs",
+      "exitCode": 0,
+      "output": "Legacy tournament checks passed: seeded/random/manual brackets, 7-player byes, 32-player progression/champion, score validity, walkovers, safe result corrections, eligibility/windows, immutable started settings, duplicates, audit, durable restore, inherited admin settings and automatic check-in window.\nDouble-elimination and board checks passed: 126 exhaustive small-field outcomes, 4/8/16/64 fields and byes, both GF paths/reset, graph corrections, player exclusivity, rest/readiness/check-in gates, manual/automatic boards, participant-only access and legacy migration.\nTournament room store checks passed: self readiness, viewer denial, start/result ownership, active-match pause protection, board release and DE persistence.\nCross-tournament start exclusivity passed."
+    },
+    {
+      "command": "node --experimental-strip-types scripts/check-chat-tabs.mjs",
+      "exitCode": 0,
+      "output": "Chat tab checks passed: legacy migration, adjacent fallback, private-only lobby, retained messages/drafts, closed-tab persistence, explicit reopening, and incoming messages without tab resurrection.\nChat UX checks passed: replaceable two-second room notices outside history, spectator seeds, and spectator messages in the match channel."
+    },
+    {
+      "command": "node --experimental-strip-types scripts/check-game-state.mjs",
+      "exitCode": 0,
+      "output": "Game checks passed: impact-only scoring/history, 180, per-visit grouping, exact restore, duplicate/stale landing protection, bust explanations, checkout, alternating starters and forfeit.\nTurn clock checks passed: two warnings before a loss, accepted stop resets warnings, opponent and finished match guards, legacy restore."
+    },
+    {
+      "command": "node --experimental-strip-types scripts/check-demo-auth.mjs",
+      "exitCode": 0,
+      "output": "Demo OTP checks passed: input/paste, email normalization, expiry, attempts, resend invalidation/cooldown/limit, reserved and unique usernames, returning profile, no raw email/code persistence, player-only session, and safe destination."
+    },
+    {
+      "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+      "exitCode": 0,
+      "output": ""
+    }
+  ],
+  "browserQA": "Niet uitgevoerd voor deze overdracht; uit te voeren in productie-integratieomgeving.",
+  "productionRepositoryQA": "Geen productiecode gewijzigd of getest door dit pakket.",
+  "publishedBuild": {
+    "status": "Eerdere geslaagde Sites-publicatie op dezelfde broncommit",
+    "version": "appgprj_6acbb313941881919fd999ecfb044b73~appgver_bea43ba96160819197f2ca21e187746c",
+    "completedAt": "2026-10-14T09:06:18.008967+00:00"
+  },
+  "runtime": {
+    "node": "v24.19.0"
+  }
+}

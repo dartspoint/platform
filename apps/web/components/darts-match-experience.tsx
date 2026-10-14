@@ -1,7 +1,7 @@
 "use client";
-import {selfName,usePlatform} from "@/lib/platform-client";
+import {selfName,usePlatform,api,mutate} from "@/lib/platform-client";
 import {publicGameLabel} from '@/lib/public-game-label';
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, ChevronDown, HeartHandshake, History, LoaderCircle, RefreshCw, ShieldCheck, Target, Trophy, Wifi, WifiOff } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,7 +11,6 @@ import { useRatingProfile } from "@/lib/darts-ratings";
 import { expectedRatingChange } from "@/lib/darts-elo";
 import { matchFormatLabel, matchRulesLabel } from "@/lib/darts-match-setup";
 import type { DartsGame } from "./darts-game";
-import { sendQuickChat } from "./darts-community";
 import "./darts-match-experience.css";
 
 function positive(value: number) { const rounded = Math.round(value); return rounded > 0 ? `+${rounded}` : String(rounded); }
@@ -20,7 +19,7 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
   const [endOpen, setEndOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [reacted, setReacted] = useState(false);
+  const [rematchId,setRematchId]=useState<string|null>(null),[resultBusy,setResultBusy]=useState(false),[resultError,setResultError]=useState('');
   const [moment, setMoment] = useState<"180" | "checkout" | null>(null);
   const nick = useRatingProfile(selfName());
   const opponent = useRatingProfile(game.opponentName);
@@ -30,13 +29,49 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
     for (const dart of game.events) grouped.set(dart.visit, [...(grouped.get(dart.visit) || []), dart]);
     return [...grouped.entries()].reverse();
   }, [game.events]);
-  useEffect(() => { setEndOpen(true); setReacted(false); setHistoryOpen(false); setDetailsOpen(false); }, [game.id]);
+  useEffect(() => { setEndOpen(true); setRematchId(null); setResultBusy(false); setResultError(""); setHistoryOpen(false); setDetailsOpen(false); }, [game.id]);
   useEffect(() => {
     if (!game.celebration) { setMoment(null); return; }
     setMoment(game.celebration);
     const timer = setTimeout(() => setMoment(null), game.celebration === "180" ? 1600 : 1000);
     return () => clearTimeout(timer);
   }, [game.events.length, game.celebration]);
+  const closeFlight=useRef<Promise<void>|null>(null);
+  const closeResult=useCallback(()=>{
+    if(closeFlight.current)return closeFlight.current;
+    const task=(async()=>{
+    setResultBusy(true);setResultError('');
+    try{
+      if(rematchId){
+        const status=await api<{state:string;match_id:string|null}>('invite/'+rematchId);
+        if(status.state==='accepted'&&status.match_id){window.location.assign('/spelen?match='+status.match_id);return;}
+        if(status.state==='pending'){
+          try{await mutate('invite/respond',{inviteId:rematchId,action:'cancel'});}
+          catch(error){const latest=await api<{state:string;match_id:string|null}>('invite/'+rematchId);if(latest.state==='accepted'&&latest.match_id){window.location.assign('/spelen?match='+latest.match_id);return;}if(latest.state==='pending')throw error;}
+        }
+      }
+      await game.closeCompletedMatch();
+    }catch(error){setResultError(error instanceof Error?error.message:'Het wedstrijdoverzicht kon niet worden afgesloten.');}
+    finally{setResultBusy(false);}
+    })();closeFlight.current=task.finally(()=>{closeFlight.current=null;});return closeFlight.current;
+  },[game.closeCompletedMatch,rematchId]);
+  useEffect(()=>{
+    if(!rematchId)return;let disposed=false,timer:ReturnType<typeof setTimeout>|undefined;
+    const check=async()=>{
+      try{const status=await api<{state:string;match_id:string|null}>('invite/'+rematchId);if(disposed)return;
+        if(status.state==='accepted'&&status.match_id){window.location.assign('/spelen?match='+status.match_id);return;}
+        if(['rejected','cancelled','expired'].includes(status.state)){await closeResult();return;}
+        setResultError('');
+      }catch(error){if(!disposed)setResultError(error instanceof Error?error.message:'De uitnodigingstatus kon niet worden opgehaald.');}
+      if(!disposed)timer=setTimeout(check,1500);
+    };void check();return()=>{disposed=true;clearTimeout(timer);};
+  },[rematchId,closeResult]);
+  async function inviteAgain(){
+    setResultBusy(true);setResultError('');
+    try{const invitation=await game.rematch();setRematchId(invitation.id);}
+    catch(error){setResultError(error instanceof Error?error.message:'De uitnodiging kon niet worden verstuurd.');}
+    finally{setResultBusy(false);}
+  }
   const over = game.phase === "won";
   useEffect(() => { if (!over) { setEndOpen(false); return; } const timer = setTimeout(() => setEndOpen(true), lessMotion ? 0 : 950); return () => clearTimeout(timer); }, [over, lessMotion]);
   const showPre = !!game.matchId && game.seat!==null && !game.ready && !game.preparing && !hidden;
@@ -68,11 +103,15 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
 
     <Dialog open={!!game.offlineUntil && !hidden} onOpenChange={() => {}}><DialogContent className="dp-dialog dp-match-dialog dp-reconnect-dialog" showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onPointerDownOutside={event => event.preventDefault()}><DialogHeader><WifiOff className="dp-reconnect-icon" size={30}/><DialogTitle>Even opnieuw verbinden.</DialogTitle><DialogDescription>Je bevestigde worpen en score blijven bewaard. Herstel binnen je resterende hersteltijd om verder te spelen.</DialogDescription></DialogHeader><strong className="dp-reconnect-clock">{game.remainingReconnect}<small>sec</small></strong><button className="dp-match-primary" onClick={game.reconnect}><RefreshCw size={16}/>Verbinding herstellen</button><p className="dp-match-mode-note">Je resterende hersteltijd wordt door de server bewaakt. Na afloop handelt de server de partij af.</p></DialogContent></Dialog>
 
-    <Dialog open={showEnd} onOpenChange={setEndOpen}><DialogContent className="dp-dialog dp-match-dialog"><DialogHeader><span className="dp-match-eyebrow"><Trophy size={14}/>GAME {gameLabel}</span><DialogTitle>{game.winner === 0 ? "Deze is van jou." : "Een mooie strijd."}</DialogTitle><DialogDescription>{game.forfeit ? "De wedstrijd is beëindigd door opgave." : `${game.winner === 0 ? selfName() : game.opponentName} wint de wedstrijd.`} {game.rules.format === "sets" ? "Uitslag in sets." : "Uitslag in legs."}</DialogDescription></DialogHeader><div className="dp-final-score"><span>{selfName()}</span><strong>{game.rules.format === "sets" ? game.sets[0] : game.legs[0]}<i>–</i>{game.rules.format === "sets" ? game.sets[1] : game.legs[1]}</strong><span>{game.opponentName}</span></div>
+    <Dialog open={showEnd} onOpenChange={()=>{}}><DialogContent className="dp-dialog dp-match-dialog" showCloseButton={false} onEscapeKeyDown={event=>event.preventDefault()} onPointerDownOutside={event=>event.preventDefault()}><DialogHeader><span className="dp-match-eyebrow"><Trophy size={14}/>GAME {gameLabel}</span><DialogTitle>Wedstrijdoverzicht</DialogTitle><DialogDescription>{game.forfeit ? "De wedstrijd is beëindigd door opgave." : `${game.winner === 0 ? selfName() : game.opponentName} wint de wedstrijd.`} {game.rules.format === "sets" ? "Uitslag in sets." : "Uitslag in legs."}</DialogDescription></DialogHeader><div className="dp-final-score"><span>{selfName()}</span><strong>{game.rules.format === "sets" ? game.sets[0] : game.legs[0]}<i>–</i>{game.rules.format === "sets" ? game.sets[1] : game.legs[1]}</strong><span>{game.opponentName}</span></div>
       {game.rules.format === "sets" && <p className="dp-match-mode-note">Totaal gewonnen legs: {game.totalLegs[0]}–{game.totalLegs[1]} · {matchFormatLabel(game.rules)}</p>}
       <div className="dp-result-stats"><div><span>Gemiddelde</span><strong>{game.averages[0].toFixed(1)}</strong><small>{game.opponentName}: {game.averages[1].toFixed(1)}</small></div><div><span>Hoogste beurt</span><strong>{game.highestVisit[0]}</strong><small>{game.opponentName}: {game.highestVisit[1]}</small></div><div><span>Hoogste finish</span><strong>{game.highestCheckout[0] || "—"}</strong><small>{game.opponentName}: {game.highestCheckout[1] || "—"}</small></div></div>
-      <div className={`dp-result-rating ${(game.ratingChange?.deltaA ?? 0) >= 0 ? "is-positive" : "is-negative"}`}><ShieldCheck size={17}/><span>{game.mode === "ranked-demo" && game.ratingChange ? <>Demorating <strong>{Math.round(game.ratingChange.beforeA)} → {Math.round(game.ratingChange.afterA)}</strong></> : "Vrij gespeeld · rating ongewijzigd"}</span>{game.mode === "ranked-demo" && game.ratingChange && <b>{positive(game.ratingChange.deltaA)}</b>}</div>
-      <button className="dp-match-primary" onClick={game.rematch}><RefreshCw size={17}/>Revanche · {game.starter === 0 ? game.opponentName : "jij"} begint</button><div className="dp-match-secondary-row"><button onClick={async () => { setReacted(await sendQuickChat("Goed gespeeld!", { gameId: game.id, opponentName: game.opponentName, roomName: sessionStorage.getItem("dartspoint-room-v1") || "Nederland 1", channel: "match" })); }} disabled={reacted}>{reacted ? <Check size={15}/> : <HeartHandshake size={15}/>} {reacted ? "Verstuurd" : "Goed gespeeld!"}</button><button onClick={() => { setEndOpen(false); setHistoryOpen(true); }}><History size={15}/>Alle worpen</button></div><a className="dp-match-back" href="/lobby">Terug naar de lobby</a>
+      <div className={`dp-result-rating ${(game.ratingChange?.deltaA ?? 0) >= 0 ? "is-positive" : "is-negative"}`}><ShieldCheck size={17}/><span>{game.mode === "ranked-demo" && game.ratingChange ? <>Rating <strong>{Math.round(game.ratingChange.beforeA)} → {Math.round(game.ratingChange.afterA)}</strong></> : "Vrij gespeeld · rating ongewijzigd"}</span>{game.mode === "ranked-demo" && game.ratingChange && <b>{positive(game.ratingChange.deltaA)}</b>}</div>
+      {rematchId&&<p className="dp-result-wait" role="status"><LoaderCircle className="dp-loading-spin" size={18}/>Wachten tot {game.opponentName} je uitnodiging accepteert of weigert…</p>}
+      {resultError&&<p className="dp-login-error" role="alert">{resultError}</p>}
+      {!game.canRematch&&<p className="dp-match-mode-note">Een toernooi- of divisiewedstrijd kan niet als nieuwe competitiewedstrijd worden herhaald. Nodig elkaar na afsluiten uit in een gewone kamer.</p>}
+      <button className="dp-match-primary" disabled={resultBusy||!!rematchId||!game.canRematch} onClick={()=>void inviteAgain()}><RefreshCw size={17}/>{rematchId?'Uitnodiging verstuurd':'Nodig opnieuw uit'}</button>
+      <button className="dp-match-back dp-result-close" disabled={resultBusy} onClick={()=>void closeResult()}>{resultBusy?'Even wachten…':'Afsluiten'}</button>
     </DialogContent></Dialog>
 
     <Dialog open={historyOpen && !hidden} onOpenChange={setHistoryOpen}><DialogContent className="dp-dialog dp-match-dialog dp-history-dialog"><DialogHeader><DialogTitle>Elke pijl telt.</DialogTitle><DialogDescription>Game {gameLabel} · {game.events.length} worpen</DialogDescription></DialogHeader><div className="dp-visit-history">{visits.length === 0 ? <p>Je eerste worp verschijnt hier zodra de pijl het bord raakt.</p> : visits.map(([visit, darts]) => <div key={visit}><header><strong>{darts[0].player === 0 ? selfName() : game.opponentName}</strong><span>Leg {darts[0].leg} · beurt {visit}</span></header><div className="dp-visit-darts">{darts.map(dart => <span key={dart.id} title={dart.ignoredOnEntry ? "Nog niet geopend: alleen een dubbel telt als eerste worp." : undefined} className={dart.checkout ? "is-finish" : dart.bust ? "is-bust" : ""}>{dart.hit.label}<small>{dart.ignoredOnEntry ? "0 · IN" : dart.credited ?? dart.hit.score}</small></span>)}<b>{darts.at(-1)!.bust ? "BUST" : darts[0].before - darts.at(-1)!.after}</b></div><footer>{darts[0].before} → {darts.at(-1)!.after}{darts.at(-1)!.checkout ? " · Uit!" : " over"}</footer></div>)}</div></DialogContent></Dialog>

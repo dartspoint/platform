@@ -60,7 +60,7 @@ export function DartsLobby() {
   const [roomFilter, setRoomFilter] = useState("Alle kamers");
   const [currentRoom, setCurrentRoom] = useState("");
   const [currentOpponent, setCurrentOpponent] = useState("");
-  const [resumeMatch, setResumeMatch] = useState<{ room: string; opponent: string; mode: string; id: string } | null>(null);
+  const [resumeMatch, setResumeMatch] = useState<{ room: string; opponent: string; mode: string; id: string; gameNumber: number } | null>(null);
   const preferences = useDartsPreferences();
   const favoriteRooms=preferences.favoriteRooms??[];
   const social = useDartsSocial();
@@ -73,9 +73,10 @@ export function DartsLobby() {
   const [invite, setInvite] = useState<string | null>(null);
   const [extra, setExtra] = useState<"ladder" | "tournament" | "notifications" | "settings" | "moderation" | null>(null);
   const [toast, setToast] = useState("");
+  useEffect(()=>{if(new URLSearchParams(window.location.search).get('room-unavailable')==='1')setToast('De vorige kamer is niet meer beschikbaar. Kies hier een andere kamer.');},[]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const chatCloseRef = useRef<HTMLButtonElement>(null);
-  useEffect(()=>{const own=platform.matches.find(m=>m.players?.some((p:any)=>p.id===platform.actor?.id));if(own){const r=platform.rooms.find(r=>r.id===own.room_id);setResumeMatch({room:r?.name??"",opponent:own.players.find((p:any)=>p.id!==platform.actor.id)?.name??"",mode:own.mode,id:own.id});}else setResumeMatch(null);},[platform.matches,platform.rooms,platform.actor]);
+  useEffect(()=>{const own=platform.matches.find(m=>m.players?.some((p:any)=>p.id===platform.actor?.id));if(own){const r=platform.rooms.find(r=>r.id===own.room_id);setResumeMatch({room:r?.name??"",opponent:own.players.find((p:any)=>p.id!==platform.actor.id)?.name??"",mode:own.mode,id:own.id,gameNumber:Number(own.gameNumber??own.game_number)});}else setResumeMatch(null);},[platform.matches,platform.rooms,platform.actor]);
   const confirmedRoom=platform.rooms.find(r=>r.id===platform.players.find(p=>p.id===platform.actor?.id)?.presence.roomId);
   const previousMembership=useRef<string|undefined>(undefined);
   useEffect(()=>{if(previousMembership.current!==confirmedRoom?.id){previousMembership.current=confirmedRoom?.id;setCurrentRoom(confirmedRoom?.name??'');setChatTab(confirmedRoom?'room':'');setSelectingRoom(false);}},[confirmedRoom?.id,confirmedRoom?.name]);
@@ -151,8 +152,6 @@ export function DartsLobby() {
   }
   function resumeActiveMatch() {
     if (!resumeMatch) return;
-    const eventDestination = tournamentRoomDestination(resumeMatch.room);
-    if (eventDestination) { window.location.assign(eventDestination); return; }
     try {
       sessionStorage.setItem("dartspoint-room-v1", resumeMatch.room);
       sessionStorage.setItem("dartspoint-opponent-v1", resumeMatch.opponent);
@@ -162,7 +161,7 @@ export function DartsLobby() {
       sessionStorage.removeItem(MATCH_AUTO_START_KEY);
       sessionStorage.removeItem("dartspoint-spectate-v1");
     } catch { /* Existing local game can still be opened. */ }
-    window.location.assign("/spelen");
+    window.location.assign("/spelen?match="+resumeMatch.id);
   }
   async function openChat(name: string) {
     if (playerId(name) === platform.actor?.id) return;
@@ -195,6 +194,9 @@ export function DartsLobby() {
     </div></header>
 
     <div className={desktop?"dp-workspace dp-lobby-workspace":undefined}><main className="lobby-main" id="main-content">
+      {resumeMatch&&<a className="lobby-resume-card" href={'/spelen?match='+resumeMatch.id} onClick={event=>{event.preventDefault();resumeActiveMatch();}} aria-label={'Je wedstrijd is nog bezig. Hervat wedstrijd '+resumeMatch.gameNumber+' tegen '+resumeMatch.opponent}>
+        <span className="lobby-resume-icon"><Target size={26}/></span><span><strong>Je wedstrijd is nog bezig</strong><small>Tegen {resumeMatch.opponent} · {resumeMatch.room} · Game {resumeMatch.gameNumber}</small><span className="lobby-resume-explanation">Je tegenstander kan verder spelen. Gebruik deze knop om terug te gaan.</span><span className="lobby-resume-action">Wedstrijd hervatten <ArrowUpRight size={18}/></span></span>
+      </a>}
       {(settings.platform.announcementActive || settings.platform.maintenance) && <div className="lobby-platform-banners" role="status">{settings.platform.maintenance && <div className="lobby-platform-banner maintenance"><Settings2 size={18}/><span><strong>Onderhoudsbericht</strong>{settings.platform.maintenanceMessage}<small>Beheerderspreview · je actieve spel blijft beschikbaar.</small></span>{isOwner && <a href="/beheer">Beheren<ArrowUpRight size={14}/></a>}</div>}{settings.platform.announcementActive && <div className="lobby-platform-banner"><Bell size={18}/><span>{settings.platform.announcement}</span></div>}</div>}
       {desktop&&confirmedRoom&&view==="home"&&!selectingRoom&&<RoomCommunity roomId={confirmedRoom.id} onChooseRoom={()=>setSelectingRoom(true)}/>}
       {!(desktop&&confirmedRoom&&view==="home"&&!selectingRoom)&&<div className="lobby-page-heading lobby-overview-heading">
@@ -203,7 +205,6 @@ export function DartsLobby() {
       </div>}
 
       {view === "home" && !(desktop&&confirmedRoom&&!selectingRoom) && <div className="lobby-room-overview">
-        {resumeMatch && <a className="lobby-resume-card" href="/spelen" onClick={event => { event.preventDefault(); resumeActiveMatch(); }}><span className="lobby-resume-icon"><Target size={21}/></span><span><strong>Hervat je wedstrijd</strong><small>Tegen {resumeMatch.opponent} · {resumeMatch.room} · #{resumeMatch.id.replace(/^#/, "")}</small></span><ArrowUpRight size={20}/></a>}
         <section className="lobby-rooms-section" aria-label="Alle kamers">
           <div className="lobby-room-controls"><label className="lobby-search"><Search size={18}/><input aria-label="Zoek een kamer" value={roomQuery} onChange={event => setRoomQuery(event.target.value)} placeholder="Zoek een kamer…"/></label><div className="lobby-filter-pills" aria-label="Filter kamers">{["Alle kamers", "Favorieten", "Sociaal", "Competitief", "Ontspannen", "Toernooi"].map(filter => <button key={filter} className={roomFilter === filter ? "active" : ""} onClick={() => setRoomFilter(filter)} aria-pressed={roomFilter === filter}>{filter}</button>)}</div></div>
           <div className="lobby-room-grid">{filteredRooms.map(room => <article className={`lobby-room-card ${room.count >= room.capacity || room.status === "closed" ? "room-is-full" : ""}`} key={room.id}>

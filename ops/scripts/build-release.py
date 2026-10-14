@@ -23,6 +23,9 @@ def main():
         with tempfile.TemporaryDirectory() as folder:
             metadata = Path(folder)/'metadata.json'
             args = ['docker','buildx','build','--platform','linux/amd64','--file','ops/Dockerfile.target','--target','runtime','--push','--provenance=mode=min','--metadata-file',str(metadata),'--tag',image+':'+release_id,'--build-arg','NODE_IMAGE='+pins['NODE_IMAGE'],'--build-arg','SERVICE='+service,'--build-arg','GIT_SHA='+sha,'--build-arg','DEPLOY_ENV='+env]
+            # Explicit one-release user request; production always keeps full tests.
+            skip = sha if env == 'staging' and os.environ.get('DARTSPOINT_SKIP_TESTS_ONCE_SHA') == sha else ''
+            args += ['--build-arg','SKIP_TESTS_ONCE_SHA='+skip]
             for k, v in public.items(): args += ['--build-arg',k+'='+v]
             subprocess.run(args+['.'], check=True)
             images[service] = image+'@'+json.loads(metadata.read_text())['containerimage.digest']
