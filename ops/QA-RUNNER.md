@@ -28,6 +28,15 @@ oorspronkelijke stop binnen 50 ms lokaal vaststaan**, gemeten als
 `stopAppliedAt - event.timeStamp`. De native inputklok en de directe freeze
 van precies de laatst getekende sample blijven ongewijzigd.
 
+De native STOP-route staat als statische capturedispatcher in de initiële
+server-HTML. Hydratie registreert uitsluitend eigen ingeschakelde knoppen met
+hun actuele callback; React blijft fallback en handelt hetzelfde native event
+niet tweemaal af. Passieve testcaptures worden vóór navigatie geregistreerd,
+zodat geometrie en de echte floodrequest vóór die vroege stop blijven liggen.
+De stopwatch blijft de oorspronkelijke native `event.timeStamp`; inputs,
+cohorten, callbackbodies en bestaande assertions blijven behouden. De extra
+capture-volgordeassertion voorkomt een onbedoelde meting na het vastzetten.
+
 Native tot de eerstvolgende RAF heeft een **gerapporteerd streefdoel van
 50 ms**. Alleen een overschrijding van die frametijd laat de test of release
 niet falen. Bewaar alle individuele frametijden, p95, maximum en

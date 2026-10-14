@@ -27,15 +27,16 @@ async function stop(page:Page,axis:'horizontal'|'vertical',target:number,directi
    w.__dpPracticeInput={at,eventTimeStamp:event.timeStamp,captureStartedAt,type:event.type,isTrusted:event.isTrusted,geometry:{indicator:horizontal?indicator.left+indicator.width/2:indicator.top+indicator.height/2,trackSize:horizontal?track.width:track.height}};
    requestAnimationFrame(()=>{const e=document.querySelector(`.practice-meter-${axis==='horizontal'?'x':'y'} i`)!,r=e.getBoundingClientRect();w.__dpFirstFrozen={position:axis==='horizontal'?r.left+r.width/2:r.top+r.height/2,at:performance.now()};});
   };
-  w.__dpPracticeCapture={element,eventType,capture};element.addEventListener(eventType,capture,true);
+  w.__dpPracticeCapture={element,eventType,capture};
  },{axis,keyboard});
  let frozen:any;
  try{
   if(keyboard)await button.press('Enter');else if(page.viewportSize()!.width<1024)await button.tap();else await button.click();
   await page.waitForFunction(()=>!!(window as any).__dpFirstFrozen);frozen=await page.evaluate(()=>({frame:(window as any).__dpFirstFrozen,inputAt:(window as any).__dpTimingInput,input:(window as any).__dpPracticeInput,mark:(performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark)?.detail}));
- }finally{await page.evaluate(()=>{const w=window as any,capture=w.__dpPracticeCapture;if(capture){capture.element.removeEventListener(capture.eventType,capture.capture,true);delete w.__dpPracticeCapture;}});}
+ }finally{await page.evaluate(()=>{delete (window as any).__dpPracticeCapture;});}
  const sample:any={viewport:page.viewportSize(),axis,target,direction,keyboard,input:frozen.input,uplink,downlink,preInput:pre,firstFrozen:frozen.frame,trace:frozen.mark};results.push(sample);
  assert.equal(frozen.input?.isTrusted,true,'Ordinary stops use genuine native browser input');assert.ok(Number.isFinite(frozen.input.eventTimeStamp)&&frozen.input.eventTimeStamp>=0&&frozen.input.eventTimeStamp<=frozen.input.captureStartedAt,'Native event time precedes capture on the same monotone clock');assert.ok(frozen.mark,'Input must capture one render sample');
+ assert.ok(frozen.input.captureStartedAt<=frozen.mark.inputAt,'Native geometry capture precedes the product stop handler');
  assert.ok(frozen.mark.stopAppliedAt<=frozen.mark.sendAt&&frozen.mark.sendAt<=frozen.mark.sendReturnedAt&&frozen.mark.sendReturnedAt<=frozen.mark.handlerCompletedAt,'Freeze precedes dispatch and handler completion');
  const pending=await geometry(page,axis),pendingAt=await page.evaluate(()=>performance.now()),serverResponse=await response,receipt=await serverResponse.json();
  const transport=await page.evaluate(commandId=>(window as any).__dpPracticeTransportAttempts.find((attempt:any)=>attempt.commandId===commandId),frozen.mark.commandId);
@@ -61,6 +62,11 @@ async function stop(page:Page,axis:'horizontal'|'vertical',target:number,directi
 }
 try{
  const user=await login(browser,'Render',{hasTouch:true}),page=user.page;page.setDefaultTimeout(20000);const room=(await get(page,'bootstrap')).rooms.find((r:any)=>r.name==='Nederland 1');await post(page,'room',{roomId:room.id});
+ // Register before navigation; only the later configured per-stop capture runs.
+ await page.addInitScript(()=>{
+  const captureBridge=(event:Event)=>{const configured=(window as any).__dpPracticeCapture;if(configured&&configured.eventType===event.type&&event.target instanceof Node&&configured.element.contains(event.target))configured.capture(event);};
+  window.addEventListener('pointerdown',captureBridge,true);window.addEventListener('keydown',captureBridge,true);
+ });
  // Calibrate the same asymmetric outgoing link used by the valid40ms-stop
  // cases. A midpoint clock would be in the future even on the first0ms stop;
  // the measured conservative mapping must prevent that cold asymmetry.

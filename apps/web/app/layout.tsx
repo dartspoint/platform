@@ -6,6 +6,7 @@ import "@fontsource/barlow-condensed/700.css";
 import "./globals.css";
 import {Toaster} from "sonner";
 import { DartsPwa } from "@/components/darts-pwa";
+import { TIMING_INPUT_BOOTSTRAP } from "@/lib/timing-input-bootstrap";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL??"https://dartspoint.nl"),
   title: { default: "DartsPoint — Online darten. Jouw kamer, jouw avond.", template: "%s · DartsPoint" },
@@ -35,5 +36,5 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#091610" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="nl" className="dark"><body><DartsPwa/>{children}<Toaster theme="dark" richColors position="bottom-right"/></body></html>;
+  return <html lang="nl" className="dark"><head><script id="dp-timing-input-bootstrap" dangerouslySetInnerHTML={{__html:TIMING_INPUT_BOOTSTRAP}}/></head><body><DartsPwa/>{children}<Toaster theme="dark" richColors position="bottom-right"/></body></html>;
 }

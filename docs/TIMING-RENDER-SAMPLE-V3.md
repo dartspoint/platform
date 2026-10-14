@@ -27,6 +27,23 @@ rapporten worden niet herschreven. Ook een afzonderlijke profielsuite met
 een afgewezen stop en slechts drie bereikte inputs blijft mislukt.
 RAF of DOM-geometrie bewijst geen fysieke schermpresentatie binnen 50 ms.
 
+De STOP-knoppen registreren hun actuele callback bij een kleine native
+window-capturedispatcher die in de server-HTML staat. Die roept dezelfde
+freeze/send-functie aan vóór de latere React-eventafhandeling. Alleen een
+geregistreerde, verbonden en ingeschakelde knop kan handelen; de bestaande
+beurt-, spectator-, readiness-, pending- en modalguards blijven gelden.
+Het native event wordt voor de React-fallback gemarkeerd om dubbelingen te
+voorkomen. Andere browserlisteners blijven lopen; clocks, samples en
+servervensters veranderen niet. Eerder geregistreerde listeners of een reeds
+geblokkeerde main thread kunnen nog steeds vertragen: de harde 50 ms-test blijft
+daarom verplicht en is geen universele garantie voor fysieke hardware.
+
+De passieve game-, practice- en floodcaptures registreren vóór de app-HTML.
+Zij behouden exact hun native `event.timeStamp`, geometriecallback, inputs en
+netwerkbelasting, inclusief de echte floodrequest vóór de stopfunctie. Een
+aanvullende assertion vereist dat de capture vóór de producthandler begint;
+zo wordt een snapshot na de freeze niet als oorspronkelijke geometrie gebruikt.
+
 De browser schrijft de indicator in zijn RAF rechtstreeks naar de DOM en
 bewaart daarbij de servergerelateerde sampletijd, fractie en fase. Primary
 pointerdown of een enkele Enter/Spatie bewaart precies deze sample. De handler

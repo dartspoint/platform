@@ -63,7 +63,7 @@ async function readyGameStop(page:Page,axis:Axis){
  await page.waitForFunction(({selector,property,before})=>(document.querySelector(selector) as HTMLElement)?.style.getPropertyValue(property)!==before,{selector:selector(axis),property,before},{polling:'raf'});return button;
 }
 async function installInputCapture(page:Page){
- await page.evaluate(()=>{
+ await page.addInitScript(()=>{
   const capture=(event:Event)=>{
    const button=(event.target as Element).closest?.('.dp-throw-button');if(!button)return;
    if(event instanceof KeyboardEvent&&(!['Enter',' '].includes(event.key)||event.repeat||event.isComposing))return;
@@ -89,7 +89,8 @@ async function captureStop(page:Page,axis:Axis,options:any,afterInput?:()=>Promi
  const sample:any={...options,axis,viewport:page.viewportSize(),input:observed.input,preInputIndicator:observed.before,handlerMs:observed.handlerMs,stopMs:observed.stopMs,frameMs:observed.frameMs,trace:observed.local,freezeJumpPx:Math.abs(observed.first-observed.before),freezeJumpFraction:Math.abs(observed.first-observed.before)/(observed.local?.geometry.trackSize??NaN),pendingFirst:axis==='horizontal'?first.indicator:first.vertical,pendingDuring:axis==='horizontal'?during.indicator:during.vertical,pendingStable:first.style===during.style,baselineVersion:baseline.stateVersion};
  // Every input stays in the result and percentile, including explicit errors.
  result.samples.push(sample);assert.ok(observed.local,'A genuine input captured its actual rendered sample');assert.equal(observed.local.phase,axis);
- assert.equal(observed.input?.isTrusted,true,'Game stops use genuine native browser input');assert.ok(Number.isFinite(observed.input.eventTimeStamp)&&observed.input.eventTimeStamp>=0&&observed.input.eventTimeStamp<=observed.input.captureStartedAt,'Native event time precedes capture on the same monotone clock');
+  assert.equal(observed.input?.isTrusted,true,'Game stops use genuine native browser input');assert.ok(Number.isFinite(observed.input.eventTimeStamp)&&observed.input.eventTimeStamp>=0&&observed.input.eventTimeStamp<=observed.input.captureStartedAt,'Native event time precedes capture on the same monotone clock');
+  assert.ok(observed.input.captureStartedAt<=observed.local.inputAt,'Native geometry capture precedes the product stop handler');
  assert.ok(observed.local.stopAppliedAt<=observed.local.sendAt&&observed.local.sendAt<=observed.local.sendReturnedAt&&observed.local.sendReturnedAt<=observed.local.handlerCompletedAt,'Freeze precedes dispatch and handler completion');
  assert.ok(Number.isFinite(sample.stopMs)&&sample.stopMs>=0&&sample.stopMs<=50,'Every native input applies its local stop <=50ms');assert.ok(Number.isFinite(sample.handlerMs)&&sample.handlerMs>=0&&sample.handlerMs<=50,'Every native input completes its live-game handler <=50ms');assert.ok(Number.isFinite(sample.frameMs)&&sample.frameMs>=0,'Every native attempt has a finite nonnegative first frozen geometry time, including rejected claims');
  Object.assign(sample,{frameTargetMs:50,frameTargetMet:sample.frameMs<=50,frameGate});if(!sample.frameTargetMet)console.warn('Live-game first frozen geometry '+sample.frameMs+' ms exceeds the informational 50 ms target; reported only at the user\'s request.');
@@ -153,6 +154,8 @@ async function captureFirstGroundedTip(page:Page){
 try{
  const a=await login(browser,'TimingA',{hasTouch:true}),b=await login(browser,'TimingB',{hasTouch:true});const page=a.page;debugPage=page;for(const actor of [a,b])trackGameWire(actor.page,actor.id);page.on('pageerror',e=>console.log(e.message));page.setDefaultTimeout(20000);const room=(await get(page,'bootstrap')).rooms.find((r:any)=>r.name==='Nederland 1');for(const actor of [a,b])await post(actor.page,'room',{roomId:room.id});const chatChannel=(await get(page,'bootstrap')).chatChannels.find((channel:any)=>channel.kind==='community'&&channel.roomId===room.id);
  const invitation=await post(page,'invite',{targetId:b.id,roomId:room.id,rules:{startScore:301,doubleIn:true,doubleOut:true,bestOf:1,format:'legs',bestOfSets:1},ranked:false});const id=(await post(b.page,'invite/respond',{inviteId:invitation.id,action:'accept'})).matchId;cleanupMatch=id;cleanupParticipants.push(page,b.page);
+ // The unchanged native capture registers before the page's early app dispatcher.
+ for(const actor of [a,b])await installInputCapture(actor.page);
  for(const actor of [a,b])await actor.page.addInitScript(`
  const descriptor=Object.getOwnPropertyDescriptor(WebSocket.prototype,'onmessage');
  Object.defineProperty(WebSocket.prototype,'onmessage',{configurable:true,get:descriptor.get,set:function(handler){const socket=this;socket.__qaHandler=handler;descriptor.set.call(this,function(event){const text=event.data instanceof ArrayBuffer?new TextDecoder().decode(event.data):'';if(window.__qaDrop&&text.includes('receipt')){window.__qaDrop=false;socket.close(4000,'QA lost acknowledgement');return;}if(text.includes('receipt'))socket.__qaReceipt=event;if(text.includes('receipt')||text.includes('snapshot'))setTimeout(function(){handler.call(socket,event);if(window.__qaReplayFlight&&text.includes('snapshot')&&text.includes('flight')){window.__qaReplayFlight=false;setTimeout(function(){handler.call(socket,event);window.__qaFlightReplayAt=performance.now();},100);}},window.__qaDelay||0);else handler.call(socket,event);});}});
@@ -167,7 +170,6 @@ try{
  setTimeout(()=>{record.timerFiredAt=performance.now();record.bufferedAmountBefore=socket.bufferedAmount;record.nativeSendCalledAt=performance.now();try{nativeSend.call(socket,data);}finally{record.nativeSendReturnedAt=performance.now();record.bufferedAmountAfter=socket.bufferedAmount;}},requestedUplinkMs);}else nativeSend.call(socket,data);};
  `);
  await page.setViewportSize({width:390,height:844});await page.goto(origin+'/spelen?match='+id);await b.page.goto(origin+'/spelen?match='+id);await page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await b.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();await page.getByRole('button',{name:'Stop horizontale indicator',exact:true}).waitFor();await page.bringToFront();
- for(const actor of [a,b])await installInputCapture(actor.page);
  result.cohorts=[];
  chromeProfile=await startThrowPerformanceProfile(browser,'artifacts/game-timing-profile');
  for(const [i,receiptDelay] of [100,300,1000].entries()){
