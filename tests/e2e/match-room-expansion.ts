@@ -129,7 +129,7 @@ async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizont
  const connectionBefore=connections.get(actor.page)?{...connections.get(actor.page)}:null;
  await button.click();
  const observed=await actor.page.evaluate(()=>{const mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined;return {timeOrigin:performance.timeOrigin,mark:mark?{name:mark.name,startTime:mark.startTime,duration:mark.duration}:null,trace:mark?.detail??null,passive:(window as any).__qaObserverSnapshot?.()??null};});
- const trace=observed.trace,attempt:any={axis,baseline,connectionBefore,performance:observed.mark,timeOrigin:observed.timeOrigin,trace,renderSampleAt:trace?.rendered?.sampleAt,meterSpeedVersion:trace?.rendered?.meterSpeedVersion,nativeEventTimestampAvailable:!!observed.passive?.nativeInput,nativeEventTimestampLimitation:'Native timestamps and passive RAF/style observers are browser diagnostics, not physical presentation proof',passiveTelemetry:observed.passive,actualOutcome:null,ingress:{status:'not_checked'}};attempts.push(attempt);await checkpoint();assert.ok(trace?.commandId,'A native stop captured its real app command UUID');
+ const trace=observed.trace,attempt:any={axis,baseline,connectionBefore,performance:observed.mark,timeOrigin:observed.timeOrigin,trace,renderSampleAt:trace?.rendered?.sampleAt,meterSpeedVersion:trace?.rendered?.meterSpeedVersion,nativeEventTimestampAvailable:!!observed.passive?.nativeInput,nativeEventTimestampLimitation:'Native timestamps and passive RAF/style observers are browser diagnostics, not physical presentation proof',initialNativeInput:observed.passive?.nativeInput??null,passiveTelemetry:observed.passive,actualOutcome:null,ingress:{status:'not_checked'}};attempts.push(attempt);await checkpoint();assert.ok(trace?.commandId,'A native stop captured its real app command UUID');
  const value=await outcome(trace.commandId);assert.ok(value);attempt.actualOutcome={type:value.type,code:value.payload.code??null,snapshot:value.type==='receipt'?publicSnapshot(value.payload):null};
  await checkpoint();
  try{
@@ -145,11 +145,19 @@ async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizont
    }
   }
  }catch{attempt.ingress={status:'diagnostic_read_failed'};}
+ // Receipt can precede this same native input's already registered first RAF.
+ // Keep the initial observation, outcome and ingress before awaiting that real callback.
+ const originalNative=attempt.initialNativeInput;
+ attempt.firstRAFObservation={timeoutMs:1500,initiallyComplete:!!originalNative?.firstRAF,completed:false,inputIdentity:originalNative?{index:originalNative.index,eventTimeStamp:originalNative.eventTimeStamp,axis:originalNative.axis}:null};
+ await checkpoint();
+ if(originalNative)await actor.page.waitForFunction(({index,eventTimeStamp,axis})=>{const input=(window as any).__qaObserverTelemetry?.lastInput;return input?.index===index&&input?.eventTimeStamp===eventTimeStamp&&input?.axis===axis&&!!input.firstRAF;},attempt.firstRAFObservation.inputIdentity,{polling:'raf',timeout:1500});
+ attempt.firstRAFObservation.completed=!!originalNative;
  // Persist outcome and original bounds before the unchanged acceptance assertion
  // and before forfeit/owned-row cleanup. Missing ingress never replaces its error.
  attempt.passiveContextTelemetry=await Promise.all(actors.map(async(value,index)=>{try{return {index,snapshot:await value.page.evaluate(()=>(window as any).__qaObserverSnapshot?.()??null),readFailed:false};}catch{return {index,snapshot:null,readFailed:true};}}));
  attempt.passiveTelemetry=attempt.passiveContextTelemetry.find((value:any)=>actors[value.index].id===actor.id)?.snapshot??observed.passive;
- const native=attempt.passiveTelemetry?.nativeInput;
+ const capturedNative=attempt.passiveTelemetry?.nativeInput;
+ const native=originalNative&&capturedNative?.index===originalNative.index&&capturedNative?.eventTimeStamp===originalNative.eventTimeStamp&&capturedNative?.axis===originalNative.axis?capturedNative:null;
  attempt.nativeEventTimestampAvailable=!!native;
  attempt.nativeTiming=native?{nativeToCaptureMs:native.captureAt-native.eventTimeStamp,nativeToCaptureEndMs:native.captureEndAt-native.eventTimeStamp,captureOwnDurationMs:native.captureEndAt-native.captureAt,captureEndToHookMs:trace.inputAt-native.captureEndAt,nativeToHookMs:trace.inputAt-native.eventTimeStamp,hookOwnDurationMs:trace.handlerCompletedAt-trace.inputAt,nativeToHandlerCompletedMs:trace.handlerCompletedAt-native.eventTimeStamp,nativeToLocalFreezeMs:trace.stopAppliedAt-native.eventTimeStamp,nativeToFirstRAFMs:native.firstRAF?native.firstRAF.at-native.eventTimeStamp:null,latestChosenDrawAfterNativeMs:trace.rendered.renderedAt-native.eventTimeStamp}:null;
  attempt.frameTiming={targetMs:50,gate:'reported-only-user-request-2026-10-14',targetMet:Number.isFinite(attempt.nativeTiming?.nativeToFirstRAFMs)&&attempt.nativeTiming.nativeToFirstRAFMs>=0?attempt.nativeTiming.nativeToFirstRAFMs<=50:null};
