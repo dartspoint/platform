@@ -92,10 +92,15 @@ async function installPassiveObserverTelemetry(page:Page,movingParticipant:boole
    frame=requestAnimationFrame(heartbeat);
   };let frame=movingParticipant?requestAnimationFrame(heartbeat):0;
   const capture=(event:PointerEvent)=>{
-   const captureAt=performance.now(),target=event.target instanceof Element?event.target.closest('.dp-throw-button'):null,label=target?.getAttribute('aria-label');
+   const captureAt=performance.now(),target=event.target instanceof Element?event.target.closest('.dp-throw-button'):null,label=target?.getAttribute('aria-label'),afterTargetAt=performance.now();
    if(!event.isPrimary||event.button!==0||!['Stop horizontale indicator','Stop verticale indicator en gooi'].includes(label??''))return;
-   const input:any={index:data.inputs.length,eventTimeStamp:event.timeStamp,captureAt,isTrusted:event.isTrusted,type:event.type,pointerType:event.pointerType,axis:label==='Stop horizontale indicator'?'horizontal':'vertical',state:{visibility:document.visibilityState,focused:document.hasFocus()},firstRAF:null};data.inputs.push(input);data.lastInput=input;
+   const beforeStateAt=performance.now(),visibility=document.visibilityState,afterVisibilityAt=performance.now(),focused=document.hasFocus(),afterFocusAt=performance.now();
+   const input:any={index:data.inputs.length,eventTimeStamp:event.timeStamp,captureAt,isTrusted:event.isTrusted,type:event.type,pointerType:event.pointerType,axis:label==='Stop horizontale indicator'?'horizontal':'vertical',state:{visibility,focused},firstRAF:null,capturePhases:{afterTargetAt,beforeStateAt,afterVisibilityAt,afterFocusAt}};data.inputs.push(input);data.lastInput=input;
+   input.capturePhases.afterInputStoredAt=performance.now();input.capturePhases.beforeRAFRegistrationAt=performance.now();
    requestAnimationFrame(timestamp=>{input.firstRAF={at:performance.now(),timestamp,left:horizontal?.style.left??null,top:vertical?.style.top??null,state:{visibility:document.visibilityState,focused:document.hasFocus()}};});
+   input.capturePhases.afterRAFRegistrationAt=performance.now();input.capturePhases.beforeUserTimingMarkAt=performance.now();
+   performance.mark('qa-observer-native-input',{startTime:input.capturePhases.beforeUserTimingMarkAt,detail:{timeOrigin:performance.timeOrigin,index:input.index,axis:input.axis,eventTimeStamp:input.eventTimeStamp,captureAt,isTrusted:input.isTrusted,pointerType:input.pointerType,capturePhases:{...input.capturePhases}}});
+   input.capturePhases.afterUserTimingMarkAt=performance.now();input.captureEndAt=performance.now();
   };if(movingParticipant)window.addEventListener('pointerdown',capture,true);
   w.__qaObserverSnapshot=()=>{
    // Idle/spectator pages get only a passive style observer. Attaching at their
@@ -145,7 +150,7 @@ async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizont
  attempt.passiveTelemetry=attempt.passiveContextTelemetry.find((value:any)=>actors[value.index].id===actor.id)?.snapshot??observed.passive;
  const native=attempt.passiveTelemetry?.nativeInput;
  attempt.nativeEventTimestampAvailable=!!native;
- attempt.nativeTiming=native?{nativeToCaptureMs:native.captureAt-native.eventTimeStamp,nativeToHookMs:trace.inputAt-native.eventTimeStamp,hookOwnDurationMs:trace.handlerCompletedAt-trace.inputAt,nativeToHandlerCompletedMs:trace.handlerCompletedAt-native.eventTimeStamp,nativeToFirstRAFMs:native.firstRAF?native.firstRAF.at-native.eventTimeStamp:null,latestChosenDrawAfterNativeMs:trace.rendered.renderedAt-native.eventTimeStamp}:null;
+ attempt.nativeTiming=native?{nativeToCaptureMs:native.captureAt-native.eventTimeStamp,nativeToCaptureEndMs:native.captureEndAt-native.eventTimeStamp,captureOwnDurationMs:native.captureEndAt-native.captureAt,captureEndToHookMs:trace.inputAt-native.captureEndAt,nativeToHookMs:trace.inputAt-native.eventTimeStamp,hookOwnDurationMs:trace.handlerCompletedAt-trace.inputAt,nativeToHandlerCompletedMs:trace.handlerCompletedAt-native.eventTimeStamp,nativeToFirstRAFMs:native.firstRAF?native.firstRAF.at-native.eventTimeStamp:null,latestChosenDrawAfterNativeMs:trace.rendered.renderedAt-native.eventTimeStamp}:null;
  await checkpoint();
  assert.equal(value.type,'receipt','The one normal input is accepted; no new UUID retry is generated');assert.equal(value.payload.commandId,trace.commandId);assert.equal(value.payload.timing.admittedAt,trace.rendered.sampleAt);assert.equal(value.payload.state.meterSpeedVersion,trace.rendered.meterSpeedVersion);
  return value.payload;

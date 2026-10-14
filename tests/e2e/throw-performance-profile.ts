@@ -28,8 +28,9 @@ async function writeMetadata(file:FileHandle,data:unknown){
 }
 
 /** Separate diagnostic run only. Default acceptance does not create a CDP session. */
-export async function startThrowPerformanceProfile(browser:Browser,proofDir:string):Promise<ThrowPerformanceProfile>{
+export async function startThrowPerformanceProfile(browser:Browser,proofDir:string,options:{screenshots?:boolean;cpuSampling?:boolean}={}):Promise<ThrowPerformanceProfile>{
  if(process.env.DARTSPOINT_THROW_PROFILE!=='1')return {stop:async()=>{}};
+ const categories=[...(options.screenshots===false?CATEGORIES.filter(category=>category!=='disabled-by-default-devtools.screenshot'):CATEGORIES),...(options.cpuSampling===true?['disabled-by-default-v8.cpu_profiler']:[])];
  const artifacts=resolve('artifacts'),directory=resolve(proofDir),local=relative(artifacts,directory);
  if(local.startsWith('..')||isAbsolute(local))throw new Error('Throw profile requires an ignored artifacts directory');
  await mkdir(artifacts,{recursive:true});await mkdir(directory,{recursive:true,mode:0o700});
@@ -43,7 +44,7 @@ export async function startThrowPerformanceProfile(browser:Browser,proofDir:stri
  const nodeStartedAtMs=performance.now();
  const metadata:any={
   diagnostic:'separate_opt_in_chrome_performance_profile',complete:false,ok:false,
-  requestedCategories:CATEGORIES,traceBufferKiB:TRACE_BUFFER_KIB,recordMode:'recordUntilFull',maxTraceBytes:MAX_TRACE_BYTES,traceBytes:0,
+  requestedCategories:categories,screenshotsRequested:options.screenshots!==false,cpuSamplingRequested:options.cpuSampling===true,traceBufferKiB:TRACE_BUFFER_KIB,recordMode:'recordUntilFull',maxTraceBytes:MAX_TRACE_BYTES,traceBytes:0,
   nodeTimeOriginMs:performance.timeOrigin,nodeStartedAtMs,nodeStoppedAtMs:null,nodeDurationMs:null,
   privateArtifact:true,automaticCiUpload:false,
   limitations:[
@@ -58,7 +59,7 @@ export async function startThrowPerformanceProfile(browser:Browser,proofDir:stri
  try{
   await writeMetadata(metadataFile,metadata);
   session=await bounded(browser.newBrowserCDPSession(),10000,'trace_start_failed');
-  await bounded(session.send('Tracing.start',{traceConfig:{includedCategories:CATEGORIES,traceBufferSizeInKb:TRACE_BUFFER_KIB,recordMode:'recordUntilFull'},transferMode:'ReturnAsStream',streamFormat:'json',streamCompression:'none'}),10000,'trace_start_failed');
+  await bounded(session.send('Tracing.start',{traceConfig:{includedCategories:categories,traceBufferSizeInKb:TRACE_BUFFER_KIB,recordMode:'recordUntilFull'},transferMode:'ReturnAsStream',streamFormat:'json',streamCompression:'none'}),10000,'trace_start_failed');
  }catch(error){
   metadata.failure=error instanceof ProfileFailure?error.category:'trace_start_failed';
   metadata.nodeStoppedAtMs=performance.now();metadata.nodeDurationMs=metadata.nodeStoppedAtMs-nodeStartedAtMs;

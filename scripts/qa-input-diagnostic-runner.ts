@@ -8,16 +8,20 @@ import {join,relative,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {chromium,type Browser,type BrowserContext,type Page,type APIResponse} from '@playwright/test';
 import {forfeitGame} from '../tests/e2e/game-command';
+import {startThrowPerformanceProfile,type ThrowPerformanceProfile} from '../tests/e2e/throw-performance-profile';
 
 const root=process.cwd(),privateDirectory=resolve(root,'artifacts/qa-input-diagnostic/private');
 const sandbox=join(privateDirectory,'sandbox'),reportPath=join(privateDirectory,'runner-report.json');
-const normalArtifacts=join(root,'artifacts'),fixturePath=join(root,'tests/e2e/game-timing.ts');
+const diagnosticTarget=process.env.DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET||'game';
+const normalArtifacts=join(root,'artifacts'),fixturePath=join(root,diagnosticTarget==='observer'?'tests/e2e/match-room-expansion.ts':'tests/e2e/game-timing.ts');
 const sourcePaths=[
- 'tests/e2e/game-timing.ts','tests/e2e/helpers.ts','tests/e2e/game-command.ts',
+ 'scripts/qa-input-diagnostic-runner.ts','scripts/qa-input-diagnostic.py','scripts/qa-input-diagnostic-capacity.py',
+ 'tests/e2e/game-timing.ts','tests/e2e/match-room-expansion.ts','tests/e2e/helpers.ts','tests/e2e/game-command.ts',
  'tests/e2e/throw-performance-profile.ts','tests/e2e/throw-presentation-profile.ts',
  'apps/web/components/darts-game.tsx','apps/web/components/darts-practice.tsx',
  'apps/web/lib/use-server-game.ts','apps/web/lib/drawn-meter.ts','apps/web/lib/use-timing-input.ts',
 ];
+const protectedNormalNames=['game-timing-progress.json','game-timing-result.json','game-timing-debug-private.txt','render-sample-timing-progress.json','render-sample-timing-result.json','workspace-chat','match-room-expansion-result.json','match-room-expansion-browser'];
 const cleanupAccess=new AsyncLocalStorage<boolean>();
 const creationFlights=new Set<Promise<APIResponse>>(),pages:Page[]=[];
 const pendingInvitations=new Map<string,Page>(),ownedMatches=new Map<string,Page>();
@@ -27,7 +31,9 @@ const uuid=/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i;
 let browser:Browser|undefined,browserLaunchFlight:Promise<Browser>|undefined,nativeBrowserClose:(()=>Promise<void>)|undefined;
 let interrupted=false,ambiguousCreation=false,clockDropped=0,reportWritable=false;
 let cleanupTask:Promise<void>|undefined;
+let observerProfile:ThrowPerformanceProfile|undefined;
 const report:any={schemaVersion:1,diagnostic:true,neverNormalAcceptance:true,
+ diagnosticTarget,traceScreenshots:diagnosticTarget==='observer'?false:true,
  physicalHardwareTested:false,normalOriginalExitCode:null,diagnosticExitCode:1,
  normalArtifactsUnchanged:false,interrupted:false,manualReviewRequired:false,
  cleanup:{attempted:false,ownedMatches:0,ownedMatchesReleased:0,pendingInvitationsCancelled:0,ok:false}};
@@ -47,7 +53,15 @@ async function normalSnapshot(){
   if(metadata.isDirectory()){for(const name of(await readdir(path)).sort())await visit(join(path,name));return;}
   await regular(path);const bytes=await readFile(path);result.push({relativePath:relative(normalArtifacts,path),sha256:sha(bytes),bytes:bytes.byteLength});
  }
- for(const name of(await readdir(normalArtifacts)).sort())if(name.startsWith('game-timing-'))await visit(join(normalArtifacts,name));
+ for(const name of(await readdir(normalArtifacts)).sort())if(/^(?:game-timing-|render-sample-|workspace-chat$|match-room-expansion-)/.test(name))await visit(join(normalArtifacts,name));
+ return result;
+}
+async function normalPresence(){
+ const result:Record<string,'file'|'directory'|'absent'>={};
+ for(const name of protectedNormalNames){
+  try{const item=await lstat(join(normalArtifacts,name));assert.ok(!item.isSymbolicLink()&&(item.isFile()||item.isDirectory()),'normal_artifact_invalid');result[name]=item.isDirectory()?'directory':'file';}
+  catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;result[name]='absent';}
+ }
  return result;
 }
 function allowed(){if(interrupted&&!cleanupAccess.getStore())fail('diagnostic_interrupted');}
@@ -129,7 +143,10 @@ async function cleanupOwned(){
    });
    report.cleanup.ok=true;
   }catch(error){report.cleanup.category=error instanceof Error&&/^diagnostic_[a-z_]+$/.test(error.message)?error.message:'diagnostic_owned_cleanup_failed';report.manualReviewRequired=true;}
-  finally{if(nativeBrowserClose)try{await bounded(nativeBrowserClose(),3000,'diagnostic_browser_close_timeout');}catch{report.cleanup.ok=false;report.cleanup.category='diagnostic_browser_close_failed';}}
+  finally{
+   if(observerProfile)try{await bounded(observerProfile.stop(),65000,'diagnostic_trace_stop_timeout');report.observerTraceStopped=true;}catch{report.cleanup.ok=false;report.cleanup.category='diagnostic_trace_stop_failed';}
+   if(nativeBrowserClose)try{await bounded(nativeBrowserClose(),3000,'diagnostic_browser_close_timeout');}catch{report.cleanup.ok=false;report.cleanup.category='diagnostic_browser_close_failed';}
+  }
  })();
 }
 function requestStop(){interrupted=true;report.interrupted=true;void cleanupOwned().catch(()=>{report.manualReviewRequired=true;});}
@@ -137,6 +154,8 @@ function requestStop(){interrupted=true;report.interrupted=true;void cleanupOwne
 let originalLaunch:typeof chromium.launch|undefined;
 try{
  assert.equal(process.env.DARTSPOINT_QA_RUNNER,'true');assert.equal(process.env.DARTSPOINT_QA_INPUT_DIAGNOSTIC,'true');assert.equal(process.env.DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED,'true');
+ assert.ok(['game','observer'].includes(diagnosticTarget),'diagnostic_target_invalid');
+ if(diagnosticTarget==='observer')assert.equal(process.env.DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED,'true');
  assert.equal(root,'/home/runner-qa/actions-runner/_work/platform/platform');assert.equal(process.env.HOME,'/home/runner-qa');
  assert.equal(execFileSync('id',['-un'],{encoding:'utf8'}).trim(),'runner-qa');assert.ok(process.getuid!()>=1000&&process.getuid!()===process.geteuid!());
  assert.equal(process.env.GITHUB_REPOSITORY,'dartspoint/platform');assert.equal(process.env.GITHUB_EVENT_NAME,'push');assert.equal(process.env.GITHUB_REF,'refs/heads/main');
@@ -152,6 +171,7 @@ try{
  await writeFile(reportPath,JSON.stringify(report)+'\n',{flag:'wx',mode:0o600});
  reportWritable=true;
  report.normalArtifactsBefore=await normalSnapshot();
+ report.normalPresenceBefore=await normalPresence();report.ongoingCapacityFileExcludedFromImmutableArtifactSnapshot=true;
  await mkdir(sandbox,{mode:0o700});await mkdir(join(sandbox,'artifacts'),{mode:0o700});
  process.chdir(sandbox);process.env.DARTSPOINT_THROW_PROFILE='1';
  originalLaunch=chromium.launch;
@@ -165,6 +185,7 @@ try{
   const session=await browser.newBrowserCDPSession();
   try{const{arguments:args}=await session.send('Browser.getBrowserCommandLine');report.browserMetadata.syntheticPointerActionsExplicitlyEnabled=args.some((arg:string)=>arg.startsWith('--enable-features=')&&arg.slice(18).split(',').includes('SyntheticPointerActions'));report.browserMetadata.syntheticPointerActionsExplicitlyDisabled=args.some((arg:string)=>arg.startsWith('--disable-features=')&&arg.slice(19).split(',').includes('SyntheticPointerActions'));report.browserMetadata.fieldTrialConfigDisabled=args.includes('--disable-field-trial-config');}
   finally{await session.detach();}
+  if(diagnosticTarget==='observer')observerProfile=await startThrowPerformanceProfile(browser,'artifacts/observer-input-profile',{screenshots:false,cpuSampling:true});
   return browser;
   })();
  };
@@ -178,7 +199,7 @@ finally{
  if(interrupted||!report.cleanup.ok)report.diagnosticExitCode=1;
  process.chdir(root);
  if(reportWritable){
-  try{report.normalArtifactsAfter=await normalSnapshot();report.normalArtifactsUnchanged=JSON.stringify(report.normalArtifactsBefore)===JSON.stringify(report.normalArtifactsAfter);if(!report.normalArtifactsUnchanged){report.diagnosticExitCode=1;report.failureCategory='diagnostic_original_artifacts_changed';}}catch{report.diagnosticExitCode=1;report.failureCategory='diagnostic_original_artifact_verification_failed';}
+  try{report.normalArtifactsAfter=await normalSnapshot();report.normalPresenceAfter=await normalPresence();report.normalArtifactsUnchanged=JSON.stringify(report.normalArtifactsBefore)===JSON.stringify(report.normalArtifactsAfter)&&JSON.stringify(report.normalPresenceBefore)===JSON.stringify(report.normalPresenceAfter);if(!report.normalArtifactsUnchanged){report.diagnosticExitCode=1;report.failureCategory='diagnostic_original_artifacts_changed';}}catch{report.diagnosticExitCode=1;report.failureCategory='diagnostic_original_artifact_verification_failed';}
   try{await save(join(privateDirectory,'clock-bridge-private.json'),{diagnostic:true,normalAcceptance:false,physicalHardwareTested:false,clockRecords,clockDropped,wallClockBracketedByMonotoneObservations:true,traceAnchor:'qa-input-diagnostic-clock',limitations:['Profile-only work changes scheduling.','Native input, performance.now and event.timeStamp share the document monotone clock.','Wall-clock samples are relations only; not elapsed-time measurements.','PNG capture time is not physical presentation.']});if(clockDropped)report.diagnosticExitCode=1;await save(reportPath,report);}catch{report.diagnosticExitCode=1;}
  }
 }

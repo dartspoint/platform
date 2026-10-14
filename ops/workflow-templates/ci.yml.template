@@ -20,6 +20,7 @@ jobs:
     env:
       DARTSPOINT_QA_RUNNER: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && 'true' || 'false' }}
       DARTSPOINT_QA_INPUT_DIAGNOSTIC: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && 'true' || 'false' }}
+      DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET: ${{ vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET || 'game' }}
       DARTSPOINT_QA_INPUT_PROFILE_PUBLIC_KEY_BASE64: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DARTSPOINT_QA_INPUT_PROFILE_PUBLIC_KEY_BASE64 || '' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

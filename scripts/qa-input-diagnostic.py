@@ -25,7 +25,8 @@ MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_FILES = 8192
 MAGIC = b'DPQAIP1\n'
 ROOT_FILES = {'runner-report.json', 'clock-bridge-private.json', 'runner-private.log', 'backend-report.json'}
-NORMAL_FILES = ('game-timing-progress.json', 'game-timing-result.json', 'game-timing-debug-private.txt')
+NORMAL_PREFIXES = ('game-timing-', 'render-sample-', 'match-room-expansion-')
+NORMAL_DIRECTORIES = ('workspace-chat', 'match-room-expansion-browser')
 
 
 class Refused(Exception):
@@ -58,11 +59,15 @@ def public_key(encoded):
 
 
 def guarded_context():
+    target = os.environ.get('DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET') or 'game'
+    require(target in ('game', 'observer'), 'diagnostic_target_invalid')
     require(os.environ.get('DARTSPOINT_QA_INPUT_DIAGNOSTIC') == 'true'
             and os.environ.get('DARTSPOINT_QA_RUNNER') == 'true'
             and os.environ.get('GITHUB_EVENT_NAME') == 'push'
             and os.environ.get('GITHUB_REF') == 'refs/heads/main'
             and os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED') == 'true', 'diagnostic_context_invalid')
+    require(target != 'observer' or os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED') == 'true',
+            'diagnostic_observer_not_reached')
     spec = importlib.util.spec_from_file_location('qa_context', Path(__file__).with_name('qa-runner-context.py'))
     qa = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(qa)
@@ -103,11 +108,26 @@ def local_environment():
 
 def normal_snapshot():
     result = {}
-    for name in NORMAL_FILES:
-        path = Path('artifacts') / name
-        if not path.exists():
+    base = Path('artifacts').absolute()
+    names = {entry.name for entry in base.iterdir()
+             if entry.name.startswith(NORMAL_PREFIXES) or entry.name in NORMAL_DIRECTORIES}
+    names.update(('game-timing-progress.json', 'game-timing-result.json', 'game-timing-debug-private.txt',
+                  'render-sample-timing-progress.json', 'render-sample-timing-result.json',
+                  'match-room-expansion-result.json', *NORMAL_DIRECTORIES))
+
+    def visit(path):
+        name = path.relative_to(base).as_posix()
+        try:
+            item = path.lstat()
+        except FileNotFoundError:
             result[name] = None
-            continue
+            return
+        require(not stat.S_ISLNK(item.st_mode) and item.st_uid == os.getuid(), 'normal_artifact_invalid')
+        if stat.S_ISDIR(item.st_mode):
+            result[name] = {'directory': True}
+            for child in sorted(path.iterdir()):
+                visit(child)
+            return
         item = private_file(path.absolute())
         require(item.st_size <= 64 * 1024 * 1024, 'normal_artifact_bound_exceeded')
         digest = hashlib.sha256()
@@ -115,6 +135,8 @@ def normal_snapshot():
             for block in iter(lambda: source.read(65536), b''):
                 digest.update(block)
         result[name] = {'bytes': item.st_size, 'sha256': digest.hexdigest()}
+    for name in sorted(names):
+        visit(base / name)
     return result
 
 
@@ -147,7 +169,7 @@ def run_child(private, environment):
                     except ProcessLookupError:
                         pass
                     termination = now
-                if termination is not None and now - termination >= 30:
+                if termination is not None and now - termination >= 120:
                     # Only an unreaped live child still owns this newly created PG.
                     try:
                         os.killpg(child.pid, signal.SIGKILL)
@@ -271,9 +293,17 @@ def main():
     encrypted.mkdir(mode=0o700)
     environment = {**os.environ, **values, 'DARTSPOINT_QA_INPUT_NORMAL_EXIT_CODE': str(original),
                    'DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED': 'true'}
+    target = os.environ.get('DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET') or 'game'
+    environment['DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET'] = target
     for name in ('E2E_ORIGIN', 'E2E_STAGING_FIXTURE', 'E2E_STAGING_PROXY', 'DARTSPOINT_THROW_PROFILE'):
         environment.pop(name, None)
+    capacity_spec = importlib.util.spec_from_file_location('qa_diagnostic_capacity',
+                                                         Path(__file__).with_name('qa-input-diagnostic-capacity.py'))
+    capacity = importlib.util.module_from_spec(capacity_spec)
+    capacity_spec.loader.exec_module(capacity)
+    capacity_before = capacity.snapshot()
     result = run_child(private, environment)
+    capacity_after = capacity.snapshot()
     unchanged = normal_snapshot() == before
     infrastructure_ok = unchanged and not result['timedOut'] and not result['interrupted']
     try:
@@ -289,14 +319,21 @@ def main():
         infrastructure_ok = infrastructure_ok and report.get('schemaVersion') == 1 \
             and report.get('diagnostic') is True and report.get('neverNormalAcceptance') is True \
             and report.get('normalOriginalExitCode') == original \
+            and report.get('diagnosticTarget') == target \
             and report.get('diagnosticExitCode') == result['childExitCode'] \
             and report.get('normalArtifactsUnchanged') is True \
             and artifact_schema_ok and artifacts_before == artifacts_after \
+            and isinstance(report.get('normalPresenceBefore'), dict) \
+            and report.get('normalPresenceBefore') == report.get('normalPresenceAfter') \
             and isinstance(report.get('cleanup'), dict) and report['cleanup'].get('ok') is True \
             and report.get('manualReviewRequired') is False and report.get('interrupted') is False
     except Exception:
         infrastructure_ok = False
     metadata = {**binding, **result, 'diagnostic': True, 'neverNormalAcceptance': True,
+                'diagnosticTarget': target,
+                'ongoingCapacityFileExcludedFromImmutableArtifactSnapshot': True,
+                'visibleCgroupAncestorsBefore': capacity_before,
+                'visibleCgroupAncestorsAfter': capacity_after,
                 'normalOriginalExitCode': original, 'normalArtifactsUnchanged': unchanged,
                 'infrastructureOk': infrastructure_ok, 'keyId': key_id}
     descriptor = os.open(private / 'backend-report.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)

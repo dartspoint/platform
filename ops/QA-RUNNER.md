@@ -23,6 +23,23 @@ Het QA-account krijgt geen algemene sudo, Docker-groep, deploymentgroep, app-soc
 
 ## Routering
 
+Een afzonderlijke Chrome-inputdiagnose is uitsluitend toegestaan na de normale
+suite op een vertrouwde `main`-push. Repositoryvariabele
+`DARTSPOINT_QA_INPUT_DIAGNOSTIC=true` vereist een lokale RSA-3072 privésleutel en
+de bijbehorende SPKI-publieke sleutel in
+`DARTSPOINT_QA_INPUT_PROFILE_PUBLIC_KEY_BASE64`. Alleen versleutelde archieven
+worden geüpload; de privésleutel blijft bij de operator. Zet
+`DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET=observer` voor dezelfde drie gebruikerscontexten,
+zes native stops en oorspronkelijke assertions van de toeschouwertest. De
+standaard `game` behoudt de bestaande werpdiagnose. Het gekozen normale scenario
+moet eerst bereikt zijn; opname en uitvoer komen in een afzonderlijke private
+sandbox. Normale spel-, oefen-, chat- en toeschouwerbewijzen worden vóór en na
+de diagnose op inhoud en aanwezigheid gecontroleerd. Het nog lopende
+capaciteitsmeetbestand is hiervan uitgesloten. De observeropname gebruikt geen
+screenshots en meet ook de zichtbare eigen cgroup-ancestors vóór en na de opname.
+Een profileresultaat vervangt nooit een normale acceptatietest en bewijst geen
+fysieke schermpresentatie. Schakel de opt-in na het onderzoek weer uit.
+
 Zet repositoryvariabele `DARTSPOINT_QA_ON_VPS` op de exacte tekst `true` nadat installatie en status zijn gecontroleerd. Alleen vertrouwde pushes naar `main` en `staging` kiezen dan de labels `[self-hosted, Linux, X64, dartspoint-qa]`. De herbruikbare staging-CI gebruikt de oorspronkelijke pushcontext. Houd precies één QA-runnerinstantie; die voert de toegewezen main- en stagingjobs na elkaar uit.
 
 Pull requests en production-verificatie blijven op `ubuntu-24.04`. Configuration- en publishjobs behouden hun bestaande hosted route; deployments behouden de aparte staging- en productionrunners. Er zijn geen extra providersecrets nodig. Alle bestaande tests en harde werpgrenzen blijven verplicht. De eerste echte QA-CI moet ook de browserdependencies, containerlimieten en `test-host-capacity.json` bewijzen; een installatiecontrole vervangt die acceptatie niet.

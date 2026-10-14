@@ -9,6 +9,13 @@ worker_start=''
 realtime_start=''
 web_start=''
 normal_game_reached=false
+normal_observer_reached=false
+if [[ "${DARTSPOINT_QA_INPUT_DIAGNOSTIC:-false}" == true ]]; then
+  case "${DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET:-game}" in
+    game|observer) ;;
+    *) printf '%s\n' 'QA input diagnostic refused: invalid_target' >&2; exit 1 ;;
+  esac
+fi
 process_identity() {
   local pid="$1" stat_line
   local -a stat_fields
@@ -35,11 +42,14 @@ cleanup_owned_services() {
   # Separate opt-in diagnostics run after the normal suite stops, while the
   # three exact native children and disposable database are still available.
   if [[ "${DARTSPOINT_QA_INPUT_DIAGNOSTIC:-false}" == true \
-        && "${DARTSPOINT_QA_RUNNER:-false}" == true && "$normal_game_reached" == true ]] \
+        && "${DARTSPOINT_QA_RUNNER:-false}" == true && "$normal_game_reached" == true \
+        && ( "${DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET:-game}" == game \
+             || ( "${DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET:-game}" == observer && "$normal_observer_reached" == true ) ) ]] \
       && owned_child_running "$web_pid" "$web_start" \
       && owned_child_running "$realtime_pid" "$realtime_start" \
       && owned_child_running "$worker_pid" "$worker_start"; then
     if ! DARTSPOINT_QA_INPUT_NORMAL_EXIT_CODE="$result" DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED=true \
+      DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED="$normal_observer_reached" \
       python3 scripts/qa-input-diagnostic.py; then
       if [[ "$result" == 0 ]]; then result=1; fi
     fi
@@ -159,5 +169,6 @@ python3 tests/integration/landing-proxy.py
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-read.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-chat.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-density.ts
+normal_observer_reached=true
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/match-room-expansion.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/room-activity.ts
