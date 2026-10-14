@@ -82,7 +82,18 @@ export function getChatChannel(key:string){resetAccount();const p=context(key);i
 // A personal push is projected by the server for that current authenticated
 // recipient. It never advances fetchedCursors: missed earlier messages and edits
 // still recover through authoritative history on polling/reconnect.
-export function hydrateChat(){if(hydrated)return;hydrated=true;emit();const visibility=()=>{const p=getPlatform();return JSON.stringify([p.actor?.id,[...p.social.muted].sort(),[...p.social.blocked].sort()]);};visibilitySignature=visibility();subscribePlatform(()=>{const next=visibility();if(next!==visibilitySignature){visibilitySignature=next;for(const key of tracked.keys()){fullReload.add(key);void load(key);}}});window.addEventListener('dartspoint:chat-changed',(event:any)=>{for(const key of tracked.keys())if(ids.get(key)===event.detail.channelId){if(event.detail.redacted){removeStored(key,event.detail.messageId,Number(event.detail.cursor??event.detail.seq??0),event.detail.message?.client_message_id);}if(event.detail.message?.channel_id===event.detail.channelId&&event.detail.message.id===event.detail.messageId){mergeStored(key,[event.detail.message]);}else void load(key);}});const catchup=()=>{for(const key of tracked.keys())void load(key);};window.addEventListener('focus',catchup);window.addEventListener('dartspoint:chat-reconnected',catchup);setInterval(()=>{if(getPlatform().actor&&document.visibilityState==='visible')catchup();},5000);}
+export function hydrateChat(){if(hydrated)return;hydrated=true;emit();const visibility=()=>{const p=getPlatform();return JSON.stringify([p.actor?.id,[...p.social.muted].sort(),[...p.social.blocked].sort()]);};visibilitySignature=visibility();subscribePlatform(()=>{const next=visibility();if(next!==visibilitySignature){visibilitySignature=next;for(const key of tracked.keys()){fullReload.add(key);void load(key);}}});window.addEventListener('dartspoint:chat-changed',(event:any)=>{
+ // Joining the personal room also emits a content-free notification. A
+ // watched channel can still be resolving, so undefined IDs must never match.
+ const detail=event.detail;
+ if(!detail||typeof detail.channelId!=='string'||!detail.channelId)return;
+ for(const key of tracked.keys())if(ids.get(key)===detail.channelId){
+  if(detail.redacted)removeStored(key,detail.messageId,Number(detail.cursor??detail.seq??0),detail.message?.client_message_id);
+  const message=detail.message;
+  if(message&&message.channel_id===detail.channelId&&message.id===detail.messageId)mergeStored(key,[message]);
+  else void load(key);
+ }
+});const catchup=()=>{for(const key of tracked.keys())void load(key);};window.addEventListener('focus',catchup);window.addEventListener('dartspoint:chat-reconnected',catchup);setInterval(()=>{if(getPlatform().actor&&document.visibilityState==='visible')catchup();},5000);}
 /** Register intent and render before the first network await. Retrying keeps the original UUID. */
 export function appendChatMessage(key:string,message:ChatMessage):Promise<boolean>{
  resetAccount();const text=message.text.trim().slice(0,500);if(!key||!text)return Promise.resolve(false);
