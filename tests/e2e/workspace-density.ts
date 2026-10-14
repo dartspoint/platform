@@ -76,11 +76,12 @@ try{
  // the unmodified API, selectors, live store and all normal access checks.
  await privileged.query("update room_memberships set lease_until=now()+interval '15 minutes' where user_id=any($1::uuid[])",[owned]);
  for(let i=0;i<8;i++)channelIds.push((await privateChannel(actor,{targetId:peers[i].actor.id})).channelId);
- for(let i=0;i<4;i++)await sendMessage(peers[i].actor,{channelId:channel,clientMessageId:randomUUID(),body:'Dichte kamer, echt opgeslagen bericht '+i});
+ // A dense history uses real human rows; transient join notices do not fill it.
+ for(let i=0;i<peers.length;i++)await sendMessage(peers[i].actor,{channelId:channel,clientMessageId:randomUUID(),body:'Dichte kamer, echt opgeslagen bericht '+i});
  const state=await get(main.page,'bootstrap');assert.equal(state.social.friends.length,20);assert.equal(state.players.filter((p:any)=>p.presence.roomId===room&&p.presence.online).length,21);assert.equal(state.channels.filter((c:any)=>c.kind==='private'&&!c.closed).length,8);report.checks.realServerFixtures=true;
  for(const [width,height] of [[1280,720],[1366,768],[1920,1080]]){
   await main.page.setViewportSize({width,height});await main.page.goto(origin+'/spelen');await main.page.locator('.dp-desktop-community').waitFor();
-  await expect(main.page.locator('.dp-desktop-players tbody tr')).toHaveCount(21);await expect(main.page.locator('.dp-desktop-friends .friend-row')).toHaveCount(20);await expect(main.page.locator('.chat-private-tab-wrap')).toHaveCount(8);await main.page.getByText('Dichte kamer, echt opgeslagen bericht 3',{exact:true}).waitFor();
+  await expect(main.page.locator('.dp-desktop-players tbody tr')).toHaveCount(21);await expect(main.page.locator('.dp-desktop-friends .friend-row')).toHaveCount(20);await expect(main.page.locator('.chat-private-tab-wrap')).toHaveCount(8);await main.page.getByText('Dichte kamer, echt opgeslagen bericht '+(peers.length-1),{exact:true}).waitFor();
   const geometry=await main.page.evaluate(()=>{const box=(selector:string)=>{const r=document.querySelector(selector)!.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right};};return {left:box('.dp-workspace>main'),right:box('.dp-desktop-community'),top:box('.dp-desktop-community-top'),players:box('.dp-desktop-players'),friends:box('.dp-desktop-friends'),chat:box('.dp-desktop-chat')};});
   assert.ok(Math.abs(geometry.left.width-geometry.right.width)<2,'Dense workspace preserves 50/50 columns');assert.ok(Math.abs(geometry.players.width-geometry.friends.width)<2,'Dense upper-right panels preserve 50/50 columns');assert.ok(Math.abs(geometry.top.height-geometry.chat.height)<2,'Dense right side preserves 50/50 rows');
   const composer=await composerReachable(main.page,width+' dense desktop');
