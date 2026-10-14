@@ -175,7 +175,6 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
     else setPanel(next === "rankings" ? "ladder" : next);
   }
   function togglePanel(next: SocialPanel) {
-    if(next==="chat"&&!hasGame&&room){setPanel(null);return;}
     if (next === "room") setRoomView("players");
     setPanel(current => current === next ? null : next);
   }
@@ -213,7 +212,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
     if (playerId(name) === platform.actor?.id) return;
     if (isBlocked(name)) { setToast("Je hebt deze speler geblokkeerd. Deblokkeer via het profiel om contact te maken."); return; }
     const channelId=await openPrivateChatTab(name);if(!channelId)return;
-    setChatTab(`private:${channelId}`); setProfile(null); setPanel(!desktop&&!hasGame&&room?null:"chat");
+    setChatTab(`private:${channelId}`); setProfile(null); setPanel("chat");
     if (desktop) requestAnimationFrame(() => desktopChatRef.current?.querySelector<HTMLInputElement>(".chat-compose input")?.focus({ preventScroll: true }));
   }
 
