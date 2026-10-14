@@ -1,5 +1,5 @@
 "use client";
-import {useCallback,useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ServerClock,TIMING_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../../packages/game-core/src/timing';
 import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} from './drawn-meter';
 import {useMotionValue} from 'motion/react';
@@ -22,57 +22,84 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  useEffect(()=>{setSelected(new URLSearchParams(window.location.search).get('match')??'');},[]);
  const matchId=explicitMatchId??selected??own?.id;
  const actualId=matchId||own?.id;
- const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[sending,setSending]=useState(false),[connectionMessage,setConnectionMessage]=useState(''),[offlineUntil,setOfflineUntil]=useState<number|null>(null),[reconnected,setReconnected]=useState(false),[active,setActive]=useState(true);
+ const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[sending,setSending]=useState(false),[connectionMessage,setConnectionMessage]=useState(''),[offlineUntil,setOfflineUntil]=useState<number|null>(null),[reconnected,setReconnected]=useState(false),[active,setActiveState]=useState(true);
  const current=useRef<Snapshot|null>(null),socket=useRef<Room|null>(null),pending=useRef<any>(null),readyRetries=useRef(0),clock=useRef(new ServerClock());
  const xIndicator=useRef<HTMLSpanElement|null>(null),yIndicator=useRef<HTMLSpanElement|null>(null),drawn=useRef<{horizontal:DrawnMeterSample|null;vertical:DrawnMeterSample|null}>({horizontal:null,vertical:null}),connectionId=useRef(''),generation=useRef(0),serverCalibrated=useRef(false);
  const [timingReady,setTimingReady]=useState(false);
  const xMeter=useMotionValue(.5),yMeter=useMotionValue(.5);
- const apply=useCallback((value:Snapshot)=>{const previous=current.current;if(previous&&previous.matchId===value.matchId&&previous.stateVersion>value.stateVersion)return;const next={...previous,...value};clock.current.seed(value.serverAt);current.current=next;setSnapshot(next);},[]);
+ const renderLive=useRef(false),frame=useRef<number|null>(null),renderControl=useRef({active:true,readOnly});
+ const projected=useRef<{horizontal:{element:HTMLElement;fraction:number}|null;vertical:{element:HTMLElement;fraction:number}|null}>({horizontal:null,vertical:null});
+ const horizontalReset=useRef<{phaseToken:string;element:HTMLElement}|null>(null),runFrame=useRef<()=>void>(()=>{});
+ const cancelFrame=useCallback(()=>{if(frame.current!==null){cancelAnimationFrame(frame.current);frame.current=null;}},[]);
+ const paintLock=useCallback((axis:'horizontal'|'vertical',fraction:number)=>{
+  const element=axis==='horizontal'?xIndicator.current:yIndicator.current;if(!element)return;
+  const previous=projected.current[axis];if(previous?.element===element&&previous.fraction===fraction)return;
+  (axis==='horizontal'?xMeter:yMeter).set(fraction);lockMeter(element,axis,fraction);projected.current[axis]={element,fraction};
+ },[xMeter,yMeter]);
+ const projectLocks=useCallback(()=>{const state=current.current?.state;if(!state)return;
+  if(state.lockedX!==null)paintLock('horizontal',(state.lockedX+1.14)/2.28);
+  if(state.lockedY!=null)paintLock('vertical',(state.lockedY+1.14)/2.28);
+ },[paintLock]);
+ const movingView=useCallback(()=>{const view=current.current;if(!renderLive.current||!view||!socket.current||renderControl.current.readOnly||!renderControl.current.active||view.seat===null||view.seat!==view.state.turn||view.lifecycle!=='playing'||!clock.current.ready||!serverCalibrated.current||pending.current?.phaseToken===view.state.phaseToken)return null;
+  const axis=view.state.phase;if(axis!=='horizontal'&&axis!=='vertical')return null;
+  // Preserve the original authoritative-lock priority over any moving draw.
+  if(axis==='horizontal'?view.state.lockedX!==null:view.state.lockedY!=null)return null;
+  const indicator=axis==='horizontal'?xIndicator.current:yIndicator.current;return indicator?.isConnected?{view,axis,indicator}:null;
+ },[]);
+ const wake=useCallback(()=>{if(!movingView()){cancelFrame();return;}if(frame.current===null)frame.current=requestAnimationFrame(runFrame.current);},[cancelFrame,movingView]);
+ runFrame.current=()=>{frame.current=null;const moving=movingView();if(!moving)return;
+  const {view,axis,indicator}=moving,state=view.state,drawAt=performance.now(),version=state.timingVersion??'receive-v1',now=clock.current.phaseNow(state.phaseToken,drawAt,version);
+  // A calibrated future phase keeps waiting on RAF; no sample is fabricated.
+  if(version!==TIMING_VERSION||now>=state.phaseStartedAt){
+   const sample=drawMeter(indicator,axis,clock.current.movingPhaseNow(state.phaseToken,drawAt,version),state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);
+   if(sample){projected.current[axis]=null;drawn.current[axis]=sample;(axis==='horizontal'?xMeter:yMeter).set(sample.fraction);
+    if(axis==='horizontal'&&state.lockedY==null&&yIndicator.current){const prior=horizontalReset.current;if(prior?.phaseToken!==state.phaseToken||prior.element!==yIndicator.current){paintLock('vertical',.5);horizontalReset.current={phaseToken:state.phaseToken,element:yIndicator.current};}}
+   }
+  }
+  wake();
+ };
+ const bindXIndicator=useCallback((element:HTMLSpanElement|null)=>{xIndicator.current=element;projected.current.horizontal=null;projectLocks();wake();},[projectLocks,wake]);
+ const bindYIndicator=useCallback((element:HTMLSpanElement|null)=>{yIndicator.current=element;projected.current.vertical=null;horizontalReset.current=null;projectLocks();wake();},[projectLocks,wake]);
+ const setActive=useCallback((value:boolean|((previous:boolean)=>boolean))=>{const next=typeof value==='function'?value(renderControl.current.active):value;renderControl.current.active=next;setActiveState(next);wake();},[wake]);
+ useLayoutEffect(()=>{renderLive.current=true;projectLocks();wake();return()=>{renderLive.current=false;cancelFrame();};},[cancelFrame,projectLocks,wake]);
+ // Snapshot projection is after DOM commit, including loading->panel mounts.
+ useLayoutEffect(()=>{renderControl.current={active,readOnly};projectLocks();wake();},[active,readOnly,snapshot,projectLocks,wake]);
+ const apply=useCallback((value:Snapshot)=>{const previous=current.current;if(previous&&previous.matchId===value.matchId&&previous.stateVersion>value.stateVersion)return;const next={...previous,...value};clock.current.seed(value.serverAt);current.current=next;projectLocks();wake();setSnapshot(next);},[projectLocks,wake]);
  useEffect(()=>{
   if(!actualId)return;let cancelled=false,retry:ReturnType<typeof setTimeout>|undefined,renew:ReturnType<typeof setInterval>|undefined,ping:ReturnType<typeof setInterval>|undefined;
   const connect=async()=>{
    try{
     const {data,error}=await browserAuth().auth.getSession();if(error||!data.session)throw new Error('Log opnieuw in om verder te spelen.');
     const client=new Client(process.env.NEXT_PUBLIC_REALTIME_URL!);const room=await client.joinOrCreate('match',{matchId:actualId,token:data.session.access_token});
-    if(cancelled){await room.leave();return;}const socketGeneration=++generation.current;socket.current=room;clock.current.restartCalibration();serverCalibrated.current=false;setTimingReady(false);setOfflineUntil(null);setConnectionMessage('');
+    if(cancelled){await room.leave();return;}const socketGeneration=++generation.current;socket.current=room;clock.current.restartCalibration();serverCalibrated.current=false;wake();setTimingReady(false);setOfflineUntil(null);setConnectionMessage('');
     const currentSocket=()=>!cancelled&&socket.current===room&&generation.current===socketGeneration;
     const samples=new Map<string,number>();
     room.onMessage('clock.challenge',(value:any)=>{if(!cancelled)room.send('clock.echo',{nonce:value.nonce});});
-    room.onMessage('clock.ready',(value:any)=>{if(!currentSocket())return;connectionId.current=value.connectionId;serverCalibrated.current=value.ready===true;setTimingReady(clock.current.ready&&serverCalibrated.current);});
-    room.onMessage('clock.sample',(value:any)=>{if(!currentSocket())return;const sent=samples.get(value.nonce);if(sent!==undefined){clock.current.sample(value.serverAt,sent,performance.now(),value.serverReceivedAt??value.serverAt);samples.delete(value.nonce);connectionId.current=value.connectionId;serverCalibrated.current=value.ready===true;setTimingReady(clock.current.ready&&serverCalibrated.current);}});
+    room.onMessage('clock.ready',(value:any)=>{if(!currentSocket())return;connectionId.current=value.connectionId;serverCalibrated.current=value.ready===true;wake();setTimingReady(clock.current.ready&&serverCalibrated.current);});
+    room.onMessage('clock.sample',(value:any)=>{if(!currentSocket())return;const sent=samples.get(value.nonce);if(sent!==undefined){clock.current.sample(value.serverAt,sent,performance.now(),value.serverReceivedAt??value.serverAt);samples.delete(value.nonce);connectionId.current=value.connectionId;serverCalibrated.current=value.ready===true;wake();setTimingReady(clock.current.ready&&serverCalibrated.current);}});
     const sample=()=>{if(!currentSocket())return;const nonce=crypto.randomUUID();samples.set(nonce,performance.now());if(samples.size>8)samples.delete(samples.keys().next().value!);room.send('clock.ping',{nonce});};sample();if(ping)clearInterval(ping);let initialSamples=0;ping=setInterval(()=>{initialSamples++;if(initialSamples<=6||initialSamples%20===0)sample();},100);
     room.onMessage('snapshot',(value:Snapshot)=>{if(currentSocket())apply(value);});
-    room.onMessage('receipt',(value:Snapshot)=>{if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;timingTrace({event:'receipt',commandId:value.commandId,matchId:value.matchId,timing:value.timing,lockedX:value.state.lockedX,lockedY:value.state.lockedY,hit:value.state.pendingDart?.hit});apply(value);pending.current=null;setSending(false);setConnectionMessage('');});
+    room.onMessage('receipt',(value:Snapshot)=>{if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;timingTrace({event:'receipt',commandId:value.commandId,matchId:value.matchId,timing:value.timing,lockedX:value.state.lockedX,lockedY:value.state.lockedY,hit:value.state.pendingDart?.hit});apply(value);pending.current=null;wake();setSending(false);setConnectionMessage('');});
     room.onMessage('error',(value:any)=>{
-     if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;const failed=pending.current;timingTrace({event:'rejected',commandId:failed.commandId,code:value.code});setSending(false);pending.current=null;setConnectionMessage(value.message);
+     if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;const failed=pending.current;timingTrace({event:'rejected',commandId:failed.commandId,code:value.code});setSending(false);pending.current=null;wake();setConnectionMessage(value.message);
      void api<Snapshot>('match/'+actualId).then(fresh=>{
       if(cancelled)return;if(['invalid_render_sample','timing_connection_mismatch'].includes(value.code))clock.current.recoverPhase(fresh.state.phaseToken);apply(fresh);
       // Readiness expresses a durable intention. Refresh and retry this alone
       // when another player's confirmation wins the version race.
       if(failed?.type==='match.ready'&&value.code==='stale_state'&&readyRetries.current<2&&fresh.seat!==null&&!fresh.state.ready[fresh.seat]&&['assigned','paused'].includes(fresh.lifecycle)&&socket.current===room&&!pending.current){
-       readyRetries.current++;const retry={...failed,commandId:crypto.randomUUID(),expectedStateVersion:fresh.stateVersion,phaseToken:fresh.state.phaseToken};pending.current=retry;setSending(true);setConnectionMessage('');room.send('command',retry);
+       readyRetries.current++;const retry={...failed,commandId:crypto.randomUUID(),expectedStateVersion:fresh.stateVersion,phaseToken:fresh.state.phaseToken};pending.current=retry;wake();setSending(true);setConnectionMessage('');room.send('command',retry);
       }
      }).catch(()=>{});
     });
-    room.onLeave(()=>{if(!currentSocket())return;socket.current=null;setTimingReady(false);setOfflineUntil(Date.now()+(current.current?.remainingReconnectMs??120000));if(readOnly){current.current=null;setSnapshot(null);}setConnectionMessage('De verbinding wordt hersteld.');retry=setTimeout(connect,1000);});
+    room.onLeave(()=>{if(!currentSocket())return;socket.current=null;wake();setTimingReady(false);setOfflineUntil(Date.now()+(current.current?.remainingReconnectMs??120000));if(readOnly){current.current=null;setSnapshot(null);}setConnectionMessage('De verbinding wordt hersteld.');retry=setTimeout(connect,1000);});
     const fresh=await api<Snapshot>('match/'+actualId);if(!currentSocket())return;apply(fresh);
     if(pending.current)room.send('command',pending.current);
     if(renew)clearInterval(renew);renew=setInterval(()=>{void browserAuth().auth.getSession().then(({data})=>{if(data.session)room.send('authenticate',{token:data.session.access_token});});},60000);
    }catch(e){if(cancelled)return;if(readOnly){current.current=null;setSnapshot(null);}setConnectionMessage(e instanceof Error?e.message:'Verbinding maken lukt niet.');retry=setTimeout(connect,3000);}
   };
-  void connect();return ()=>{cancelled=true;clearTimeout(retry);clearInterval(renew);clearInterval(ping);void socket.current?.leave();socket.current=null;current.current=null;pending.current=null;readyRetries.current=0;setSnapshot(null);};
- },[actualId,apply,readOnly]);
- useEffect(()=>{let frame:number;const tick=()=>{
-  const view=current.current,state=view?.state;
-  if(view&&state){const frozen=pending.current?.phaseToken===state.phaseToken,calibrated=clock.current.ready&&serverCalibrated.current,moving=!frozen&&!readOnly&&active&&['horizontal','vertical'].includes(state.phase)&&view.seat!==null&&view.seat===state.turn&&view.lifecycle==='playing'&&calibrated,drawAt=moving?performance.now():0,version=state.timingVersion??'receive-v1',now=moving?clock.current.phaseNow(state.phaseToken,drawAt,version):0,canDraw=moving&&(state.timingVersion!==TIMING_VERSION||now>=state.phaseStartedAt);
-   if(state.lockedX!==null){const f=(state.lockedX+1.14)/2.28;xMeter.set(f);lockMeter(xIndicator.current,'horizontal',f);}
-   else if(state.phase==='horizontal'&&canDraw&&xIndicator.current){const sample=drawMeter(xIndicator.current,'horizontal',clock.current.movingPhaseNow(state.phaseToken,drawAt,version),state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);if(sample){drawn.current.horizontal=sample;xMeter.set(sample.fraction);}}
-   if(state.lockedY!=null){const f=(state.lockedY+1.14)/2.28;yMeter.set(f);lockMeter(yIndicator.current,'vertical',f);}
-   else if(state.phase==='vertical'&&canDraw&&yIndicator.current){const sample=drawMeter(yIndicator.current,'vertical',clock.current.movingPhaseNow(state.phaseToken,drawAt,version),state.phaseStartedAt,state.phaseToken,state.meterSpeedVersion);if(sample){drawn.current.vertical=sample;yMeter.set(sample.fraction);}}
-   else if(state.phase==='horizontal'&&canDraw){yMeter.set(.5);lockMeter(yIndicator.current,'vertical',.5);}
-  }
-  frame=requestAnimationFrame(tick);
- };frame=requestAnimationFrame(tick);return ()=>cancelAnimationFrame(frame);},[active,readOnly,xMeter,yMeter]);
+  void connect();return ()=>{cancelled=true;clearTimeout(retry);clearInterval(renew);clearInterval(ping);void socket.current?.leave();socket.current=null;current.current=null;pending.current=null;wake();readyRetries.current=0;setSnapshot(null);};
+ },[actualId,apply,readOnly,wake]);
+
  const command=useCallback((type:string)=>{
   const s=current.current;if(readOnly||!s||s.seat===null||!socket.current||pending.current)return;
   // Gate RAF and freeze before network, React, haptics or audio.
@@ -81,12 +108,13 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
   const payload={protocolVersion:1,commandId:crypto.randomUUID(),matchId:s.matchId,expectedStateVersion:s.stateVersion,type,phaseToken:s.state.phaseToken,...(axis&&sample&&s.state.timingVersion===TIMING_VERSION?{renderSample:{sampleAt:sample.sampleAt,connectionId:connectionId.current,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1,meterSpeedVersion:sample.meterSpeedVersion}}:{})};pending.current=payload;
   const element=axis==='horizontal'?xIndicator.current:yIndicator.current;
   if(axis&&sample)lockMeter(element,axis,sample.fraction);
+  cancelFrame();
   const stopAppliedAt=performance.now(),sendAt=performance.now();
   // Submit the frozen sample before geometry reads, diagnostics or React work.
   socket.current.send('command',payload);const sendReturnedAt=performance.now();
   readyRetries.current=0;setSending(true);
   if(axis&&sample){const geometry=element?meterGeometry(element,axis):undefined,trace={event:'local-stop',commandId:payload.commandId,matchId:s.matchId,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1,phase:axis,phaseToken:s.state.phaseToken,phaseStartedAt:s.state.phaseStartedAt,timingVersion:s.state.timingVersion,rendered:sample,geometry,inputAt:stoppedAt,stopAppliedAt,sendAt,sendReturnedAt,clockOffset:clock.current.phaseOffset(s.state.phaseToken),localLock:sample.fraction};timingTrace(trace);performance.mark('dp-local-stop',{detail:{...trace,axis:type,at:stoppedAt,x:xMeter.get(),y:yMeter.get(),handlerCompletedAt:performance.now()}});}
- },[readOnly,xMeter,yMeter]);
+ },[readOnly,xMeter,yMeter,cancelFrame]);
  const startOrStop=useCallback(()=>{const s=current.current;if(readOnly||!active||!s||s.seat!==s.state.turn||s.lifecycle!=='playing'||pending.current)return;if(s.state.phase==='horizontal')command('dart.stop_horizontal');else if(s.state.phase==='vertical')command('dart.stop_vertical');if(preferences.haptics)navigator.vibrate?.(12);},[readOnly,active,preferences.haptics,command]);
  const beginMatch=useCallback(async()=>command('match.ready'),[command]);
  const raw=snapshot?.state??empty,swap=snapshot?.seat===1;
@@ -104,5 +132,5 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  const clearMatchSelection=useCallback(()=>{setSelected("");window.history.replaceState(null,"","/spelen");},[]);
  const noOp=useCallback(()=>{},[]);
  const mode:MatchMode=snapshot?.mode==='ranked'?'ranked-demo':'casual';
- return {...state,clearMatchSelection,id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator,yIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage,ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
+ return {...state,clearMatchSelection,id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage,ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
 }

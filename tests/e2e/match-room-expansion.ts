@@ -41,6 +41,74 @@ async function meters(page:Page){return page.locator('.dp-fullscreen-stage .dp-g
  const x=root.querySelector<HTMLElement>('.dp-meter-row .dp-meter-indicator')!,y=root.querySelector<HTMLElement>('.dp-meter-track-vertical .dp-meter-indicator')!,xr=x.getBoundingClientRect(),yr=y.getBoundingClientRect();
  return {horizontal:xr.left+xr.width/2,vertical:yr.top+yr.height/2,left:x.style.left,top:y.style.top};
 });}
+async function installPassiveObserverTelemetry(page:Page,movingParticipant:boolean){
+ await page.addInitScript(({movingParticipant})=>{
+  const w=window as any,capacity=192,observerCapacity=64;
+  const data:any={startedAt:performance.now(),capacity,observerCapacity,supported:{longtask:false,'long-animation-frame':false},dropped:{raf:0,style:0,longtask:0,'long-animation-frame':0},raf:[],style:[],longTasks:[],longAnimationFrames:[],inputs:[],lastInput:null};w.__qaObserverTelemetry=data;
+  const keep=(key:string,value:any,limit:number,drop:string)=>{data[key].push(value);if(data[key].length>limit){data[key].shift();data.dropped[drop]++;}};
+  const originalRAF=window.requestAnimationFrame,classified=new WeakMap<FrameRequestCallback,{applicationTick:boolean;functionIndex:number}>(),functionCapacity=16;
+  const applicationRAF:any={classification:'function-source-has-movingPhaseNow-and-phaseStartedAt',callbackSourceStored:false,extraPollingLoop:false,functionCapacity,ringCapacity:capacity,functions:[],invocations:0,totalCallbackWallMs:0,maxCallbackWallMs:0,classifications:0,classificationWallMs:0,droppedFunctions:0,droppedRing:0,ring:[]};data.applicationRAF=applicationRAF;
+  window.requestAnimationFrame=function(callback:FrameRequestCallback){
+   if(typeof callback!=='function')return originalRAF.call(this,callback);
+   let info=classified.get(callback);
+   if(!info){
+    const started=performance.now(),source=Function.prototype.toString.call(callback),applicationTick=source.includes('movingPhaseNow')&&source.includes('phaseStartedAt');
+    info={applicationTick,functionIndex:-1};applicationRAF.classifications++;applicationRAF.classificationWallMs+=performance.now()-started;
+    if(applicationTick){if(applicationRAF.functions.length<functionCapacity){info.functionIndex=applicationRAF.functions.length;applicationRAF.functions.push({index:info.functionIndex,invocations:0,totalCallbackWallMs:0,maxCallbackWallMs:0,firstAt:null,lastAt:null});}else applicationRAF.droppedFunctions++;}
+    classified.set(callback,info);
+   }
+   if(!info.applicationTick)return originalRAF.call(this,callback);
+   const functionIndex=info.functionIndex;
+   return originalRAF.call(this,function(this:Window,timestamp:number){
+    const at=performance.now();
+    try{return callback.call(this,timestamp);}
+    finally{
+     const returnedAt=performance.now(),duration=returnedAt-at;applicationRAF.invocations++;applicationRAF.totalCallbackWallMs+=duration;applicationRAF.maxCallbackWallMs=Math.max(applicationRAF.maxCallbackWallMs,duration);
+     const record=applicationRAF.functions[functionIndex];if(record){record.invocations++;record.totalCallbackWallMs+=duration;record.maxCallbackWallMs=Math.max(record.maxCallbackWallMs,duration);record.firstAt??=at;record.lastAt=at;}
+     applicationRAF.ring.push({functionIndex,at,returnedAt,timestamp});if(applicationRAF.ring.length>capacity){applicationRAF.ring.shift();applicationRAF.droppedRing++;}
+    }
+   });
+  };
+  const performanceObservers:PerformanceObserver[]=[];
+  for(const type of ['longtask','long-animation-frame']){
+   if(!PerformanceObserver.supportedEntryTypes.includes(type))continue;
+   const accept=(entries:PerformanceEntry[])=>{for(const entry of entries){const source=entry.toJSON(),value:any={startTime:entry.startTime,duration:entry.duration};for(const key of ['renderStart','styleAndLayoutStart','blockingDuration','firstUIEventTimestamp'])if(Number.isFinite(source[key]))value[key]=source[key];if(Array.isArray(source.scripts))value.scripts=source.scripts.map((script:any)=>Object.fromEntries(['startTime','duration','executionStart','forcedStyleAndLayoutDuration','pauseDuration'].filter(key=>Number.isFinite(script[key])).map(key=>[key,script[key]])));keep(type==='longtask'?'longTasks':'longAnimationFrames',value,observerCapacity,type);}};
+   const observer=new PerformanceObserver(list=>accept(list.getEntries()));observer.observe({type,buffered:true});performanceObservers.push(observer);data.supported[type]=true;data['drain_'+type]=()=>accept(observer.takeRecords());
+  }
+  let horizontal:HTMLElement|null=null,vertical:HTMLElement|null=null,button:HTMLElement|null=null;
+  const mutations=new MutationObserver(records=>{
+   let horizontalWrites=0,verticalWrites=0,oldEqualsCurrentAtDelivery=0;
+   for(const record of records){if(record.target===horizontal)horizontalWrites++;else if(record.target===vertical)verticalWrites++;if(record.oldValue===(record.target as HTMLElement).getAttribute('style'))oldEqualsCurrentAtDelivery++;}
+   keep('style',{at:performance.now(),horizontalWrites,verticalWrites,oldEqualsCurrentAtDelivery,left:horizontal?.style.left??null,top:vertical?.style.top??null},capacity,'style');
+  });
+  const attachMeters=()=>{
+   if(!horizontal?.isConnected||!vertical?.isConnected){mutations.disconnect();horizontal=document.querySelector('.spectator-live-game .dp-meter-row .dp-meter-indicator')??document.querySelector('.dp-fullscreen-stage .dp-meter-row .dp-meter-indicator');vertical=document.querySelector('.spectator-live-game .dp-meter-track-vertical .dp-meter-indicator')??document.querySelector('.dp-fullscreen-stage .dp-meter-track-vertical .dp-meter-indicator');if(horizontal)mutations.observe(horizontal,{attributes:true,attributeFilter:['style'],attributeOldValue:true});if(vertical)mutations.observe(vertical,{attributes:true,attributeFilter:['style'],attributeOldValue:true});}
+   if(!button?.isConnected)button=horizontal?.closest('.dp-game-panel')?.querySelector('.dp-throw-button')??null;
+  };
+  const heartbeat=(timestamp:number)=>{
+   attachMeters();
+   // Style/attribute reads do not force geometry/layout or participate in draws.
+   keep('raf',{at:performance.now(),timestamp,left:horizontal?.style.left??null,top:vertical?.style.top??null,scope:horizontal?.closest('.spectator-live-game')?'spectator':horizontal?'participant':null,controlLabel:button?.getAttribute('aria-label')??null,controlDisabled:button?.hasAttribute('disabled')??null},capacity,'raf');
+   frame=requestAnimationFrame(heartbeat);
+  };let frame=movingParticipant?requestAnimationFrame(heartbeat):0;
+  const capture=(event:PointerEvent)=>{
+   const captureAt=performance.now(),target=event.target instanceof Element?event.target.closest('.dp-throw-button'):null,label=target?.getAttribute('aria-label');
+   if(!event.isPrimary||event.button!==0||!['Stop horizontale indicator','Stop verticale indicator en gooi'].includes(label??''))return;
+   const input:any={index:data.inputs.length,eventTimeStamp:event.timeStamp,captureAt,isTrusted:event.isTrusted,type:event.type,pointerType:event.pointerType,axis:label==='Stop horizontale indicator'?'horizontal':'vertical',state:{visibility:document.visibilityState,focused:document.hasFocus()},firstRAF:null};data.inputs.push(input);data.lastInput=input;
+   requestAnimationFrame(timestamp=>{input.firstRAF={at:performance.now(),timestamp,left:horizontal?.style.left??null,top:vertical?.style.top??null,state:{visibility:document.visibilityState,focused:document.hasFocus()}};});
+  };if(movingParticipant)window.addEventListener('pointerdown',capture,true);
+  w.__qaObserverSnapshot=()=>{
+   // Idle/spectator pages get only a passive style observer. Attaching at their
+   // first existing outcome checkpoint adds no polling loop or readiness wait.
+   if(!movingParticipant)attachMeters();
+   for(const type of ['longtask','long-animation-frame'])data['drain_'+type]?.();
+   const input=data.lastInput,from=(input?.eventTimeStamp??performance.now())-1000;
+   return {timeOrigin:performance.timeOrigin,nativeInput:input,movingParticipant,styleObserverAttached:!!horizontal&&!!vertical,supported:data.supported,dropped:{...data.dropped},capacity,observerCapacity,observedAt:performance.now(),state:{visibility:document.visibilityState,focused:document.hasFocus()},currentStyles:{left:horizontal?.style.left??null,top:vertical?.style.top??null},applicationRAF:{...applicationRAF,functions:applicationRAF.functions.map((value:any)=>({...value})),ring:applicationRAF.ring.filter((entry:any)=>entry.at>=from)},raf:data.raf.filter((entry:any)=>entry.at>=from),style:data.style.filter((entry:any)=>entry.at>=from),longTasks:data.longTasks.filter((entry:any)=>entry.startTime+entry.duration>=from),longAnimationFrames:data.longAnimationFrames.filter((entry:any)=>entry.startTime+entry.duration>=from)};
+  };
+  // The existing browser.close() also owns these observer/listener lifetimes.
+  w.__qaObserverStop=()=>{cancelAnimationFrame(frame);mutations.disconnect();performanceObservers.forEach(observer=>observer.disconnect());window.removeEventListener('pointerdown',capture,true);};
+ },{movingParticipant});
+}
 async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizontal'|'vertical'){
  // This is a disposable, owned-state observation before the unchanged native
  // driver; no provider call, admission value, sample or command is injected.
@@ -51,11 +119,11 @@ async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizont
  const selector=axis==='horizontal'?'.dp-fullscreen-stage .dp-meter-row .dp-meter-indicator':'.dp-fullscreen-stage .dp-meter-track-vertical .dp-meter-indicator',property=axis==='horizontal'?'left':'top';
  const previous=await actor.page.locator(selector).evaluate((element,property)=>(element as HTMLElement).style.getPropertyValue(property),property);
  await actor.page.waitForFunction(({selector,property,previous})=>{const element=document.querySelector(selector) as HTMLElement|null;return !!element&&element.style.getPropertyValue(property)!==previous;},{selector,property,previous},{polling:'raf',timeout:15000});
- await actor.page.evaluate(()=>{performance.clearMarks('dp-local-stop');});
+ await actor.page.evaluate(()=>{performance.clearMarks('dp-local-stop');const data=(window as any).__qaObserverTelemetry;if(data)data.lastInput=null;});
  const connectionBefore=connections.get(actor.page)?{...connections.get(actor.page)}:null;
  await button.click();
- const observed=await actor.page.evaluate(()=>{const mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined;return {timeOrigin:performance.timeOrigin,mark:mark?{name:mark.name,startTime:mark.startTime,duration:mark.duration}:null,trace:mark?.detail??null};});
- const trace=observed.trace,attempt:any={axis,baseline,connectionBefore,performance:observed.mark,timeOrigin:observed.timeOrigin,trace,renderSampleAt:trace?.rendered?.sampleAt,meterSpeedVersion:trace?.rendered?.meterSpeedVersion,nativeEventTimestampAvailable:false,nativeEventTimestampLimitation:'The existing mark records app handler times, not native event.timeStamp',actualOutcome:null,ingress:{status:'not_checked'}};attempts.push(attempt);await checkpoint();assert.ok(trace?.commandId,'A native stop captured its real app command UUID');
+ const observed=await actor.page.evaluate(()=>{const mark=performance.getEntriesByName('dp-local-stop').at(-1) as PerformanceMark|undefined;return {timeOrigin:performance.timeOrigin,mark:mark?{name:mark.name,startTime:mark.startTime,duration:mark.duration}:null,trace:mark?.detail??null,passive:(window as any).__qaObserverSnapshot?.()??null};});
+ const trace=observed.trace,attempt:any={axis,baseline,connectionBefore,performance:observed.mark,timeOrigin:observed.timeOrigin,trace,renderSampleAt:trace?.rendered?.sampleAt,meterSpeedVersion:trace?.rendered?.meterSpeedVersion,nativeEventTimestampAvailable:!!observed.passive?.nativeInput,nativeEventTimestampLimitation:'Native timestamps and passive RAF/style observers are browser diagnostics, not physical presentation proof',passiveTelemetry:observed.passive,actualOutcome:null,ingress:{status:'not_checked'}};attempts.push(attempt);await checkpoint();assert.ok(trace?.commandId,'A native stop captured its real app command UUID');
  const value=await outcome(trace.commandId);assert.ok(value);attempt.actualOutcome={type:value.type,code:value.payload.code??null,snapshot:value.type==='receipt'?publicSnapshot(value.payload):null};
  await checkpoint();
  try{
@@ -73,6 +141,11 @@ async function nativeStop(actor:Awaited<ReturnType<typeof login>>,axis:'horizont
  }catch{attempt.ingress={status:'diagnostic_read_failed'};}
  // Persist outcome and original bounds before the unchanged acceptance assertion
  // and before forfeit/owned-row cleanup. Missing ingress never replaces its error.
+ attempt.passiveContextTelemetry=await Promise.all(actors.map(async(value,index)=>{try{return {index,snapshot:await value.page.evaluate(()=>(window as any).__qaObserverSnapshot?.()??null),readFailed:false};}catch{return {index,snapshot:null,readFailed:true};}}));
+ attempt.passiveTelemetry=attempt.passiveContextTelemetry.find((value:any)=>actors[value.index].id===actor.id)?.snapshot??observed.passive;
+ const native=attempt.passiveTelemetry?.nativeInput;
+ attempt.nativeEventTimestampAvailable=!!native;
+ attempt.nativeTiming=native?{nativeToCaptureMs:native.captureAt-native.eventTimeStamp,nativeToHookMs:trace.inputAt-native.eventTimeStamp,hookOwnDurationMs:trace.handlerCompletedAt-trace.inputAt,nativeToHandlerCompletedMs:trace.handlerCompletedAt-native.eventTimeStamp,nativeToFirstRAFMs:native.firstRAF?native.firstRAF.at-native.eventTimeStamp:null,latestChosenDrawAfterNativeMs:trace.rendered.renderedAt-native.eventTimeStamp}:null;
  await checkpoint();
  assert.equal(value.type,'receipt','The one normal input is accepted; no new UUID retry is generated');assert.equal(value.payload.commandId,trace.commandId);assert.equal(value.payload.timing.admittedAt,trace.rendered.sampleAt);assert.equal(value.payload.state.meterSpeedVersion,trace.rendered.meterSpeedVersion);
  return value.payload;
@@ -86,7 +159,8 @@ async function forgedSpectatorCommand(page:Page,snapshot:any,extra:Record<string
 try{
  await mkdir(directory,{recursive:true,mode:0o700});
  for(const suffix of ['ViewA','ViewB','ViewC']){const actor=await login(browser,suffix);actors.push(actor);owned.push(actor.id);assert.equal((await get(actor.page,'bootstrap')).actor.role,'player');actor.page.setDefaultTimeout(15000);wire(actor.page);
-  await actor.page.addInitScript(()=>{const send=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))(window as any).__qaGameSocket=this;return send.call(this,data);};});
+ await actor.page.addInitScript(()=>{const send=WebSocket.prototype.send;WebSocket.prototype.send=function(data){const text=data instanceof ArrayBuffer?new TextDecoder().decode(data):ArrayBuffer.isView(data)?new TextDecoder().decode(data):String(data);if(text.includes('command')||text.includes('clock.ping'))(window as any).__qaGameSocket=this;return send.call(this,data);};});
+  await installPassiveObserverTelemetry(actor.page,suffix==='ViewA');
  }
  const [a,b,viewer]=actors;assert.equal(new Set(owned).size,3);
  await privileged.query('insert into community_rooms(id,name,slug,capacity,min_rating,max_rating) values($1,$2,$2,50,0,5000)',[room,label]);await privileged.query("insert into channels(id,kind,room_id) values($1,'community',$2)",[roomChannel,room]);
