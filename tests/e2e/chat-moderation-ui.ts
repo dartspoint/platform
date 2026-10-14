@@ -62,7 +62,7 @@ try{
    },viewport,{timeout:5000});
    // Idle mobile rooms show the new room feed; open its Chat overlay through
    // the same navigation control a player uses before checking the notice.
-   if(viewport.width<1024)await fixture.page.locator('.dp-play-nav').getByRole('button',{name:/^Chat/}).click();
+   if(viewport.width<1024){await fixture.page.locator('.dp-play-nav').getByRole('button',{name:/^Chat/}).click();await fixture.page.locator('.dp-social-sheet').evaluate(async panel=>{await Promise.all(panel.getAnimations().map(animation=>animation.finished));});}
    await notice.waitFor();const box=await notice.boundingBox();assert.ok(box&&box.y>=0&&box.y+box.height<=viewport.height+1,'Slow-mode notice remains visible in compact desktop/mobile chat');
   }
   await fixture.page.setViewportSize({width:1366,height:768});await fixture.page.waitForTimeout(5100);
