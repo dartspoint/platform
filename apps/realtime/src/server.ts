@@ -12,6 +12,7 @@ import {acquireMatch,renewMatch,matchAccess,matchAccessBatch,captureMatchIngress
 import {trustedLatency,sampleWindow} from '../../../packages/game-core/src/timing';
 import {IngressOrder} from '../../../packages/data/src/ingress-order';
 import {DomainError,requireThat,uuid,commandSchema} from '../../../packages/contracts/src/index';
+import {MatchWriterLease} from './match-writer-lease';
 
 const writerId=randomUUID();
 const eventLoop=monitorEventLoopDelay({resolution:20});eventLoop.enable();
@@ -29,23 +30,30 @@ class DartsPersonal extends Room {
 }
 class DartsMatch extends Room {
  maxClients=52;matchId='';fence=0;version=-1;queue:Promise<unknown>=Promise.resolve();pendingCommands=0;publishing=false;
+ writerLease:MatchWriterLease|undefined;
  challenges=new WeakMap<Client,{nonce:string;at:number}>();samples=new WeakMap<Client,number[]>();
  connections=new WeakMap<Client,string>();
  ingressOrder=new IngressOrder(16,16);
  challenge(client:Client){if(this.challenges.has(client))return;const nonce=randomUUID();this.challenges.set(client,{nonce,at:performance.now()});client.send('clock.challenge',{nonce});}
  async onCreate(options:any){
-  this.matchId=uuid.parse(options.matchId);this.fence=await acquireMatch(this.matchId,writerId);await this.setMetadata({matchId:this.matchId});
+  this.matchId=uuid.parse(options.matchId);this.fence=await acquireMatch(this.matchId,writerId);
+  this.writerLease=new MatchWriterLease({
+   renew:()=>renewMatch(this.matchId,writerId,this.fence),
+   release:()=>db().query('update matches set lease_until=now() where id=$1 and writer_id=$2 and writer_fence=$3',[this.matchId,writerId,this.fence]),
+   disconnect:()=>this.disconnect(),report:event=>console.error(JSON.stringify({event})),
+  });
+  await this.setMetadata({matchId:this.matchId});
   this.onMessage('command',(client:Client,input:unknown)=>{
    const receivedAt=Date.now(),actor=client.auth as Actor,samples=this.samples.get(client)??[],latencyMs=trustedLatency(samples),connectionId=this.connections.get(client),admissionWindowMs=sampleWindow(samples);
    const commandId=uuid.safeParse((input as any)?.commandId).success?(input as any).commandId:undefined;
-   if(this.pendingCommands>=16||actor.expiresAt<=receivedAt){client.send('error',{commandId,code:'command_busy',message:'Wacht op je vorige actie of herstel je verbinding.'});return;}
+   if(this.writerLease?.isClosing||this.pendingCommands>=16||actor.expiresAt<=receivedAt){client.send('error',{commandId,code:'command_busy',message:'Wacht op je vorige actie of herstel je verbinding.'});return;}
    this.pendingCommands++;
    // Reserve receive order before asynchronous policy/DB reads. Capture has its
    // own short queue; snapshots and clocks never enter either command queue.
    const captured=this.ingressOrder.reserve('commands').run(()=>captureMatchIngress(actor,input,{receivedAt,latencyMs,connectionId,admissionWindowMs})).then(value=>({ok:true as const,value}),error=>({ok:false as const,error}));
    this.queue=this.queue.then(async()=>{
     let original:Awaited<ReturnType<typeof captureMatchIngress>>|undefined;
-    try{const capture=await captured;if(!capture.ok)throw capture.error;original=capture.value;const result=await matchCommand(actor,input,writerId,this.fence,{receivedAt,latencyMs,connectionId,admissionWindowMs});client.send('receipt',result);void this.publish();}
+    try{const capture=await captured;if(!capture.ok)throw capture.error;original=capture.value;requireThat(!this.writerLease?.isClosing,'stale_writer',409);const result=await matchCommand(actor,input,writerId,this.fence,{receivedAt,latencyMs,connectionId,admissionWindowMs});client.send('receipt',result);void this.publish();}
     catch(e){
      let ingress;
      // Only this authenticated player's invalid-sample rejection gets its
@@ -69,7 +77,7 @@ class DartsMatch extends Room {
   this.onMessage('authenticate',async(client:Client,input:any)=>{try{const actor=await verifyToken(input?.token);requireThat(actor.id===(client.auth as Actor).id,'identity_mismatch',403);client.auth=actor;}catch{client.leave(4001);}});
   // At most one publication; periodic reads never join the authoritative command queue.
   this.clock.setInterval(()=>{void this.publish();},100);
-  this.clock.setInterval(async()=>{if(!await renewMatch(this.matchId,writerId,this.fence))await this.disconnect();},10000);
+  this.clock.setInterval(()=>{void this.writerLease?.renew();},10000);
   this.clock.setInterval(async()=>{for(const client of this.clients){try{const actor=client.auth as Actor;requireThat(actor.expiresAt>Date.now(),'session_expired',401);await assertSessionActive(actor);const fresh=await actorById(actor.id,actor.expiresAt);requireThat(fresh.sessionVersion===actor.sessionVersion,'session_revoked',401);await matchAccess(fresh,this.matchId);}catch{client.leave(4001);}}},10000);
  }
  async onAuth(_client:Client,options:any){const actor=await verifyToken(options?.token);await matchAccess(actor,this.matchId);return actor;}
@@ -90,7 +98,7 @@ class DartsMatch extends Room {
  }
  async onReconnect(client:Client){await connection(client.auth as Actor,this.matchId,true);client.send('snapshot',await matchAccess(client.auth as Actor,this.matchId));}
  async onLeave(client:Client){if(!this.clients.some(c=>c!==client&&(c.auth as Actor)?.id===(client.auth as Actor).id))await connection(client.auth as Actor,this.matchId,false);}
- async onDispose(){await db().query('update matches set lease_until=now() where id=$1 and writer_id=$2 and writer_fence=$3',[this.matchId,writerId,this.fence]);}
+ async onDispose(){await this.writerLease?.dispose();}
 }
 const http=createServer();
 // Colyseus handles HTTP matchmaking before Express; configure its supported CORS hook.

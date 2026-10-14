@@ -42,9 +42,7 @@ cleanup_owned_services() {
   # Separate opt-in diagnostics run after the normal suite stops, while the
   # three exact native children and disposable database are still available.
   if [[ "${DARTSPOINT_QA_INPUT_DIAGNOSTIC:-false}" == true \
-        && "${DARTSPOINT_QA_RUNNER:-false}" == true && "$normal_game_reached" == true \
-        && ( "${DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET:-game}" == game \
-             || ( "${DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET:-game}" == observer && "$normal_observer_reached" == true ) ) ]] \
+        && "${DARTSPOINT_QA_RUNNER:-false}" == true && "$normal_game_reached" == true ]] \
       && owned_child_running "$web_pid" "$web_start" \
       && owned_child_running "$realtime_pid" "$realtime_start" \
       && owned_child_running "$worker_pid" "$worker_start"; then

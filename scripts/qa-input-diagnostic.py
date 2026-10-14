@@ -66,8 +66,8 @@ def guarded_context():
             and os.environ.get('GITHUB_EVENT_NAME') == 'push'
             and os.environ.get('GITHUB_REF') == 'refs/heads/main'
             and os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED') == 'true', 'diagnostic_context_invalid')
-    require(target != 'observer' or os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED') == 'true',
-            'diagnostic_observer_not_reached')
+    require(os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED', 'false') in ('true', 'false'),
+            'diagnostic_observer_reached_invalid')
     spec = importlib.util.spec_from_file_location('qa_context', Path(__file__).with_name('qa-runner-context.py'))
     qa = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(qa)
@@ -320,6 +320,7 @@ def main():
             and report.get('diagnostic') is True and report.get('neverNormalAcceptance') is True \
             and report.get('normalOriginalExitCode') == original \
             and report.get('diagnosticTarget') == target \
+            and report.get('normalObserverReached') is (os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED') == 'true') \
             and report.get('diagnosticExitCode') == result['childExitCode'] \
             and report.get('normalArtifactsUnchanged') is True \
             and artifact_schema_ok and artifacts_before == artifacts_after \
@@ -331,6 +332,7 @@ def main():
         infrastructure_ok = False
     metadata = {**binding, **result, 'diagnostic': True, 'neverNormalAcceptance': True,
                 'diagnosticTarget': target,
+                'normalObserverReached': os.environ.get('DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED') == 'true',
                 'ongoingCapacityFileExcludedFromImmutableArtifactSnapshot': True,
                 'visibleCgroupAncestorsBefore': capacity_before,
                 'visibleCgroupAncestorsAfter': capacity_after,

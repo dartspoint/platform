@@ -16,6 +16,7 @@ const diagnosticTarget=process.env.DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET||'game'
 const normalArtifacts=join(root,'artifacts'),fixturePath=join(root,diagnosticTarget==='observer'?'tests/e2e/match-room-expansion.ts':'tests/e2e/game-timing.ts');
 const sourcePaths=[
  'scripts/qa-input-diagnostic-runner.ts','scripts/qa-input-diagnostic.py','scripts/qa-input-diagnostic-capacity.py',
+ 'apps/realtime/src/server.ts','apps/realtime/src/match-writer-lease.ts',
  'tests/e2e/game-timing.ts','tests/e2e/match-room-expansion.ts','tests/e2e/helpers.ts','tests/e2e/game-command.ts',
  'tests/e2e/throw-performance-profile.ts','tests/e2e/throw-presentation-profile.ts',
  'apps/web/components/darts-game.tsx','apps/web/components/darts-practice.tsx',
@@ -155,7 +156,8 @@ let originalLaunch:typeof chromium.launch|undefined;
 try{
  assert.equal(process.env.DARTSPOINT_QA_RUNNER,'true');assert.equal(process.env.DARTSPOINT_QA_INPUT_DIAGNOSTIC,'true');assert.equal(process.env.DARTSPOINT_QA_INPUT_NORMAL_GAME_REACHED,'true');
  assert.ok(['game','observer'].includes(diagnosticTarget),'diagnostic_target_invalid');
- if(diagnosticTarget==='observer')assert.equal(process.env.DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED,'true');
+ assert.ok(['true','false'].includes(process.env.DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED??'false'));
+ report.normalObserverReached=process.env.DARTSPOINT_QA_INPUT_NORMAL_OBSERVER_REACHED==='true';
  assert.equal(root,'/home/runner-qa/actions-runner/_work/platform/platform');assert.equal(process.env.HOME,'/home/runner-qa');
  assert.equal(execFileSync('id',['-un'],{encoding:'utf8'}).trim(),'runner-qa');assert.ok(process.getuid!()>=1000&&process.getuid!()===process.geteuid!());
  assert.equal(process.env.GITHUB_REPOSITORY,'dartspoint/platform');assert.equal(process.env.GITHUB_EVENT_NAME,'push');assert.equal(process.env.GITHUB_REF,'refs/heads/main');

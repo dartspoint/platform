@@ -31,9 +31,11 @@ de bijbehorende SPKI-publieke sleutel in
 worden geüpload; de privésleutel blijft bij de operator. Zet
 `DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET=observer` voor dezelfde drie gebruikerscontexten,
 zes native stops en oorspronkelijke assertions van de toeschouwertest. De
-standaard `game` behoudt de bestaande werpdiagnose. Het gekozen normale scenario
-moet eerst bereikt zijn; opname en uitvoer komen in een afzonderlijke private
-sandbox. Normale spel-, oefen-, chat- en toeschouwerbewijzen worden vóór en na
+standaard `game` behoudt de bestaande werpdiagnose. De normale werptests moeten
+eerst gestart zijn; de afzonderlijke observeropname mag ook volgen wanneer die
+eerder falen. Het rapport bewaart die oorspronkelijke failure en vermeldt of
+de normale toeschouwertest bereikt was. Opname en uitvoer komen in een afzonderlijke
+private sandbox. Normale spel-, oefen-, chat- en toeschouwerbewijzen worden vóór en na
 de diagnose op inhoud en aanwezigheid gecontroleerd. Het nog lopende
 capaciteitsmeetbestand is hiervan uitgesloten. De observeropname gebruikt geen
 screenshots en meet ook de zichtbare eigen cgroup-ancestors vóór en na de opname.
