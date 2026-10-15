@@ -12,9 +12,18 @@ test('Only the configured production apex can opt into search',()=>{
     ['staging','https://staging.dartspoint.nl'],['staging','https://dartspoint.nl'],
     ['production','https://staging.dartspoint.nl'],['production','https://www.dartspoint.nl'],
     ['production','http://dartspoint.nl'],['production','https://dartspoint.nl.evil.invalid'],
-    ['production','https://user:secret@dartspoint.nl'],['production',undefined],
+    ['production','https://user:secret@dartspoint.nl'],['production',''],
     ['development','http://127.0.0.1:4300'],
   ] as const)assert.equal(searchContext(environment,url).indexable,false,`${environment}: ${url}`);
+  const previous=process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    assert.equal(searchContext('production').indexable,false);
+    process.env.NEXT_PUBLIC_APP_URL='https://dartspoint.nl';
+    assert.equal(searchContext('production').indexable,true);
+  } finally {
+    if(previous===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=previous;
+  }
 });
 
 test('Search metadata keeps staging and unpublished documents out of production canonicals',async()=>{
