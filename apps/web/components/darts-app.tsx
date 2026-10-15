@@ -41,18 +41,18 @@ function SpectatorView({ matchId, variant, lessMotion, onInvite, onProfile, onMe
   const [admission,setAdmission]=useState<SpectatorAdmission|null>(null),[message,setMessage]=useState(''),[tab,setTab]=useState('match');
   useEffect(()=>{
     let cancelled=false;setAdmission(null);setMessage('');setTab('match');
-    if(!matchId){setMessage('Deze speler heeft geen livewedstrijd meer.');return;}
+    if(!matchId){setMessage('Deze speler speelt op dit moment geen wedstrijd.');return;}
     void mutate<SpectatorAdmission>('match/spectate',{matchId}).then(value=>{
       if(cancelled)return;
-      if(value.matchId!==matchId){setMessage('De livewedstrijd kon niet worden geopend.');return;}
+      if(value.matchId!==matchId){setMessage('Meekijken lukt nu niet. Probeer het opnieuw.');return;}
       setAdmission(value);
-    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:'Deze wedstrijd is niet beschikbaar om mee te kijken.');});
+    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:'Je kunt bij deze wedstrijd niet meekijken.');});
     return()=>{cancelled=true;};
   },[matchId]);
   const roomName=platform.rooms.find(room=>room.id===admission?.roomId)?.name??'';
   return <div className="spectator-view">
     <div className="spectator-status"><span className="live-pill"><i/> LIVE</span><span><Eye size={14}/>Meekijken{admission?` · #${admission.publicGameId}`:''}</span></div>
-    {message?<p className="spectator-note" role="status">{message}</p>:!admission?<p className="spectator-note" role="status">Toegang tot de livewedstrijd wordt gecontroleerd…</p>:<SpectatorGame matchId={admission.matchId} variant={variant} lessMotion={lessMotion}>
+    {message?<p className="spectator-note" role="status">{message}</p>:!admission?<p className="spectator-note" role="status">Even geduld, je kijkt zo mee…</p>:<SpectatorGame matchId={admission.matchId} variant={variant} lessMotion={lessMotion}>
       <ChatPanel gameId={admission.matchId} roomId={admission.roomId} roomName={roomName} activeTab={tab} onTabChange={setTab} embedded compact readEnabled quiet={false} onInvite={onInvite} onProfile={onProfile} onMessage={onMessage} onSpectate={onSpectate}/>
       <MatchQueue matchId={admission.matchId} onPlayNext={onPlayNext}/>
     </SpectatorGame>}
@@ -303,7 +303,6 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
                 <button onClick={() => setPanel("tournaments")}><Trophy size={18}/>Toernooien</button>
                 <a href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }}><ArrowLeft size={18}/>Terug naar de lobby</a>
                 <button onClick={() => requestLeave("logout")}><LogOut size={18}/>Uitloggen</button>
-                <p className="settings-note">Partij opgeslagen. Je kunt vanuit de lobby verder spelen.</p>
               </div>
             </>}
           </div>
@@ -312,7 +311,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
       <AnimatePresence>{toast && <motion.div className="app-toast dp-play-toast" role="status" initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}><Check size={17}/><span>{toast}</span><button onClick={() => setToast("")} aria-label="Sluiten"><X size={14}/></button></motion.div>}</AnimatePresence>
     <MatchInviteDialog opponent={invite} onClose={() => setInvite(null)} onStart={acceptInvite} initialRanked={currentRoom?.category === "ranked"}/>
     <Dialog open={!!profile} onOpenChange={open => !open && setProfile(null)}><DialogContent className={`${commonDialog} profile-dialog`}><DialogHeader className="sr-only"><DialogTitle>Profiel van {profileLabel}</DialogTitle><DialogDescription>Spelersprofiel, statistieken en prestaties.</DialogDescription></DialogHeader>{profile && <ProfileView name={profile} roomName={room} gameId={game.id}/>}{profileLabel === selfName() && isOwner && <a href="/beheer" className="dp-panel-link"><ShieldCheck size={16}/>Platformbeheer<ArrowUpRight size={15}/></a>}{profile && profileLabel !== selfName() && <Button className="profile-message-button" variant="outline" disabled={isBlocked(profile)} onClick={() => openPrivateChat(profile)}><MessageCircle size={16}/>Privébericht</Button>}<Button className="dialog-primary profile-invite-button" disabled={!!profile && profileLabel!==selfName()&&(isBlocked(profile)||!!invitationReason(profile))} onClick={() => { if (profileLabel === selfName()) { setProfile(null); navigate("rankings"); } else { invitePlayer(profile!); setProfile(null); } }}>{profileLabel === selfName() ? "Bekijk de ranglijst" : invitationReason(profile??'')||"Nodig uit voor een potje"}<ArrowUpRight size={16}/></Button></DialogContent></Dialog>
-    <Dialog open={!!spectate} onOpenChange={open => !open && setSpectate(null)}><DialogContent className={`${commonDialog} spectator-dialog`}><DialogHeader><DialogTitle>Langs de oche</DialogTitle><DialogDescription>De livewedstrijd en wedstrijdchat, zonder jouw eigen partij te verlaten.</DialogDescription></DialogHeader>{spectate && <SpectatorView key={spectatorMatchId??spectate} matchId={spectatorMatchId} variant={variant} lessMotion={lessMotion} onInvite={id=>{setSpectate(null);invitePlayer(id);}} onProfile={id=>{setSpectate(null);openProfile(id);}} onMessage={id=>{setSpectate(null);void openPrivateChat(id);}} onSpectate={setSpectate} onPlayNext={()=>{invitePlayer(spectate===selfName()?opponent:spectate);setSpectate(null);}}/>}<Button className="dialog-primary" onClick={() => setSpectate(null)}>Terug naar jouw wedstrijd <ArrowRight size={15}/></Button></DialogContent></Dialog>
+    <Dialog open={!!spectate} onOpenChange={open => !open && setSpectate(null)}><DialogContent className={`${commonDialog} spectator-dialog`}><DialogHeader><DialogTitle>Langs de oche</DialogTitle><DialogDescription>Volg de wedstrijd en praat mee. Je eigen partij blijft open.</DialogDescription></DialogHeader>{spectate && <SpectatorView key={spectatorMatchId??spectate} matchId={spectatorMatchId} variant={variant} lessMotion={lessMotion} onInvite={id=>{setSpectate(null);invitePlayer(id);}} onProfile={id=>{setSpectate(null);openProfile(id);}} onMessage={id=>{setSpectate(null);void openPrivateChat(id);}} onSpectate={setSpectate} onPlayNext={()=>{invitePlayer(spectate===selfName()?opponent:spectate);setSpectate(null);}}/>}<Button className="dialog-primary" onClick={() => setSpectate(null)}>Terug naar jouw wedstrijd <ArrowRight size={15}/></Button></DialogContent></Dialog>
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>Jouw speelritme</DialogTitle><DialogDescription>Bediening, geluid en sociale voorkeuren.</DialogDescription></DialogHeader><DartsPreferencesPanel/><Button className="dialog-primary" onClick={() => setSettingsOpen(false)}>Helemaal goed <Check size={16}/></Button></DialogContent></Dialog>
     <Dialog open={moderationOpen&&canManageRoom(currentRoom?.id??"")} onOpenChange={setModerationOpen}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>Kamerbeheer</DialogTitle><DialogDescription>Houd {room} een fijne plek voor iedereen.</DialogDescription></DialogHeader><ModeratorPanel room={room}/></DialogContent></Dialog>
     <Dialog open={notifications} onOpenChange={setNotifications}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>Even bijpraten</DialogTitle><DialogDescription>Wat er speelt in de club.</DialogDescription></DialogHeader><DartsNotifications/></DialogContent></Dialog>

@@ -17,7 +17,7 @@ export class ApiError extends Error{constructor(message:string,public code:strin
 export async function api<T=any>(path:string,input?:unknown):Promise<T>{
  if(path==='chat/send')lastChatActivity=Date.now();
  const response=await fetch('/api/platform/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input)});
- const data=await response.json();if(!response.ok)throw new ApiError(data.error??'De actie kon niet worden uitgevoerd.',data.code,response.status,data.retryAfter);return data as T;
+ const data=await response.json();if(!response.ok)throw new ApiError(typeof data.error==='string'&&data.error.trim()&&data.error!==data.code?data.error:'Dit is niet gelukt. Probeer het nog eens.',data.code,response.status,data.retryAfter);return data as T;
 }
 const olderRecords=new Map<string,any>();let historyActor:string|undefined;
 export async function loadOlderRecords(){const actor=snapshot.actor.id;if(actor!==historyActor){olderRecords.clear();historyActor=actor;}const last=snapshot.records.at(-1);const records=await api<any[]>("history"+(last?"?before="+encodeURIComponent(last.ended_at)+"&id="+last.id:""));if(actor!==snapshot.actor?.id)return;for(const record of records)olderRecords.set(record.id,record);snapshot={...snapshot,records:[...snapshot.records,...records.filter(r=>!snapshot.records.some(p=>p.id===r.id))]};listeners.forEach(fn=>fn());return records.length;}
@@ -27,7 +27,7 @@ let deferredRefresh:ReturnType<typeof setTimeout>|undefined,deferredAt=0,lastCha
 /** Coalesce inbox/read metadata refreshes; content arrives through its personal
  * projection. Keep a one-second bound even during continuous room activity. */
 export function schedulePlatformRefresh(){const now=Date.now();deferredAt||=now;clearTimeout(deferredRefresh);deferredRefresh=setTimeout(()=>{deferredAt=0;deferredRefresh=undefined;void refreshPlatform().catch(()=>{});},Math.min(500,Math.max(0,1000-(now-deferredAt))));}
-export async function mutate<T=any>(path:string,input:unknown):Promise<T>{try{const data=await api<T>(path,input);await refreshPlatform();return data;}catch(e){toast.error(e instanceof Error?e.message:'De actie kon niet worden uitgevoerd.');throw e;}}
+export async function mutate<T=any>(path:string,input:unknown):Promise<T>{try{const data=await api<T>(path,input);await refreshPlatform();return data;}catch(e){toast.error(e instanceof Error?e.message:'Dit is niet gelukt. Probeer het nog eens.');throw e;}}
 export function PlatformProvider({initial,children}:{initial:PlatformSnapshot;children:ReactNode}){
  const [ready,setReady]=useState(false);
  useEffect(()=>{

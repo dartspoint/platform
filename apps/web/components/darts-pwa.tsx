@@ -36,8 +36,8 @@ export function DartsPwaInstallButton({ className = "dp-secondary" }: { classNam
       await prompt.prompt();
       const choice = await prompt.userChoice;
       deferredInstall = null; setAvailable(false);
-      setHelp(choice.outcome === "accepted" ? "DartsPoint wordt op je beginscherm gezet." : "Je kunt DartsPoint later alsnog installeren.");
-    } else setHelp(/iPhone|iPad|iPod/.test(navigator.userAgent) ? "Open DartsPoint in Safari. Tik op Delen en kies ‘Zet op beginscherm’." : "Open het browsermenu en kies ‘App installeren’ of ‘Toevoegen aan startscherm’. Voor je wedstrijd en opgeslagen oefenvoortgang is een internetverbinding nodig.");
+      setHelp(choice.outcome === "accepted" ? "Je kunt DartsPoint straks als app openen." : "Je kunt de app later nog installeren.");
+    } else setHelp(/iPhone|iPad|iPod/.test(navigator.userAgent) ? "Open DartsPoint in Safari. Tik op Delen en kies ‘Zet op beginscherm’." : "Kies ‘App installeren’ of ‘Toevoegen aan startscherm’ in het menu van je browser. Je hebt internet nodig om te spelen en je oefenvoortgang te bewaren.");
   }
   return <div><button type="button" className={className} onClick={() => void install()} disabled={installed}>{available ? <Download size={17} /> : <Smartphone size={17} />}{installed ? "DartsPoint is geïnstalleerd" : "Installeer DartsPoint"}</button>{help && <p role="status" style={{ fontSize: 12, color: "var(--muted, #91aa9c)", maxWidth: 380, marginTop: 10, lineHeight: 1.6 }}>{help}</p>}</div>;
 }

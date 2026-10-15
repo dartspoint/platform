@@ -34,11 +34,11 @@ export function PlayerSocialActions({ userId, name, room = "", gameId = "", cont
       <div className="dp-social-form-title"><strong>Wat wil je melden?</strong><button type="button" aria-label="Melding sluiten" onClick={() => setReportOpen(false)}><X size={16}/></button></div>
       <label>Reden<select value={reason} onChange={event => setReason(event.target.value)}><option>Onvriendelijk gedrag</option><option>Spam of ongewenste berichten</option><option>Vermoeden van valsspelen</option><option>Ongepaste gebruikersnaam</option><option>Anders</option></select></label>
       <label>Toelichting <small>optioneel</small><textarea value={detail} maxLength={600} onChange={event => setDetail(event.target.value)} placeholder="Wat gebeurde er?" rows={3}/></label>
-      <span className="dp-social-context">{room}{gameId&&` · Game ${publicGameLabel(platform,gameId)}`}{context && " · Gesprekscontext toegevoegd"}</span>
+      <span className="dp-social-context">{room}{gameId&&` · Game ${publicGameLabel(platform,gameId)}`}{context && " · Je melding gaat naar de moderators"}</span>
       <button className="dp-social-primary" type="submit"><Flag size={14}/>Melding opslaan</button>
       <small>Je melding wordt door de moderatoren beoordeeld.</small>
     </form>}
-    {saved && <p className="dp-social-status is-success" role="status"><Check size={15}/>Melding {saved} opgeslagen met de wedstrijdgegevens.</p>}
+    {saved && <p className="dp-social-status is-success" role="status"><Check size={15}/>Je melding is verstuurd. Bedankt voor het doorgeven.</p>}
   </div>;
 }
 
@@ -82,7 +82,7 @@ export function ModeratorPanel({ room = "" }: { room?: string }) {
       </form>
       {feedback && <p role="status" className="dp-social-status is-success"><Check size={14}/>{feedback}</p>}
       {entries.length > 0 && <div className="dp-moderation-log"><h4>Acties in deze kamer</h4>{entries.map(entry => <article key={entry.id}><div><strong>{entry.name}</strong><span>{entry.kind === "warn" ? "Waarschuwing" : entry.kind === "mute" ? "Mute" : "Verwijderd"}{entry.kind !== "warn" ? entry.until > now ? ` · ${Math.max(1, Math.ceil((entry.until - now) / 60_000))} min` : " · Beëindigd" : ""}</span></div><p>{entry.reason}</p><small>Door {entry.moderator} · {new Date(entry.createdAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}</small>{entry.kind !== "warn" && entry.until > now && <button onClick={async () => await revokeModeration(entry.id)}>Opheffen</button>}</article>)}</div>}
-      {social.reports.length > 0 && <div className="dp-moderation-log"><h4>Opgeslagen meldingen <span>{social.reports.length}</span></h4>{social.reports.slice(-5).reverse().map(report => <article key={report.id}><div><strong>{report.name}</strong><span>{report.status}</span></div><p>{report.reason}{report.detail ? ` — ${report.detail}` : ""}</p><small>{report.room} · Game {publicGameLabel(platform,report.gameId)} · {report.id}</small>{report.context && <details><summary>Gesprekscontext</summary><p>{report.context}</p></details>}</article>)}</div>}
+      {social.reports.length > 0 && <div className="dp-moderation-log"><h4>Opgeslagen meldingen <span>{social.reports.length}</span></h4>{social.reports.slice(-5).reverse().map(report => <article key={report.id}><div><strong>{report.name}</strong><span>{report.status}</span></div><p>{report.reason}{report.detail ? ` — ${report.detail}` : ""}</p><small>{report.room} · Game {publicGameLabel(platform,report.gameId)}</small>{report.context && <details><summary>Bijbehorend bericht</summary><p>{report.context}</p></details>}</article>)}</div>}
       {social.blocked.length > 0 && <div className="dp-moderation-log"><h4>Door jou geblokkeerd</h4>{social.blocked.map(blocked => <article key={blocked}><div><strong>{blocked}</strong><button onClick={async () => await toggleBlocked(blocked)}>Deblokkeren</button></div></article>)}</div>}
     </div>}
   </section>;

@@ -100,7 +100,7 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
     const fresh=await api<Snapshot>('match/'+actualId);if(!currentSocket())return;apply(fresh);
     if(pending.current)room.send('command',pending.current);
     if(renew)clearInterval(renew);renew=setInterval(()=>{void browserAuth().auth.getSession().then(({data})=>{if(data.session)room.send('authenticate',{token:data.session.access_token});});},60000);
-   }catch(e){if(cancelled)return;if(readOnly){current.current=null;setSnapshot(null);}setConnectionMessage(e instanceof Error?e.message:'Verbinding maken lukt niet.');retry=setTimeout(connect,3000);}
+   }catch(e){if(cancelled)return;if(readOnly){current.current=null;setSnapshot(null);}setConnectionMessage(e instanceof Error?e.message:'We kunnen je wedstrijd niet openen. We proberen het opnieuw.');retry=setTimeout(connect,3000);}
   };
   void connect();return ()=>{cancelled=true;clearTimeout(retry);clearInterval(renew);clearInterval(ping);void socket.current?.leave();socket.current=null;current.current=null;pending.current=null;wake();readyRetries.current=0;setSnapshot(null);};
  },[actualId,apply,readOnly,wake]);

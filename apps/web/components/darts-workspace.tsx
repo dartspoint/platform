@@ -33,7 +33,7 @@ export function PracticeWorkspace({tutorial=false}:{tutorial?:boolean}){
  useEffect(()=>{setTab('room');},[room?.id]);
  async function openMessage(name:string){const channelId=await openPrivateChatTab(name);if(channelId)setTab('private:'+channelId);}
  function invitePlayer(name:string){const reason=invitationReason(name);if(reason){setFeedback(reason);return;}setInvite(playerId(name)??name);}
- function spectatePlayer(identifier:string){const id=playerId(identifier),match=p.matches.find(m=>m.players?.some((player:any)=>player.id===id));if(!id||!match){setFeedback('Deze wedstrijd is niet meer beschikbaar.');return;}try{sessionStorage.setItem('dartspoint-spectate-v1',id);}catch{setFeedback('Je keuze kon niet worden bewaard. Probeer het opnieuw.');return;}window.location.assign('/spelen');}
+ function spectatePlayer(identifier:string){const id=playerId(identifier),match=p.matches.find(m=>m.players?.some((player:any)=>player.id===id));if(!id||!match){setFeedback('Je kunt deze wedstrijd nu niet bekijken. Kies een andere wedstrijd.');return;}try{sessionStorage.setItem('dartspoint-spectate-v1',id);}catch{setFeedback('Meekijken lukt nu niet. Probeer het opnieuw.');return;}window.location.assign('/spelen');}
  // Keep the practice component at the same tree position. A responsive remount
  // starts another reset, whose late response can complete the visible session.
  const standaloneStyle=desktop?undefined:{display:'contents' as const};

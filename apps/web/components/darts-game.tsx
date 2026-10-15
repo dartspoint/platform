@@ -331,7 +331,7 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
       {!game.isSpectator && <button className={`dp-throw-button ${active ? "is-timing" : ""}`} {...throwInput} disabled={disabled} aria-label={game.phase === "won" ? "Speel opnieuw" : game.phase === "horizontal" ? "Stop horizontale indicator" : game.phase === "vertical" ? "Stop verticale indicator en gooi" : game.phase === "flight" ? "Pijl onderweg" : "Tegenstander aan de beurt"}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? "STOP" : "GOOI"}</span><ArrowUpRight size={15} /></>}</button>}
     </div>
     {game.timeoutWarning && game.phase !== "won" && <p className="dp-connection-note dp-timeout-warning" role="status" aria-live="polite" data-timeout-strike={game.timeoutWarning.strike}>
-      {game.timeoutWarning.player === 0 ? game.playerName : game.opponentName}: {game.timeoutWarning.strike === 1 ? "eerste time-outwaarschuwing. Gooi binnen de nieuwe beurttijd." : "tweede time-outwaarschuwing. Bij de volgende time-out verlies je de wedstrijd."}
+      {game.timeoutWarning.player === 0 ? game.playerName : game.opponentName}: {game.timeoutWarning.strike === 1 ? "je beurttijd is voorbij. Gooi binnen de nieuwe beurttijd." : "je beurttijd is voor de tweede keer voorbij. Bij een derde keer verlies je de wedstrijd."}
     </p>}
     <Scoreboard game={game} lessMotion={lessMotion} checkoutHints={checkoutHints} />
     {showExperience && <MatchExperience game={game} lessMotion={lessMotion} hidden={interactionBlocked}/>}

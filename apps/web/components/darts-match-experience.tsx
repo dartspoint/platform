@@ -51,7 +51,7 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
         }
       }
       await game.closeCompletedMatch();
-    }catch(error){setResultError(error instanceof Error?error.message:'Het wedstrijdoverzicht kon niet worden afgesloten.');}
+    }catch(error){setResultError(error instanceof Error?error.message:'Afsluiten lukt nu niet. Probeer het opnieuw.');}
     finally{setResultBusy(false);}
     })();closeFlight.current=task.finally(()=>{closeFlight.current=null;});return closeFlight.current;
   },[game.closeCompletedMatch,rematchId]);
@@ -62,14 +62,14 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
         if(status.state==='accepted'&&status.match_id){window.location.assign('/spelen?match='+status.match_id);return;}
         if(['rejected','cancelled','expired'].includes(status.state)){await closeResult();return;}
         setResultError('');
-      }catch(error){if(!disposed)setResultError(error instanceof Error?error.message:'De uitnodigingstatus kon niet worden opgehaald.');}
+      }catch(error){if(!disposed)setResultError(error instanceof Error?error.message:'Je uitnodiging kan nu niet worden bijgewerkt. We proberen het opnieuw.');}
       if(!disposed)timer=setTimeout(check,1500);
     };void check();return()=>{disposed=true;clearTimeout(timer);};
   },[rematchId,closeResult]);
   async function inviteAgain(){
     setResultBusy(true);setResultError('');
     try{const invitation=await game.rematch();setRematchId(invitation.id);}
-    catch(error){setResultError(error instanceof Error?error.message:'De uitnodiging kon niet worden verstuurd.');}
+    catch(error){setResultError(error instanceof Error?error.message:'Uitnodigen lukt nu niet. Probeer het opnieuw.');}
     finally{setResultBusy(false);}
   }
   const over = game.phase === "won";
@@ -81,9 +81,9 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
       <button onClick={() => setDetailsOpen(value => !value)} aria-expanded={detailsOpen} aria-label="Wedstrijdinformatie en verbinding"><span className={`dp-verification-dot ${game.verification}`}/>{game.modeLabel}<ChevronDown size={11}/></button>
       {over && <button onClick={() => setEndOpen(true)}><Trophy size={12}/>Uitslag</button>}
       {detailsOpen && <div className="dp-match-tool-menu">
-        <strong>Game {gameLabel}</strong><span>{game.verification === "server" ? "Worpen gecontroleerd op de server" : "Lokale demowedstrijd"}</span>
+        <strong>Game {gameLabel}</strong>
         <button onClick={() => { setHistoryOpen(true); setDetailsOpen(false); }}><History size={14}/>Bekijk alle worpen</button>
-        {!over && <button onClick={() => { game.simulateDisconnect(); setDetailsOpen(false); }}><WifiOff size={14}/>Test verbinding herstellen</button>}
+        {!over && <button onClick={() => { game.simulateDisconnect(); setDetailsOpen(false); }}><WifiOff size={14}/>Opnieuw verbinden</button>}
         <a href="/clubhuis"><Trophy size={14}/>Records & geschiedenis</a>
       </div>}
     </div>}
@@ -91,7 +91,7 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
     <AnimatePresence>{moment && !hidden && <motion.div className={`dp-game-moment ${moment === "180" ? "is-180" : "is-checkout"}`} key={`${game.events.length}-${moment}`} aria-live="polite" initial={lessMotion ? false : { opacity: 0, scale: .82 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}><span>{moment === "180" ? "ONE HUNDRED AND EIGHTY" : "GAME SHOT"}</span><strong>{moment === "180" ? "180" : game.events.at(-1)?.hit.label}</strong></motion.div>}</AnimatePresence>
     {game.reconnected && !hidden && <div className="dp-reconnect-toast" role="status"><Wifi size={14}/>Je partij staat precies waar je was.</div>}
     {game.connectionMessage && !game.offlineUntil && !hidden && <div className="dp-connection-note" role="status">{game.connectionMessage}</div>}
-    <Dialog open={!!game.preparing&&!hidden} onOpenChange={()=>{}}><DialogContent className="dp-dialog dp-match-dialog" showCloseButton={false}><DialogHeader><DialogTitle>Je partij wordt geopend.</DialogTitle><DialogDescription>{game.connectionMessage||'De server haalt je bevestigde wedstrijd op.'}</DialogDescription></DialogHeader><LoaderCircle className="dp-loading-spin" size={24}/><a className="dp-match-back" href="/lobby">Terug naar de lobby</a></DialogContent></Dialog>
+    <Dialog open={!!game.preparing&&!hidden} onOpenChange={()=>{}}><DialogContent className="dp-dialog dp-match-dialog" showCloseButton={false}><DialogHeader><DialogTitle>Je partij wordt geopend.</DialogTitle><DialogDescription>{game.connectionMessage||'Even geduld, je wedstrijd wordt klaargezet.'}</DialogDescription></DialogHeader><LoaderCircle className="dp-loading-spin" size={24}/><a className="dp-match-back" href="/lobby">Terug naar de lobby</a></DialogContent></Dialog>
 
     <Dialog open={showPre} onOpenChange={() => {}}><DialogContent className="dp-dialog dp-match-dialog" showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onPointerDownOutside={event => event.preventDefault()}>
       <DialogHeader><span className="dp-match-eyebrow"><Target size={14}/>KLAAR AAN DE OCHE</span><DialogTitle>Een mooie partij begint hier.</DialogTitle><DialogDescription>{matchRulesLabel(game.rules)}<br/>{matchFormatLabel(game.rules)}</DialogDescription></DialogHeader>
@@ -101,7 +101,7 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
       <button className="dp-match-primary" disabled={game.sending||game.waitingForOpponent} onClick={() => void game.beginMatch()}>{game.sending ? <LoaderCircle className="dp-loading-spin" size={17}/> : <ArrowRight size={17}/>} {game.sending ? "Wedstrijd voorbereiden…" : game.waitingForOpponent?'Wachten op je tegenstander…':"Begin de wedstrijd"}</button><a className="dp-match-back" href="/lobby">Terug naar de lobby</a>
     </DialogContent></Dialog>
 
-    <Dialog open={!!game.offlineUntil && !hidden} onOpenChange={() => {}}><DialogContent className="dp-dialog dp-match-dialog dp-reconnect-dialog" showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onPointerDownOutside={event => event.preventDefault()}><DialogHeader><WifiOff className="dp-reconnect-icon" size={30}/><DialogTitle>Even opnieuw verbinden.</DialogTitle><DialogDescription>Je bevestigde worpen en score blijven bewaard. Herstel binnen je resterende hersteltijd om verder te spelen.</DialogDescription></DialogHeader><strong className="dp-reconnect-clock">{game.remainingReconnect}<small>sec</small></strong><button className="dp-match-primary" onClick={game.reconnect}><RefreshCw size={16}/>Verbinding herstellen</button><p className="dp-match-mode-note">Je resterende hersteltijd wordt door de server bewaakt. Na afloop handelt de server de partij af.</p></DialogContent></Dialog>
+    <Dialog open={!!game.offlineUntil && !hidden} onOpenChange={() => {}}><DialogContent className="dp-dialog dp-match-dialog dp-reconnect-dialog" showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onPointerDownOutside={event => event.preventDefault()}><DialogHeader><WifiOff className="dp-reconnect-icon" size={30}/><DialogTitle>Even opnieuw verbinden.</DialogTitle><DialogDescription>Je worpen en score zijn er nog. Verbind op tijd opnieuw om verder te spelen.</DialogDescription></DialogHeader><strong className="dp-reconnect-clock">{game.remainingReconnect}<small>sec</small></strong><button className="dp-match-primary" onClick={game.reconnect}><RefreshCw size={16}/>Verbinding herstellen</button><p className="dp-match-mode-note">Verbind opnieuw voordat de teller op nul staat. Anders eindigt de wedstrijd.</p></DialogContent></Dialog>
 
     <Dialog open={showEnd} onOpenChange={()=>{}}><DialogContent className="dp-dialog dp-match-dialog" showCloseButton={false} onEscapeKeyDown={event=>event.preventDefault()} onPointerDownOutside={event=>event.preventDefault()}><DialogHeader><span className="dp-match-eyebrow"><Trophy size={14}/>GAME {gameLabel}</span><DialogTitle>Wedstrijdoverzicht</DialogTitle><DialogDescription>{game.forfeit ? "De wedstrijd is beëindigd door opgave." : `${game.winner === 0 ? selfName() : game.opponentName} wint de wedstrijd.`} {game.rules.format === "sets" ? "Uitslag in sets." : "Uitslag in legs."}</DialogDescription></DialogHeader><div className="dp-final-score"><span>{selfName()}</span><strong>{game.rules.format === "sets" ? game.sets[0] : game.legs[0]}<i>–</i>{game.rules.format === "sets" ? game.sets[1] : game.legs[1]}</strong><span>{game.opponentName}</span></div>
       {game.rules.format === "sets" && <p className="dp-match-mode-note">Totaal gewonnen legs: {game.totalLegs[0]}–{game.totalLegs[1]} · {matchFormatLabel(game.rules)}</p>}
@@ -109,7 +109,7 @@ export function MatchExperience({ game, lessMotion, hidden }: { game: DartsGame;
       <div className={`dp-result-rating ${(game.ratingChange?.deltaA ?? 0) >= 0 ? "is-positive" : "is-negative"}`}><ShieldCheck size={17}/><span>{game.mode === "ranked-demo" && game.ratingChange ? <>Rating <strong>{Math.round(game.ratingChange.beforeA)} → {Math.round(game.ratingChange.afterA)}</strong></> : "Vrij gespeeld · rating ongewijzigd"}</span>{game.mode === "ranked-demo" && game.ratingChange && <b>{positive(game.ratingChange.deltaA)}</b>}</div>
       {rematchId&&<p className="dp-result-wait" role="status"><LoaderCircle className="dp-loading-spin" size={18}/>Wachten tot {game.opponentName} je uitnodiging accepteert of weigert…</p>}
       {resultError&&<p className="dp-login-error" role="alert">{resultError}</p>}
-      {!game.canRematch&&<p className="dp-match-mode-note">Een toernooi- of divisiewedstrijd kan niet als nieuwe competitiewedstrijd worden herhaald. Nodig elkaar na afsluiten uit in een gewone kamer.</p>}
+      {!game.canRematch&&<p className="dp-match-mode-note">Een toernooi- of divisiewedstrijd kun je niet opnieuw spelen. Sluit dit overzicht en nodig elkaar uit voor een gewone partij.</p>}
       <button className="dp-match-primary" disabled={resultBusy||!!rematchId||!game.canRematch} onClick={()=>void inviteAgain()}><RefreshCw size={17}/>{rematchId?'Uitnodiging verstuurd':'Nodig opnieuw uit'}</button>
       <button className="dp-match-back dp-result-close" disabled={resultBusy} onClick={()=>void closeResult()}>{resultBusy?'Even wachten…':'Afsluiten'}</button>
     </DialogContent></Dialog>

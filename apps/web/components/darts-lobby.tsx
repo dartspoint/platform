@@ -144,7 +144,7 @@ export function DartsLobby() {
       if (setup) selectMatchSetup(opponent, setup);
       else sessionStorage.removeItem(MATCH_AUTO_START_KEY);
     } catch {
-      if (setup) throw new Error("Je spelinstellingen konden niet worden bewaard. Probeer het opnieuw.");
+      if (setup) throw new Error("Je spelinstellingen zijn niet opgeslagen. Probeer het nog eens.");
     }
     if(newMatch&&setup&&opponent)await mutate("invite",{targetId:playerId(opponent),roomId:selectedRoom.id,rules:setup.rules,ranked:setup.ranked});
     if(desktop&&!newMatch&&!spectate){setCurrentRoom(room);setSelectingRoom(false);setChatTab("room");setView("home");return;}
@@ -195,9 +195,9 @@ export function DartsLobby() {
 
     <div className={desktop?"dp-workspace dp-lobby-workspace":undefined}><main className="lobby-main" id="main-content">
       {resumeMatch&&<a className="lobby-resume-card" href={'/spelen?match='+resumeMatch.id} onClick={event=>{event.preventDefault();resumeActiveMatch();}} aria-label={'Je wedstrijd is nog bezig. Hervat wedstrijd '+resumeMatch.gameNumber+' tegen '+resumeMatch.opponent}>
-        <span className="lobby-resume-icon"><Target size={26}/></span><span><strong>Je wedstrijd is nog bezig</strong><small>Tegen {resumeMatch.opponent} · {resumeMatch.room} · Game {resumeMatch.gameNumber}</small><span className="lobby-resume-explanation">Je tegenstander kan verder spelen. Gebruik deze knop om terug te gaan.</span><span className="lobby-resume-action">Wedstrijd hervatten <ArrowUpRight size={18}/></span></span>
+        <span className="lobby-resume-icon"><Target size={26}/></span><span><strong>Je wedstrijd is nog bezig</strong><small>Tegen {resumeMatch.opponent} · {resumeMatch.room} · Game {resumeMatch.gameNumber}</small><span className="lobby-resume-explanation">Je tegenstander kan doorspelen. Hervat je wedstrijd wanneer je klaar bent.</span><span className="lobby-resume-action">Wedstrijd hervatten <ArrowUpRight size={18}/></span></span>
       </a>}
-      {(settings.platform.announcementActive || settings.platform.maintenance) && <div className="lobby-platform-banners" role="status">{settings.platform.maintenance && <div className="lobby-platform-banner maintenance"><Settings2 size={18}/><span><strong>Onderhoudsbericht</strong>{settings.platform.maintenanceMessage}<small>Beheerderspreview · je actieve spel blijft beschikbaar.</small></span>{isOwner && <a href="/beheer">Beheren<ArrowUpRight size={14}/></a>}</div>}{settings.platform.announcementActive && <div className="lobby-platform-banner"><Bell size={18}/><span>{settings.platform.announcement}</span></div>}</div>}
+      {(settings.platform.announcementActive || settings.platform.maintenance) && <div className="lobby-platform-banners" role="status">{settings.platform.maintenance && <div className="lobby-platform-banner maintenance"><Settings2 size={18}/><span><strong>Onderhoudsbericht</strong>{settings.platform.maintenanceMessage}<small>Er is op dit moment onderhoud.</small></span>{isOwner && <a href="/beheer">Beheren<ArrowUpRight size={14}/></a>}</div>}{settings.platform.announcementActive && <div className="lobby-platform-banner"><Bell size={18}/><span>{settings.platform.announcement}</span></div>}</div>}
       {desktop&&confirmedRoom&&view==="home"&&!selectingRoom&&<RoomCommunity roomId={confirmedRoom.id} onChooseRoom={()=>setSelectingRoom(true)}/>}
       {!(desktop&&confirmedRoom&&view==="home"&&!selectingRoom)&&<div className="lobby-page-heading lobby-overview-heading">
         <div><span className="lobby-eyebrow">DARTSPOINT</span>{view!=="home"&&<button className="lobby-screen-back" onClick={()=>navigate("home")} aria-label="Terug naar de lobby"><ChevronRight size={20} style={{transform:"rotate(180deg)"}}/></button>}<h1 ref={headingRef} tabIndex={-1}>{view === "home" ? "Alle kamers." : view === "friends" ? "Vrienden." : view === "messages" ? "Privéberichten." : "Jouw profiel."}</h1><p>{view === "home" ? "Kies een kamer en schuif aan." : view === "friends" ? "Je vrienden en vriendschapsverzoeken, op één plek." : view === "messages" ? "Je persoonlijke gesprekken, ook buiten een kamer." : "Je prestaties, speelvoorkeuren en account."}</p></div>

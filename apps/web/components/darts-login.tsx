@@ -65,9 +65,9 @@ export function DartsAuthFlow({ intent = "login" }: { intent?: "login" | "regist
  const sanitizeOtpInput=(value:string)=>value.replace(/[^0-9]/g,"").slice(0,6);
  useEffect(()=>{setDestination(demoLoginDestination(window.location.search));setNow(Date.now());const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer);},[]);
  useEffect(()=>{const frame=requestAnimationFrame(()=>{if(step==="email")emailInput.current?.focus();if(step==="code")codeInput.current?.focus();if(step==="username")usernameInput.current?.focus();if(step==="ready")readyHeading.current?.focus();});return ()=>cancelAnimationFrame(frame);},[step]);
- async function issueCode(event?:FormEvent<HTMLFormElement>){event?.preventDefault();if(busy||requestBusy.current||!captchaReady)return;requestBusy.current=true;setBusy(true);setError("");try{const normalized=email.trim().toLowerCase();await api("auth/request",{email:normalized,...(captchaToken?{captchaToken}:{})});setEmail(normalized);setSent(Date.now());setNow(Date.now());setCode("");setNotice("Je inlogcode is verstuurd. Controleer ook je spammap.");setStep("code");}catch(e){setError(e instanceof Error?e.message:"De inlogcode kon niet worden verstuurd.");}finally{setCaptchaToken("");setCaptchaGeneration(n=>n+1);requestBusy.current=false;setBusy(false);}}
- async function submitCode(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy)return;setBusy(true);setError("");try{const actor=await api("auth/verify",{email,code});if(actor.onboarded){const result=await api("bootstrap");const player=result.players.find((p:any)=>p.id===actor.id);setReturning(true);setProfile({username:actor.username,role:actor.role,rating:player?.rating??1500});setStep("ready");}else setStep("username");}catch(e){setError(e instanceof Error?e.message:"De code kon niet worden gecontroleerd.");codeInput.current?.select();}finally{setBusy(false);}}
- async function submitUsername(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy)return;setBusy(true);setError("");try{const created=await api("onboard",{username:nickname});setProfile(created);setStep("ready");}catch(e){setError(e instanceof Error?e.message:"De spelersnaam kon niet worden opgeslagen.");}finally{setBusy(false);}}
+ async function issueCode(event?:FormEvent<HTMLFormElement>){event?.preventDefault();if(busy||requestBusy.current||!captchaReady)return;requestBusy.current=true;setBusy(true);setError("");try{const normalized=email.trim().toLowerCase();await api("auth/request",{email:normalized,...(captchaToken?{captchaToken}:{})});setEmail(normalized);setSent(Date.now());setNow(Date.now());setCode("");setNotice("Je inlogcode is verstuurd. Controleer ook je spammap.");setStep("code");}catch(e){setError(e instanceof Error?e.message:"We konden je inlogcode niet versturen. Probeer het later opnieuw.");}finally{setCaptchaToken("");setCaptchaGeneration(n=>n+1);requestBusy.current=false;setBusy(false);}}
+ async function submitCode(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy)return;setBusy(true);setError("");try{const actor=await api("auth/verify",{email,code});if(actor.onboarded){const result=await api("bootstrap");const player=result.players.find((p:any)=>p.id===actor.id);setReturning(true);setProfile({username:actor.username,role:actor.role,rating:player?.rating??1500});setStep("ready");}else setStep("username");}catch(e){setError(e instanceof Error?e.message:"We konden je code niet controleren. Probeer het nog eens.");codeInput.current?.select();}finally{setBusy(false);}}
+ async function submitUsername(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy)return;setBusy(true);setError("");try{const created=await api("onboard",{username:nickname});setProfile(created);setStep("ready");}catch(e){setError(e instanceof Error?e.message:"We konden je spelersnaam niet opslaan. Probeer het nog eens.");}finally{setBusy(false);}}
  async function changeEmail(){await api("auth/logout",{});setCode("");setNickname("");setProfile(null);setError("");setNotice("");setReturning(false);setStep("email");}
  function enterDemo(){if(profile&&!busy){setBusy(true);window.location.assign(destination);}}
 
@@ -124,29 +124,29 @@ export function DartsAuthFlow({ intent = "login" }: { intent?: "login" | "regist
             <h1 id="dp-auth-title">Hoe noemen<br/>we je<span>?</span></h1>
             <p className="dp-login-intro">Dit is je eerste keer. Kies de naam waarmee andere spelers je straks herkennen. Je kiest je spelersnaam maar één keer.</p>
             <form className="dp-login-form" onSubmit={submitUsername} noValidate>
-              <div className="dp-login-field"><label htmlFor="dp-auth-username">Spelersnaam</label><div className="dp-login-input-wrap"><UserRound size={18}/><input ref={usernameInput} id="dp-auth-username" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={20} placeholder="Jouw naam aan het bord" value={nickname} onChange={event => { setNickname(event.target.value); setError(""); }} required aria-invalid={Boolean(error)} aria-describedby={error ? "dp-auth-error dp-auth-username-help" : "dp-auth-username-help"}/></div><p className="dp-register-field-help" id="dp-auth-username-help">3–20 tekens · A–Z, 0–9, - en _ · geen spaties</p></div>
+              <div className="dp-login-field"><label htmlFor="dp-auth-username">Spelersnaam</label><div className="dp-login-input-wrap"><UserRound size={18}/><input ref={usernameInput} id="dp-auth-username" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={20} placeholder="Je naam aan het bord" value={nickname} onChange={event => { setNickname(event.target.value); setError(""); }} required aria-invalid={Boolean(error)} aria-describedby={error ? "dp-auth-error dp-auth-username-help" : "dp-auth-username-help"}/></div><p className="dp-register-field-help" id="dp-auth-username-help">3–20 tekens · letters, cijfers, - en _ · geen spaties</p></div>
               {error && <p className="dp-login-error" id="dp-auth-error" role="alert">{error}</p>}
               <button type="submit" className="dp-login-primary">Bevestig mijn spelersnaam <ArrowRight size={18}/></button>
             </form>
-            <p className="dp-auth-name-note">Je begint als normale speler met <strong>1500 DP</strong>. Je spelersnaam blijft wit bij de normale rol. Je rating blijft wit totdat je geplaatst bent.</p>
+            <p className="dp-auth-name-note">Je begint met <strong>1500 DP</strong>. Je krijgt een plek op de ladder zodra je tien rankingwedstrijden tegen vijf verschillende tegenstanders hebt gespeeld.</p>
             <button type="button" className="dp-register-edit" onClick={changeEmail}><ArrowLeft size={14}/> Ander e-mailadres gebruiken</button>
           </>}
           {step === "ready" && profile && <>
-            <span className="dp-auth-verified"><CheckCircle2 size={15}/> {returning ? "Je spelersprofiel is herkend" : "Je spelersprofiel staat klaar"}</span>
+            <span className="dp-auth-verified"><CheckCircle2 size={15}/> {returning ? "Je bent ingelogd" : "Je spelersprofiel staat klaar"}</span>
             <h1 ref={readyHeading} tabIndex={-1} id="dp-auth-title">{returning ? <>Welkom terug<span>.</span></> : <>Dit is jouw<br/>startpunt<span>.</span></>}</h1>
-            <p className="dp-login-intro">{returning ? "Je spelersnaam staat al vast. Na je code kun je direct verder." : "De volgende keer wordt je spelersnaam na de code automatisch herkend."}</p>
+            <p className="dp-login-intro">{returning ? "Kies een kamer en speel verder waar je gebleven was." : "Je spelersnaam staat klaar. De volgende keer heb je alleen een nieuwe inlogcode nodig."}</p>
             <div className="dp-register-profile"><span className="dp-register-avatar" aria-hidden="true">{profile.username.slice(0, 2).toUpperCase()}</span><div><strong>{profile.username}</strong><span>{profile.role === "player" ? "Speler" : profile.role.toUpperCase()}</span></div><span className="dp-register-rating">{Math.round(profile.rating)}<small>DP</small></span></div>
-            <p className="dp-register-rating-note">Je rating groeit mee met je gerankte wedstrijden. Je profiel heeft geen beheerrechten.</p>
+            <p className="dp-register-rating-note">Je rating verandert door wedstrijden voor de ranking. Oefenen en vrij spelen tellen niet mee.</p>
             <button type="button" className="dp-login-primary" onClick={enterDemo} disabled={busy}>{busy ? "De lobby openen…" : "Open de lobby"}<ArrowRight size={18}/></button>
             <p className="dp-auth-sample-note">Je bent klaar voor je volgende dartavond. Kies een kamer en schuif aan.</p>
             <button type="button" className="dp-register-edit" onClick={changeEmail} disabled={busy}><ArrowLeft size={14}/> Ander e-mailadres gebruiken</button>
           </>}
           {(step==="email"||step==="code")&&<Turnstile key={captchaGeneration} onToken={setCaptchaToken}/>}<p className="dp-login-demo-note" id="dp-auth-prototype-note"><ShieldCheck size={15}/><span>Je code is 10 minuten geldig en werkt één keer. Deel je code met niemand. Je e-mailadres blijft privé.</span></p>
-          <div className="dp-auth-bottom-links"><a href="/">Terug naar DartsPoint</a><a href="/mailvoorbeelden">Bekijk onze mails <ArrowRight size={12}/></a></div>
+          <div className="dp-auth-bottom-links"><a href="/">Terug naar DartsPoint</a></div>
         </motion.div>
       </section>
     </div>
-    <footer className="dp-login-footer"><span>DartsPoint</span><span>Het oude gevoel. Een nieuwe avond.</span><span>V1 ONLINE DARTEN</span></footer>
+    <footer className="dp-login-footer"><span>DartsPoint</span><span>Het oude gevoel. Een nieuwe avond.</span><span>TOT AAN DE OCHE</span></footer>
   </main></MotionConfig>;
 }
 

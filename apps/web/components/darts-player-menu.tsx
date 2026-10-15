@@ -84,13 +84,13 @@ export function PlayerActionMenu({ name:providedName, userId, roomId, channelId,
     {feedback && <div className="dp-player-menu-feedback" role="status"><Check size={15}/>{feedback}</div>}
     <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}>
       <DialogContent className="dp-player-action-dialog" onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }}>
-        <DialogHeader><span className="dp-player-action-emblem">{dialog === "report" ? <Flag size={24}/> : <ShieldCheck size={24}/>}</span><DialogTitle>{dialog === "report" ? `${name} melden` : `${name} modereren`}</DialogTitle><DialogDescription>{dialog === "report" ? "Je melding krijgt de kamer en wedstrijd mee als context." : `Kamermaatregel in ${roomName}. Persoonlijke mute staat hier los van.`}</DialogDescription></DialogHeader>
+        <DialogHeader><span className="dp-player-action-emblem">{dialog === "report" ? <Flag size={24}/> : <ShieldCheck size={24}/>}</span><DialogTitle>{dialog === "report" ? `${name} melden` : `${name} modereren`}</DialogTitle><DialogDescription>{dialog === "report" ? "Vertel kort wat er gebeurde. De moderators zien om welke kamer en wedstrijd het gaat." : `Deze maatregel geldt alleen in ${roomName}. Berichten alleen voor jezelf verbergen kan via het spelersmenu.`}</DialogDescription></DialogHeader>
         <form onSubmit={async event => {
           event.preventDefault();
           if (dialog === "report") {
-            try{await reportPlayer({ name, targetId, roomId:contextId, channelId, room: roomName, gameId:reportMatchId, messageId, reason: reportReason, detail: reason, context: "Melding via het spelersmenu." });setDialog(null); notify('Je melding is opgeslagen.');}catch(e){setError(e instanceof Error?e.message:'Melding opslaan mislukt.');}
+            try{await reportPlayer({ name, targetId, roomId:contextId, channelId, room: roomName, gameId:reportMatchId, messageId, reason: reportReason, detail: reason, context: "Melding via het spelersmenu." });setDialog(null); notify('Je melding is verstuurd. Bedankt voor het doorgeven.');}catch(e){setError(e instanceof Error?e.message:'Je melding is niet verstuurd. Probeer het opnieuw.');}
           } else if (canModerate && await moderationAction({ name, targetId, room:contextId!, channelId, messageId, matchId:reportMatchId||undefined, kind, minutes, reason, actor: viewerName })) {
-            setDialog(null); notify(`${name}: ${kind === "warn" ? "waarschuwing opgeslagen" : kind === "mute" ? `${minutes} minuten kamermute` : `${minutes} minuten uit de kamer verwijderd`}.`);
+            setDialog(null); notify(`${name}: ${kind === "warn" ? "waarschuwing gegeven" : kind === "mute" ? `${minutes} minuten kamermute` : `${minutes} minuten uit de kamer verwijderd`}.`);
           } else setError("Controleer je rechten en geef een reden van minimaal 5 tekens.");
         }}>
           {dialog === "report" ? <label>Reden<select value={reportReason} onChange={event => setReportReason(event.target.value)}>{["Onvriendelijk gedrag", "Spam of ongewenste berichten", "Vermoeden van valsspelen", "Ongepaste gebruikersnaam", "Anders"].map(value => <option key={value}>{value}</option>)}</select></label> : <div className="dp-player-action-fields"><label>Actie<select value={kind} onChange={event => setKind(event.target.value as ModerationKind)}><option value="warn">Waarschuwen</option><option value="mute">Tijdelijk muten in kamer</option><option value="remove">Uit kamer verwijderen</option></select></label>{kind !== "warn" && <label>Duur<select value={minutes} onChange={event => setMinutes(Number(event.target.value))}>{[5, 10, 30, 60].map(value => <option key={value} value={value}>{value} minuten</option>)}</select></label>}</div>}
@@ -98,7 +98,6 @@ export function PlayerActionMenu({ name:providedName, userId, roomId, channelId,
           {error && <p className="dp-player-action-error" role="alert">{error}</p>}
           <span className="dp-player-action-context">{roomName||'Privégesprek'}{gameId&&` · Wedstrijd ${publicGameLabel(platform,gameId)}`}</span>
           <button type="submit" className="dp-social-primary" disabled={dialog === "moderation" && reason.trim().length < 5}>{dialog === "report" ? "Melding opslaan" : "Maatregel toepassen"}</button>
-          <small>Je actie wordt op de server gecontroleerd en vastgelegd.</small>
         </form>
         {dialog === "moderation" && canModerate && activeModeration.length > 0 && <div className="dp-player-active-actions"><strong>Actieve kamermaatregelen</strong>{activeModeration.map(entry => <div key={entry.id}><span>{entry.kind === "mute" ? "Kamermute" : "Verwijderd"}<small>{entry.reason}</small></span><button type="button" onClick={async () => { if (await revokeModeration(entry.id, viewerName)) notify("Kamermaatregel opgeheven."); }}>Opheffen</button></div>)}</div>}
       </DialogContent>

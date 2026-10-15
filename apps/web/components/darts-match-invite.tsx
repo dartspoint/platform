@@ -31,7 +31,7 @@ export function MatchInviteDialog({ opponent, onClose, onStart, initialRanked }:
   async function start() {
     if(sending||busyReason){if(busyReason)setError(busyReason);return;}setSending(true);setError("");
     try { await onStart(normalizeMatchSetup(setup)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "De partij kon niet worden gestart."); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Uitnodigen lukt nu niet. Probeer het opnieuw."); }
     finally{setSending(false); }
   }
   return <Dialog open={!!opponent} onOpenChange={open => { if (!open) onClose(); }}>
@@ -44,7 +44,7 @@ export function MatchInviteDialog({ opponent, onClose, onStart, initialRanked }:
       <div className="dpi-ranked"><div><Trophy size={17}/><span><strong>Spelen voor ranking</strong><small>{setup.ranked ? "Officiële DP-partij" : "Vrij spelen zonder ratingwijziging"}</small></span></div><button type="button" role="switch" aria-label="Spelen voor ranking" aria-checked={setup.ranked} onClick={() => setSetup(value => ({ ...value, ranked: !value.ranked }))}><span/>{setup.ranked ? "Ja" : "Nee"}</button></div>
       {setup.ranked && <div className="dpi-elo-preview"><span>Bij winst <b>+{Math.round(expected.win)}</b></span><span>Bij verlies <b>{Math.round(expected.loss)}</b></span></div>}
       <div className="dpi-summary"><strong>{matchFormatLabel(setup.rules)}</strong><span>{setup.rules.format === "sets" ? `Eerst ${(setup.rules.bestOfSets + 1) / 2} ${setup.rules.bestOfSets === 1 ? "set" : "sets"} winnen` : `Eerst ${(setup.rules.bestOf + 1) / 2} ${setup.rules.bestOf === 1 ? "leg" : "legs"} winnen`} · om de beurt beginnen</span></div>
-      <p className="dpi-demo-note">Je tegenstander ontvangt een uitnodiging en kiest zelf of die meedoet.{setup.ranked ? " DP verandert na de definitieve uitslag." : ""}</p>
+      <p className="dpi-demo-note">Je tegenstander krijgt een uitnodiging. Na accepteren kunnen jullie beginnen.{setup.ranked ? " Na de wedstrijd wordt jullie DP bijgewerkt." : ""}</p>
       {error && <p className="dpi-error" role="alert">{error}</p>}
       {busyReason&&<p className="dpi-error" role="status">{busyReason}</p>}
       <button className="dpi-start" disabled={sending||!!busyReason} onClick={start}>Uitnodigen & spelen<ArrowUpRight size={19}/></button>
