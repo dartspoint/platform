@@ -10,6 +10,9 @@ voorkeuren en meldingen. Verouderde beweringen over demospelers, gesimuleerde
 tegenstanders en opslag uitsluitend op het apparaat zijn verwijderd of vervangen
 door uitleg die aansluit op de bestaande werking. Ook beheeruitleg is korter en
 concreter gemaakt, met behoud van belangrijke publicatie- en conflictuitleg.
+Aantallen gebruiken enkelvoud of meervoud. Het wedstrijdoverzicht toont en zoekt
+met het bestaande openbare wedstrijdnummer; interne wedstrijd-ID’s blijven
+ongewijzigd voor selectie en gegevensverzoeken.
 
 Belangrijke spelregels, veiligheidsuitleg, de drie beurttijden, hersteltijd,
 DP-voorwaarden en de gevolgen van een actie blijven zichtbaar. Een mislukte actie

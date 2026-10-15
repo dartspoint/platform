@@ -180,7 +180,7 @@ function CheckoutHint({ game, reducedMotion }: { game: DartsGame; reducedMotion:
         initial={reducedMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
         transition={{ duration: reducedMotion ? 0 : .18, ease: "easeOut" }}>
         <span className="dp-checkout-label" aria-hidden="true"><i/>Finish</span>
-        <span className="sr-only">Uitgooimogelijkheden voor {player}, {remaining} punten met {game.dartsLeft} {game.dartsLeft === 1 ? "pijl" : "pijlen"}: </span>
+        <span className="sr-only">Uitgooimogelijkheden voor {player}, {remaining} {remaining === 1 ? "punt" : "punten"} met {game.dartsLeft} {game.dartsLeft === 1 ? "pijl" : "pijlen"}: </span>
         <div className="dp-checkout-routes" tabIndex={0} aria-label="Uitgooimogelijkheden, horizontaal scrollbaar">
           {routes.map((route, index) => <span className="dp-checkout-option" key={route.join("-")}>
             {index > 0 && <span className="dp-checkout-divider" aria-hidden="true">|</span>}
