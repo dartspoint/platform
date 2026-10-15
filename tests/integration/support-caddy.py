@@ -10,7 +10,6 @@ class Backend(http.server.BaseHTTPRequestHandler):
     def do_GET(self):self.send_response(200);self.end_headers()
     def log_message(self,*args):pass
 backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);thread=threading.Thread(target=backend.serve_forever,daemon=True);thread.start()
-with socket.socket() as probe:probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
 source=(root/'ops/Caddyfile.staging').read_text().replace(host.WEBHOOK_RULE,host.OUTSIDE)
 # Exercise the exact transformation that previously failed on a caddy-fmt host.
 formatted=subprocess.run([str(binary),'fmt','-'],input=source,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True).stdout
@@ -18,22 +17,33 @@ assert '\t@outside not remote_ip' in formatted
 updated=host.staging_webhook(formatted);before_start,before_end=host.staging_span(formatted);after_start,after_end=host.staging_span(updated)
 assert formatted[:before_start]==updated[:after_start] and formatted[before_end:]==updated[after_end:]
 formatted_updated=subprocess.run([str(binary),'fmt','-'],input=updated,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True).stdout
-assert host.staging_webhook(formatted_updated)==formatted_updated
-start,end=host.staging_span(formatted_updated);site=formatted_updated[start:end].replace('staging.dartspoint.nl {','http://127.0.0.1:'+str(port)+' {',1).replace('100.64.0.0/10 fd7a:115c:a1e0::/48 127.0.0.1 ::1','192.0.2.123').replace('127.0.0.1:3001','127.0.0.1:'+str(backend.server_port))
-with tempfile.TemporaryDirectory(prefix='dartspoint-caddy-support-') as folder:
-    config=Path(folder)/'Caddyfile';config.write_text('{\n admin off\n auto_https off\n}\n'+site+'\n')
-    process=subprocess.Popen([str(binary),'run','--config',str(config),'--adapter','caddyfile'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    def status(path,method):
-        try:
-            with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:'+str(port)+path,data=b'{}' if method=='POST' else None,method=method),timeout=2) as response:return response.status
-        except urllib.error.HTTPError as error:return error.code
-    try:
-        for _ in range(100):
+assert host.staging_configuration(formatted_updated)==(formatted_updated,'tailscale-with-signed-webhook')
+public=source[:before_start]+source[before_start:before_end].replace(host.OUTSIDE+'\n','').replace('    respond @outside 403\n','')+source[before_end:]
+public_formatted=subprocess.run([str(binary),'fmt','-'],input=public,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True).stdout
+assert host.staging_configuration(public_formatted)==(public_formatted,'public-preserved')
+
+def exercise(configuration,checks,probe_status):
+    with socket.socket() as probe:probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
+    start,end=host.staging_span(configuration);site=configuration[start:end].replace('staging.dartspoint.nl {','http://127.0.0.1:'+str(port)+' {',1).replace('100.64.0.0/10 fd7a:115c:a1e0::/48 127.0.0.1 ::1','192.0.2.123').replace('127.0.0.1:3001','127.0.0.1:'+str(backend.server_port))
+    with tempfile.TemporaryDirectory(prefix='dartspoint-caddy-support-') as folder:
+        config=Path(folder)/'Caddyfile';config.write_text('{\n admin off\n auto_https off\n}\n'+site+'\n')
+        process=subprocess.Popen([str(binary),'run','--config',str(config),'--adapter','caddyfile'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        def status(path,method):
             try:
-                if status('/privacy','GET')==403:break
-            except (OSError,urllib.error.URLError):pass
-            time.sleep(.05)
-        checks={('POST','/api/support/inbound'):201,('GET','/api/support/inbound'):405,('POST','/api/support/inbound/'):403,('POST','/api/platform/auth/request'):403,('GET','/privacy'):403,('GET','/support'):403}
-        for (method,path),expected in checks.items():assert status(path,method)==expected,(method,path,expected)
-        print(json.dumps({'event':'support_caddy_boundary_passed','checks':len(checks),'publicPostOnly':True,'otherStagingPathsRestricted':True,'loopbackOnlyTest':True,'realCaddyFormattedFixture':True,'formattedIdempotence':True,'otherBlocksByteIdentical':True}))
-    finally:process.terminate();process.wait(timeout=5);backend.shutdown();backend.server_close()
+                with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:'+str(port)+path,data=b'{}' if method=='POST' else None,method=method),timeout=2) as response:return response.status
+            except urllib.error.HTTPError as error:return error.code
+        try:
+            for _ in range(100):
+                try:
+                    if status('/privacy','GET')==probe_status:break
+                except (OSError,urllib.error.URLError):pass
+                time.sleep(.05)
+            for (method,path),expected in checks.items():assert status(path,method)==expected,(method,path,expected)
+        finally:process.terminate();process.wait(timeout=5)
+try:
+    private_checks={('POST','/api/support/inbound'):201,('GET','/api/support/inbound'):405,('POST','/api/support/inbound/'):403,('POST','/api/platform/auth/request'):403,('GET','/privacy'):403,('GET','/support'):403}
+    exercise(formatted_updated,private_checks,403)
+    public_checks={('POST','/api/support/inbound'):201,('GET','/api/support/inbound'):200,('POST','/api/platform/auth/request'):201,('GET','/privacy'):200,('GET','/support'):200,('GET','/internal'):404,('GET','/internal/private'):404}
+    exercise(public_formatted,public_checks,200)
+    print(json.dumps({'event':'support_caddy_boundary_passed','privateChecks':len(private_checks),'publicChecks':len(public_checks),'privatePublicPostOnly':True,'privateOtherPathsRestricted':True,'publicReachabilityPreserved':True,'publicConfigurationByteIdentical':True,'loopbackOnlyTest':True,'realCaddyFormattedFixtures':True,'formattedIdempotence':True,'otherBlocksByteIdentical':True}))
+finally:backend.shutdown();backend.server_close()

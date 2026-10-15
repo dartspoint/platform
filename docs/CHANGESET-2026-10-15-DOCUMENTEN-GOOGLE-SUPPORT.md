@@ -23,7 +23,7 @@ Een minimale verwijdermarkering wordt eerst met Restic versleuteld opgeslagen en
 
 Databaseback-ups krijgen een harde kalenderleeftijd met echte verwijdering van verlopen snapshots en ongebruikte data. Het minimale herstelregister blijft maximaal 37 dagen. Nieuwe runtime- en operatielogs worden op datum verwijderd. Terugschakelen naar een oudere release ondersteunt de oorspronkelijke logconfiguratie; de nieuwe logbewaartermijn geldt voor releases met de nieuwe launcher.
 
-De beheerde hostupdate wijzigt de staging-Compose, de exacte publieke POST-webhookroute en staging-retentietimers. De overige stagingroutes blijven via Tailscale afgeschermd. Er worden geen productie-Compose, productiehostblokken, productietimers of applicatieprocessen door het installatiescript vervangen of herstart. Gedeelde beheerscripts worden onder beide deploymentlocks bijgewerkt, met privé-rollbackkopie.
+De beheerde hostupdate wijzigt de staging-Compose en staging-retentietimers. De actieve Caddy-routering op de VPS bevestigt dat de stagingwebpagina’s nu al openbaar bereikbaar zijn; die bestaande bereikbaarheid en de volledige Caddy-inhoud blijven bij deze herkende inrichting behouden, zonder reload. Een bestaande Tailscale-inrichting krijgt uitsluitend een uitzondering voor de exacte POST-webhookroute. De afzonderlijke realtimehostblokken blijven behouden. Er worden geen productie-Compose, productiehostblokken, productietimers of applicatieprocessen door het installatiescript vervangen of herstart. Gedeelde beheerscripts worden onder beide deploymentlocks bijgewerkt, met privé-rollbackkopie.
 
 ## Aangetoonde controles
 
@@ -33,7 +33,7 @@ De controles gebruiken lokale eigen testdata, echte PostgreSQL/Supabase Auth, Ma
 | --- | --- |
 | TypeScript en productiebuild | Geslaagd |
 | Unittests | 78 geslaagd |
-| Beheerde deployment en rollback | 48 geslaagd, inclusief echte Compose-samenvoeging voor oude en nieuwe images |
+| Beheerde deployment en rollback | 49 geslaagd, inclusief echte Compose-samenvoeging voor oude en nieuwe images |
 | Juridische versies en gesloten registratie | Database-integratie geslaagd |
 | Ticketrechten en mailherstel | 69 databasecontroles geslaagd |
 | Bewaarbeleid | 36 databasecontroles geslaagd |
@@ -45,9 +45,9 @@ De controles gebruiken lokale eigen testdata, echte PostgreSQL/Supabase Auth, Ma
 | Bijlagenscanner | Echte schone scan en EICAR-weigering geslaagd |
 | Mobiele en toetsenbordbediening, gast en team | 13 browsercontroles geslaagd |
 | Mailstatus en afscherming herstelpaneel | 4 browsercontroles geslaagd met echte Mailpitmail |
-| Publieke webhookgrens | 6 echte lokale Caddy-HTTP-controles geslaagd |
+| Webhookgrens en bestaande openbare staging | 13 echte lokale Caddy-HTTP-controles over beide inrichtingen geslaagd |
 
-Supabase database-lint meldt geen errors. De bestaande retentiefunctie geeft één waarschuwing over de expliciet getypeerde JSONB-initialisatie; de daadwerkelijke database-uitvoering van de retentietests slaagt. De oorspronkelijke aangeleverde assets en beschermde stijlprefixen zijn behouden. De hostupdate herkent ook echte `caddy fmt`-uitvoer zonder de bestaande toegangsregels te verruimen. Bestaande testaccounts ruimen hun eigen juridische acceptaties op voordat hun tijdelijke profiel wordt verwijderd; de productiebeperkingen blijven gelden.
+Supabase database-lint meldt geen errors. De bestaande retentiefunctie geeft één waarschuwing over de expliciet getypeerde JSONB-initialisatie; de daadwerkelijke database-uitvoering van de retentietests slaagt. De oorspronkelijke aangeleverde assets en beschermde stijlprefixen zijn behouden. De hostupdate herkent ook echte `caddy fmt`-uitvoer zonder de bestaande toegangsregels te verruimen. Bestaande testaccounts ruimen hun eigen juridische acceptaties op voordat hun tijdelijke profiel wordt verwijderd; de productiebeperkingen blijven gelden. De uitnodigingstest controleert zowel geldige levering vóór annulering als geweigerde levering daarna; de testopruiming wordt met de bestaande transactievergrendeling geordend.
 
 ## Nog te bevestigen op staging en bij providers
 

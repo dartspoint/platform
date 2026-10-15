@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reviewed staging support update. No production service, Caddy site, timer or DNS mutation."""
-import base64, contextlib, datetime, fcntl, hashlib, json, os, pwd, re, stat, subprocess, tempfile
+import base64, contextlib, datetime, fcntl, hashlib, json, os, pwd, re, shlex, stat, subprocess, tempfile
 from pathlib import Path
 SOURCE_SHA='__SOURCE_SHA__'
 BUNDLE_SHA='__BUNDLE_SHA__'
@@ -40,7 +40,7 @@ def staging_span(text):
             if depth==0:return start,index+1
     raise RuntimeError('Unbalanced staging Caddy site')
 
-def staging_webhook(text):
+def staging_configuration(text):
     start,end=staging_span(text);block=text[start:end]
     def tokens(line):return line.split('#',1)[0].split()
     def lines(name):return list(re.finditer(r'(?m)^[ \t]*'+re.escape(name)+r'(?=[ \t\r\n]|$)[^\r\n]*(?:\r?\n|$)',block))
@@ -62,19 +62,30 @@ def staging_webhook(text):
     method=lines('@support_wrong_method');method_denials=[tokens(m.group()) for m in lines('respond') if tokens(m.group())[1:2]==['@support_wrong_method']]
     checks={'singleOutsideMatcher':len(outside)==1,'outsideDenyExpected':denials==[['respond','@outside','403']],'upstreamExpected':upstreams==[['reverse_proxy','127.0.0.1:3001']]}
     def refuse(reason):raise RuntimeError('Staging access rules require manual inspection: '+json.dumps({'reason':reason,**checks},sort_keys=True))
+    if not outside:
+        # The active host routing confirmed this stock site is public. Its
+        # webhook is already reachable; preserve that policy and every byte.
+        expected={('encode','zstd','gzip'),('@internal','path','/internal','/internal/*'),('respond','@internal','404'),('header','X-Robots-Tag','noindex, nofollow, noarchive'),('header','X-Content-Type-Options','nosniff'),('reverse_proxy','127.0.0.1:3001')}
+        try:body=[tuple(shlex.split(line,comments=True)) for line in block[block.index('{')+1:block.rindex('}')].splitlines()];body=[line for line in body if line]
+        except ValueError:refuse('unrecognized_public_staging_tokens')
+        checks['publicStockBodyExpected']=len(body)==len(expected) and set(body)==expected
+        if not checks['publicStockBodyExpected']:refuse('unrecognized_public_staging_body')
+        return text,'public-preserved'
     if not all(checks.values()):refuse('unrecognized_staging_boundary')
     value=tokens(outside[0].group())
     if same_allowlist(value[1:]):
         if method or method_denials:refuse('conflicting_webhook_method_rule')
         prior=outside[0];ending='\r\n' if prior.group().endswith('\r\n') else '\n' if prior.group().endswith('\n') else ''
         updated=block[:prior.start()]+WEBHOOK_RULE+ending+block[prior.end():]
-        return text[:start]+updated+text[end:]
+        return text[:start]+updated+text[end:],'tailscale-with-signed-webhook'
     body=matcher_body(outside[0]);checks['outsideAllowlistExpected']=bool(body and len(body)==2 and sum(same_allowlist(item) for item in body)==1 and ['not','path','/api/support/inbound'] in body)
     method_body=matcher_body(method[0]) if len(method)==1 else None
     checks['webhookMethodExpected']=bool(method_body and len(method_body)==2 and ['path','/api/support/inbound'] in method_body and ['not','method','POST'] in method_body and method_denials==[['respond','@support_wrong_method','405']])
     if not checks['outsideAllowlistExpected'] or not checks['webhookMethodExpected']:refuse('unrecognized_staging_matcher')
     # caddy fmt changes indentation; semantic recognition must still be a no-op.
-    return text
+    return text,'tailscale-with-signed-webhook'
+
+def staging_webhook(text):return staging_configuration(text)[0]
 
 def validate_pins(previous,following):
     baseline={'NODE_IMAGE','REDIS_IMAGE','POSTGRES_IMAGE'}
@@ -118,8 +129,9 @@ def main():
     if hashlib.sha256(raw).hexdigest()!=BUNDLE_SHA:raise RuntimeError('Bundle checksum mismatch')
     files=json.loads(raw);managed=Path('/usr/local/libexec/dartspoint');safe_directory(managed)
     pins=Path('/etc/dartspoint/image-pins.json');target_state(pins);validate_pins(json.loads(pins.read_text()),json.loads(files['image-pins.json']))
-    caddy=Path('/etc/caddy/Caddyfile');target_state(caddy);original=caddy.read_text();updated=staging_webhook(original)
-    targets={pins:files.pop('image-pins.json').encode(),Path('/etc/dartspoint/staging/compose.yml'):files.pop('staging-compose.yml').encode(),caddy:updated.encode()}
+    caddy=Path('/etc/caddy/Caddyfile');target_state(caddy);original=caddy.read_text();updated,access_mode=staging_configuration(original);caddy_changed=updated!=original
+    targets={pins:files.pop('image-pins.json').encode(),Path('/etc/dartspoint/staging/compose.yml'):files.pop('staging-compose.yml').encode()}
+    if caddy_changed:targets[caddy]=updated.encode()
     for name,content in files.items():
         if re.fullmatch(r'scripts/[a-z0-9_-]+\.py',name):targets[managed/name.split('/')[1]]=content.encode()
         elif re.fullmatch(r'units/dartspoint-(retention|privacy-ledger)-staging\.(service|timer)',name):targets[Path('/etc/systemd/system')/name.split('/')[1]]=content.encode()
@@ -163,7 +175,7 @@ def main():
         try:
             for path,data in targets.items():atomic(path,data,originals[path][1] if originals[path] else 0o644)
             subprocess.run(['/usr/bin/systemctl','daemon-reload'],check=True)
-            subprocess.run(['/usr/bin/caddy','reload','--config',str(caddy),'--adapter','caddyfile'],check=True)
+            if caddy_changed:subprocess.run(['/usr/bin/caddy','reload','--config',str(caddy),'--adapter','caddyfile'],check=True)
             subprocess.run(['/usr/bin/systemctl','enable','--now',*timer_names],check=True)
         except Exception:
             for path,prior in originals.items():
@@ -173,9 +185,10 @@ def main():
             for name,(enabled,active) in timer_state.items():
                 subprocess.run(['/usr/bin/systemctl','enable' if enabled else 'disable',name],check=False)
                 subprocess.run(['/usr/bin/systemctl','start' if active else 'stop',name],check=False)
-            subprocess.run(['/usr/bin/caddy','reload','--config',str(caddy),'--adapter','caddyfile'],check=False)
+            if caddy_changed:subprocess.run(['/usr/bin/caddy','reload','--config',str(caddy),'--adapter','caddyfile'],check=False)
             raise
     print('Staging support host preparation installed. Source: '+SOURCE_SHA)
+    print(json.dumps({'event':'staging_support_access_preserved','accessMode':access_mode}))
     print('Production Compose, Caddy sites, timers and services were preserved; no application service was restarted.')
     print('Private rollback inventory: '+str(backup))
     print('Next: review provider settings, deploy the reviewed staging release, then perform staging acceptance before production publication.')

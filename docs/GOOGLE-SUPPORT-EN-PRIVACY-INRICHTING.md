@@ -41,7 +41,7 @@ Hostnet blijft de bestaande mailbox `support@dartspoint.nl` ontvangen. Vervang d
 5. Selecteer de events `email.received`, `email.bounced`, `email.failed`, `email.delivery_delayed` en `email.complained`. Sla het webhook signing secret uitsluitend op als GitHub Environment-secret `RESEND_WEBHOOK_SECRET`.
 6. Zet open- en kliktracking uit op het Resend-verzenddomein. Vul de bijbehorende Resend-domain-ID in als `SUPPORT_RESEND_DOMAIN_ID`; de supportmailer controleert die instellingen voordat hij verzendt.
 
-De bestaande `RESEND_API_KEY` moet ook ontvangen berichten en domeininstellingen kunnen lezen. Een sleutel met alleen verzendrechten volstaat niet. De staging-webhook wordt pas bereikbaar na de beheerde hostupdate; die stelt uitsluitend de ondertekende POST-route open.
+De bestaande `RESEND_API_KEY` moet ook ontvangen berichten en domeininstellingen kunnen lezen. Een sleutel met alleen verzendrechten volstaat niet. De nieuwe webhookroute werkt na de applicatiedeployment. De hostupdate behoudt een bestaande openbare stagingwebsite. Bij een stagingwebsite die al via Tailscale is afgeschermd, krijgt uitsluitend de exacte POST-webhookroute een openbare uitzondering. In beide gevallen controleert de applicatie de providerhandtekening.
 
 Binnenkomende mail wordt eerst duurzaam opgeslagen. Alleen originele provider-gecontroleerde afzenderauthenticatie, passende oorspronkelijke berichtreferenties en de bevestigde mailbox kunnen een bestaand dossier koppelen. Een onderwerpnummer, CC-adres of geldige webhook alleen geeft geen toegang. Onzekere berichten komen in afgeschermde triage.
 

@@ -341,6 +341,17 @@ class DeploymentContractChecks(unittest.TestCase):
         for unsafe in (changed.replace('not path /api/support/inbound','not path /api/support/*'),changed.replace('not method POST','not method GET'),changed.replace('respond @support_wrong_method 405','respond @support_wrong_method 200')):
             with self.assertRaises(RuntimeError):host.staging_webhook(unsafe)
 
+    def test_support_host_update_preserves_only_the_known_stock_public_staging_site(self):
+        path=HERE.parent/'update-support-host.template.py';spec=importlib.util.spec_from_file_location('support_host_public',path);host=importlib.util.module_from_spec(spec);spec.loader.exec_module(host)
+        source=(HERE.parent/'Caddyfile.staging').read_text().replace(host.WEBHOOK_RULE+'\n','').replace('    respond @outside 403\n','',1)
+        start,end=host.staging_span(source);public=source[start:end];combined='production.example.invalid { respond 200 }\n'+source
+        self.assertEqual(host.staging_configuration(combined),(combined,'public-preserved'))
+        tabs=combined.replace(public,public.replace('    ','\t'))
+        self.assertEqual(host.staging_configuration(tabs),(tabs,'public-preserved'))
+        for unsafe in (public.replace('3001','3000'),public.replace('nosniff','unsafe-value'),public.replace('noindex, nofollow, noarchive','index, follow'),public.replace('encode zstd gzip','encode gzip'),public.replace('encode zstd gzip','encode zstd gzip\n    basic_auth { }'),public.replace('encode zstd gzip','encode zstd gzip\n    respond /custom 200')):
+            with self.assertRaises(RuntimeError) as raised:host.staging_webhook(unsafe)
+            self.assertNotIn('unsafe-value',str(raised.exception));self.assertNotIn('basic_auth',str(raised.exception))
+
     def test_support_compose_is_resource_bounded_and_scanner_has_no_host_access(self):
         import yaml
         services=yaml.safe_load((HERE.parent/'compose.target.yml').read_text())['services'];scanner=services['clamav'];support=services['support']
