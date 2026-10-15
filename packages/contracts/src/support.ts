@@ -1,0 +1,18 @@
+import {z} from 'zod';
+import {uuid} from './index';
+export const supportRoles=['tournament','chat','game','platform'] as const;
+export type SupportRole=typeof supportRoles[number];
+export const supportRole=z.enum(supportRoles);
+export const supportStatuses=['new','in_progress','waiting_player','waiting_team','resolved','closed'] as const;
+export type SupportStatus=typeof supportStatuses[number];
+export const supportStatus=z.enum(supportStatuses);
+export const supportPriority=z.enum(['normal','high','urgent']);
+export const supportContext=z.object({room:z.string().trim().max(180).optional(),tournament:z.string().trim().max(180).optional(),sanction:z.string().trim().max(180).optional(),matchNumber:z.number().int().positive().optional(),reportedStaffName:z.string().trim().max(50).optional(),safetyConcern:z.boolean().optional(),reportedUsername:z.string().trim().max(20).optional(),roomId:uuid.optional(),matchId:uuid.optional(),tournamentId:uuid.optional(),sanctionId:uuid.optional(),reportedUserId:uuid.optional(),moderationCaseId:uuid.optional(),privacyKind:z.enum(['access','export','correction','delete_account','delete_data','objection','restriction']).optional(),categories:z.array(z.string().max(80)).max(30).optional(),linkedTicketId:uuid.optional()}).strict();
+export const supportTicketInput=z.object({clientRequestId:uuid,topicId:z.string().regex(/^[a-z0-9_-]{1,80}$/),title:z.string().trim().min(3).max(180),body:z.string().trim().min(1).max(12000),context:supportContext.default({}),guestName:z.string().trim().min(1).max(80).optional(),email:z.string().trim().email().max(254).transform(v=>v.toLowerCase()).optional(),captchaToken:z.string().max(4096).optional()}).strict();
+export const supportMessageInput=z.object({clientRequestId:uuid,body:z.string().trim().min(1).max(12000),visibility:z.enum(['public','internal']).default('public')}).strict();
+export const supportUpdateInput=z.object({status:supportStatus.optional(),topicId:z.string().regex(/^[a-z0-9_-]{1,80}$/).optional(),priority:supportPriority.optional(),reason:z.string().trim().min(5).max(1000)}).strict();
+export const supportTeamInput=z.object({userId:uuid,roles:z.array(supportRole).max(4).refine(v=>new Set(v).size===v.length),firstName:z.string().trim().max(50),reason:z.string().trim().min(5).max(1000),canManageTeam:z.boolean().optional(),canExecutePrivacy:z.boolean().optional()}).strict();
+export type SupportTopic={id:string;name:string;description:string;roles:SupportRole[];protectedKind:string|null;active:boolean;sortOrder:number;defaultPriority:string;responseHours:number;requiredFields:string[];notificationMode:string};
+export type SupportTicket={id:string;number:number;title:string;topicId:string;topicName:string;status:SupportStatus;priority:string;assignedTo:string|null;requesterName:string;createdAt:number;updatedAt:number;unread:boolean;protectedKind:string|null;context:Record<string,unknown>;closedAt:number|null};
+export type SupportMessage={id:string;authorKind:'requester'|'staff'|'system';firstName:string|null;teamRole:string|null;visibility:'public'|'internal';body:string;createdAt:number};
+export type SupportAttachment={id:string;messageId:string;name:string;mime:string;bytes:number;scanStatus:'pending'|'clean'|'rejected'|'error';downloadUrl:string|null};

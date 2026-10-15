@@ -47,6 +47,11 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           INTERNAL_DEPLOY_TOKEN: ${{ secrets.INTERNAL_DEPLOY_TOKEN }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          RESEND_WEBHOOK_SECRET: ${{ secrets.RESEND_WEBHOOK_SECRET }}
+          SUPPORT_INBOUND_ADDRESS: ${{ vars.SUPPORT_INBOUND_ADDRESS }}
+          SUPPORT_RESEND_DOMAIN_ID: ${{ vars.SUPPORT_RESEND_DOMAIN_ID }}
+          GOOGLE_AUTH_ENABLED: ${{ vars.GOOGLE_AUTH_ENABLED }}
         run: python3 ops/scripts/check-delivery-config.py
   publish:
     name: Publish images
@@ -138,6 +143,11 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           INTERNAL_DEPLOY_TOKEN: ${{ secrets.INTERNAL_DEPLOY_TOKEN }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          RESEND_WEBHOOK_SECRET: ${{ secrets.RESEND_WEBHOOK_SECRET }}
+          SUPPORT_INBOUND_ADDRESS: ${{ vars.SUPPORT_INBOUND_ADDRESS }}
+          SUPPORT_RESEND_DOMAIN_ID: ${{ vars.SUPPORT_RESEND_DOMAIN_ID }}
+          GOOGLE_AUTH_ENABLED: ${{ vars.GOOGLE_AUTH_ENABLED }}
         run: /usr/bin/python3 -I /usr/local/libexec/dartspoint/delivery-entry.py
       - name: Remove downloaded public manifest
         if: always()

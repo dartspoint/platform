@@ -181,6 +181,9 @@ export function DartsOpening({ serverNow, opensAt }: { serverNow: number; opensA
         </button>
       </div>
     </footer>
+    <nav aria-label="Informatie en contact" style={{display:'flex',flexWrap:'wrap',justifyContent:'center',gap:'10px 20px',padding:'10px 20px 24px',fontSize:12}}>
+      <a href="/algemene-voorwaarden">Voorwaarden</a><a href="/privacy">Privacyverklaring</a><a href="/handleiding">Handleiding</a><a href="/support">Support</a><a href="/contact">Contact · Ontwikkeld door DG Webservices</a>
+    </nav>
 
     <dialog ref={privacy} className={styles.privacyDialog} aria-labelledby="opening-privacy-title" onClick={event => { if (event.target === event.currentTarget) privacy.current?.close(); }}>
       <button className={styles.dialogClose} type="button" aria-label="Sluiten" onClick={() => privacy.current?.close()}><X aria-hidden="true"/></button>

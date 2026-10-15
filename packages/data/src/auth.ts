@@ -4,34 +4,37 @@ import { createRemoteJWKSet, jwtVerify, decodeProtectedHeader, decodeJwt } from 
 import { db } from './db';
 import {authenticationFailure,authenticationStage} from './auth-failures';
 import { requireThat, DomainError, uuid } from '../../contracts/src/index';
-export type Actor={id:string;username:string|null;role:'owner'|'admin'|'vip'|'player';sessionVersion:number;expiresAt:number;onboarded:boolean;renameRequired?:boolean;sessionId?:string};
+export type Actor={id:string;username:string|null;role:'owner'|'admin'|'vip'|'player';sessionVersion:number;expiresAt:number;onboarded:boolean;renameRequired?:boolean;sessionId?:string;supportOnly?:boolean};
 export function publicPlayerName(id:string,name:string|null,renameRequired:boolean){return renameRequired?'Speler-'+id.replaceAll('-','').slice(0,12):name;}
 let jwks:ReturnType<typeof createRemoteJWKSet>|undefined;
 export function authAdmin() {
  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SECRET_KEY!,{global:{fetch:providerFetch},auth:{persistSession:false,autoRefreshToken:false}});
 }
 export async function actorById(id:string,expiresAt:number,complete=true):Promise<Actor>{return loadActor(id,expiresAt,complete,'access');}
-async function loadActor(id:string,expiresAt:number,complete:boolean,scope:'access'|'revoke',sessionId?:string):Promise<Actor> {
+async function loadActor(id:string,expiresAt:number,complete:boolean,scope:'access'|'revoke'|'support',sessionId?:string):Promise<Actor> {
  const q=await db().query(`select p.*, coalesce((select role from user_roles r where r.user_id=p.id and r.revoked_at is null order by case role when 'owner' then 0 else 1 end limit 1), case when exists(select 1 from vip_entitlements v where v.user_id=p.id and v.status='active' and v.starts_at<=now() and (v.ends_at is null or v.ends_at>now())) then 'vip' else 'player' end) role,
  exists(select 1 from sanctions where target_id=p.id and room_id is null and kind='suspend' and starts_at<=now() and ends_at>now() and revoked_at is null) globally_suspended,
  exists(select 1 from private.revoked_sessions where session_id=$2::uuid) session_revoked from profiles p where p.id=$1`,[id,sessionId??null]);
  const p=q.rows[0]; requireThat(p,'unauthenticated',401);
+ if(scope==='support')requireThat(['active','suspended'].includes(p.status),'account_closed',403,'Dit account is afgesloten. Gebruik de openbare supportroute.');
  if(scope==='access')requireThat(p.status==='active','banned',403,'Je account heeft op dit moment geen toegang.');
  if(scope==='access')requireThat(!p.globally_suspended,'banned',403);
  requireThat(!complete || p.onboarded_at,'profile_incomplete',403,'Kies eerst je spelersnaam.');
  if(sessionId){requireThat(expiresAt>Date.now(),'session_expired',401);requireThat(!p.session_revoked,'session_revoked',401);}
- return {id:p.id,username:publicPlayerName(p.id,p.username,p.rename_required),role:p.role,sessionVersion:p.session_version,expiresAt,onboarded:!!p.onboarded_at,renameRequired:!!p.rename_required};
+ return {id:p.id,username:publicPlayerName(p.id,p.username,p.rename_required),role:p.role,sessionVersion:p.session_version,expiresAt,onboarded:!!p.onboarded_at,renameRequired:!!p.rename_required,...(scope==='support'?{supportOnly:p.status!=='active'||!!p.globally_suspended}:{})};
 }
 export async function verifyToken(token:string,complete=true):Promise<Actor>{return verifyIdentity(token,complete,'access');}
 // A suspended player may revoke a verified session; this grants no application access.
 export async function verifyLogoutToken(token:string):Promise<Actor>{return verifyIdentity(token,false,'revoke');}
+// Support is a separate scope: a suspension grants no gameplay or chat access.
+export async function verifySupportToken(token:string,complete=false):Promise<Actor>{return verifyIdentity(token,complete,'support');}
 async function confirmedProviderUser(token:string,expectedId?:string){
  const {data,error}=await authenticationStage('provider',()=>authAdmin().auth.getUser(token));
  if(error)throw authenticationFailure(error,'provider');
  requireThat(data.user?.email_confirmed_at&&(!expectedId||data.user.id===expectedId),'unauthenticated',401);
  return data.user!;
 }
-async function verifyIdentity(token:string,complete:boolean,scope:'access'|'revoke'):Promise<Actor> {
+async function verifyIdentity(token:string,complete:boolean,scope:'access'|'revoke'|'support'):Promise<Actor> {
  let id:string,expiry:number,sessionId:string;
  try {
   requireThat(typeof token==='string' && token.length>20 && token.length<8192,'unauthenticated',401);

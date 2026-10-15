@@ -21,16 +21,16 @@ def prepare(manifest, values, root):
               'DATABASE_ROLE':'dartspoint_app',
               'REDIS_URL':'redis://redis:6379/0'}
     auth = {'NEXT_PUBLIC_SUPABASE_URL':values['NEXT_PUBLIC_SUPABASE_URL'], 'SUPABASE_SECRET_KEY':values['SUPABASE_SECRET_KEY']}
-    write_env(release/'web.env', {**common, **auth, **manifest['public'], 'LANDING_ORIGIN':values['LANDING_ORIGIN'], 'TRUST_PROXY':'caddy', 'REALTIME_HEALTH_URL':'http://realtime:2567'})
+    write_env(release/'web.env', {**common, **auth, **manifest['public'], 'LANDING_ORIGIN':values['LANDING_ORIGIN'], 'TURNSTILE_SECRET_KEY':values['TURNSTILE_SECRET_KEY'], 'RESEND_WEBHOOK_SECRET':values['RESEND_WEBHOOK_SECRET'], 'GOOGLE_AUTH_ENABLED':values['GOOGLE_AUTH_ENABLED'] or 'false', 'TRUST_PROXY':'caddy', 'REALTIME_HEALTH_URL':'http://realtime:2567'})
     write_env(release/'realtime.env', {**common, **auth, 'NEXT_PUBLIC_APP_URL':values['NEXT_PUBLIC_APP_URL'], 'BIND_HOST':'0.0.0.0', 'INTERNAL_DEPLOY_TOKEN':values['INTERNAL_DEPLOY_TOKEN']})
-    write_env(release/'worker.env', {**common, **auth, **{k:values[k] for k in ('NEXT_PUBLIC_APP_URL','RESEND_API_KEY','MAIL_FROM','MAIL_REPLY_TO','LANDING_ORIGIN')}})
+    write_env(release/'worker.env', {**common, **auth, **{k:values[k] for k in ('NEXT_PUBLIC_APP_URL','RESEND_API_KEY','MAIL_FROM','MAIL_REPLY_TO','LANDING_ORIGIN','SUPPORT_INBOUND_ADDRESS','SUPPORT_RESEND_DOMAIN_ID')}, 'CLAMAV_HOST':'clamav', 'CLAMAV_PORT':'3310'})
     write_env(release/'migration.env', {'NODE_ENV':'production','APP_ENV':env,'DEPLOY_ENV':env,'MIGRATION_DATABASE_URL':values['DATABASE_URL'],'DATABASE_CA_CERT_BASE64':values['DATABASE_CA_CERT_BASE64']})
     backup = {k:values[k] for k in ('RESTIC_REPOSITORY','RESTIC_PASSWORD','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_DEFAULT_REGION','DATABASE_CA_CERT_BASE64')}
     backup['BACKUP_DATABASE_URL'] = values['DATABASE_URL']
     backup['POSTGRES_IMAGE'] = manifest['pins']['POSTGRES_IMAGE']
     write_env(release/'backup.env', backup)
     web, realtime = ports(env)
-    write_env(release/'deploy.env', {'DEPLOY_ENV':env,'RELEASE_DIR':str(release),'WEB_PORT':str(web),'REALTIME_PORT':str(realtime),'REDIS_IMAGE':manifest['pins']['REDIS_IMAGE'],**{s.upper()+'_IMAGE':manifest['images'][s] for s in SERVICES}})
-    metadata = {**manifest, 'id':release.name, 'redisImage':manifest['pins']['REDIS_IMAGE']}
+    write_env(release/'deploy.env', {'DEPLOY_ENV':env,'RELEASE_DIR':str(release),'WEB_PORT':str(web),'REALTIME_PORT':str(realtime),'REDIS_IMAGE':manifest['pins']['REDIS_IMAGE'],'CLAMAV_IMAGE':manifest['pins']['CLAMAV_IMAGE'],**{s.upper()+'_IMAGE':manifest['images'][s] for s in SERVICES}})
+    metadata = {**manifest, 'id':release.name, 'supportRuntime':True, 'retainedLogs':True, 'redisImage':manifest['pins']['REDIS_IMAGE']}
     (release/'release.json').write_text(json.dumps(metadata, indent=2)+'\n')
     return release

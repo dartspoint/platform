@@ -39,6 +39,7 @@ try{
  const messageId=(await db().query('select id from chat_messages where channel_id=$1',[channel.channelId])).rows[0].id;
  await assert.rejects(report(c,{targetId:a.id,reason:'Ongewenst bericht',messageId}),{code:'forbidden'});
  const reported=await report(b,{targetId:a.id,reason:'Ongewenst bericht',messageId,channelId:channel.channelId});
+ const duplicateInput={targetId:a.id,reason:'Herhaalbare technische melding',messageId,channelId:channel.channelId,clientRequestId:randomUUID()};const duplicates=await Promise.all([report(b,duplicateInput),report(b,duplicateInput)]);assert.equal(duplicates[0].id,duplicates[1].id);assert.equal(duplicates[0].ticketId,duplicates[1].ticketId);assert.equal((await db().query('select count(*) n from private.support_tickets where id=$1',[duplicates[0].ticketId])).rows[0].n,'1');
  const saved=(await db().query('select * from private.moderation_cases where id=$1',[reported.id])).rows[0];assert.equal(saved.evidence.message.body,message.body);assert.equal(saved.evidence.channel.id,channel.channelId);assert.equal(saved.room_id,null);
  const response='Je melding is onderzocht en afgehandeld.';await adminAction(own,{action:'case',args:[reported.id,'resolved',response]});await adminAction(own,{action:'case',args:[reported.id,'resolved',response]});
  assert.equal((await db().query("select count(*) n from private.outbox_events where kind='report-resolution' and payload->>'caseId'=$1",[reported.id])).rows[0].n,'1');

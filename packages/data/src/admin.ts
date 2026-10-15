@@ -1,3 +1,4 @@
+import {supportModerationTicket} from './support';
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
 import {db,transaction,audit,outbox} from './db';
@@ -61,8 +62,10 @@ export async function moderate(actor:Actor,input:unknown){
  });
 }
 export async function report(actor:Actor,input:unknown){
- const p=z.object({targetId:uuid,reason:z.string().trim().min(3).max(80),detail:z.string().max(2000).default(''),messageId:uuid.optional(),channelId:uuid.optional(),matchId:uuid.optional(),roomId:uuid.optional()}).strict().parse(input);
+ const p=z.object({targetId:uuid,reason:z.string().trim().min(3).max(80),detail:z.string().max(2000).default(''),messageId:uuid.optional(),channelId:uuid.optional(),matchId:uuid.optional(),roomId:uuid.optional(),clientRequestId:uuid.optional()}).strict().parse(input);
+ const {clientRequestId,...payload}=p,payloadHash=createHash('sha256').update(JSON.stringify(payload)).digest('hex'),rawKey=createHash('sha256').update(actor.id+payloadHash+Math.floor(Date.now()/60000)).digest('hex'),requestKey=clientRequestId??`${rawKey.slice(0,8)}-${rawKey.slice(8,12)}-4${rawKey.slice(13,16)}-a${rawKey.slice(17,20)}-${rawKey.slice(20,32)}`;
  requireThat(p.targetId!==actor.id,'self_target');return transaction(async c=>{
+  await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[actor.id+requestKey]);const previous=(await c.query("select * from private.idempotency_keys where actor_id=$1 and scope='report' and key=$2",[actor.id,requestKey])).rows[0];if(previous){requireThat(previous.payload_hash===payloadHash,'idempotency_conflict',409);return previous.response;}
   await target(c,p.targetId);const evidence:Record<string,unknown>={};let roomId=p.roomId??null,matchId=p.matchId??null;
   async function useChannel(ch:any){
    if(ch.kind==='private'){requireThat(p.targetId===(ch.user_low===actor.id?ch.user_high:ch.user_low),'invalid_context',403);requireThat(!p.roomId&&!p.matchId,'invalid_context',403);roomId=null;matchId=null;}
@@ -75,7 +78,7 @@ export async function report(actor:Actor,input:unknown){
    evidence.message={id:message.id,channelId:message.channel_id,body:message.body,senderId:message.sender_id,createdAt:message.created_at};
   }else if(p.channelId)await useChannel(await channelAccess(c,actor,p.channelId));else if(roomId)await roomAccess(c,actor,roomId);
   if(matchId){const m=(await c.query('select id,room_id,game_number,lifecycle,rules,state_version from matches where id=$1',[matchId])).rows[0];requireThat(m,'match_not_found',404);requireThat(!p.roomId||p.roomId===m.room_id,'invalid_context',403);await roomAccess(c,actor,m.room_id);if(!p.messageId)requireThat((await c.query('select 1 from match_players where match_id=$1 and user_id=$2',[m.id,p.targetId])).rowCount,'invalid_context',403);evidence.match=m;roomId=m.room_id;}
-  const r=await c.query('insert into private.moderation_cases(reporter_id,target_id,message_id,match_id,reason,detail,room_id,evidence) values($1,$2,$3,$4,$5,$6,$7,$8) returning id',[actor.id,p.targetId,p.messageId??null,matchId,p.reason,p.detail,roomId,JSON.stringify(evidence)]);await audit(c,actor.id,'report.create',r.rows[0].id,{targetId:p.targetId});return {ok:true,id:r.rows[0].id};
+  const r=await c.query('insert into private.moderation_cases(reporter_id,target_id,message_id,match_id,reason,detail,room_id,evidence) values($1,$2,$3,$4,$5,$6,$7,$8) returning id',[actor.id,p.targetId,p.messageId??null,matchId,p.reason,p.detail,roomId,JSON.stringify(evidence)]);const linked=await supportModerationTicket(c,{reporterId:actor.id,reportedUserId:p.targetId,moderationCaseId:r.rows[0].id,messageId:p.messageId,matchId:matchId??undefined,body:p.reason+(p.detail?'\n\n'+p.detail:''),requestKey});await audit(c,actor.id,'report.create',r.rows[0].id,{targetId:p.targetId,ticketId:linked.ticketId});const response={ok:true,id:r.rows[0].id,ticketId:linked.ticketId};await c.query("insert into private.idempotency_keys(actor_id,scope,key,payload_hash,response) values($1,'report',$2,$3,$4)",[actor.id,requestKey,payloadHash,JSON.stringify(response)]);return response;
  });
 }
 export async function adminAction(actor:Actor,input:unknown){

@@ -82,6 +82,7 @@ export async function joinRoom(actor:Actor,input:unknown){
  return {roomId:result.roomId,visitId:result.visitId};
 }
 export async function heartbeat(actor:Actor,input:unknown={}){const {active=false}=z.object({active:z.boolean().optional()}).strict().parse(input);return transaction(async c=>{
+ if(active)await c.query("update profiles set last_active_at=now(),inactivity_warned_at=null where id=$1 and status='active' and last_active_at<now()-interval '5 minutes'",[actor.id]);
  const member=(await c.query("select room_id from room_memberships where user_id=$1 and lease_until>clock_timestamp() for update",[actor.id])).rows[0];
  if(!member)return {ok:false,code:'room_membership_expired'};
  await roomAccess(c,actor,member.room_id);

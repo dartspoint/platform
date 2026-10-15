@@ -38,6 +38,8 @@ LABEL org.opencontainers.image.revision=$GIT_SHA nl.dartspoint.environment=$DEPL
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=build --chown=node:node /build/dist/deploy/${SERVICE}/ ./
+COPY --chown=node:node ops/retained-log.mjs /app/retained-log.mjs
+RUN mkdir -p /var/log/dartspoint && chown node:node /var/log/dartspoint && chmod 0700 /var/log/dartspoint
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

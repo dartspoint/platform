@@ -31,7 +31,7 @@ function loadTurnstile():Promise<TurnstileApi>{
  return pending;
 }
 
-export function Turnstile({onToken}:{onToken:(token:string)=>void}){
+export function Turnstile({onToken,action='login'}:{onToken:(token:string)=>void;action?:'login'|'support'}){
  const ref=useRef<HTMLDivElement>(null),callback=useRef(onToken);callback.current=onToken;
  const [error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  const key=process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
@@ -50,7 +50,7 @@ export function Turnstile({onToken}:{onToken:(token:string)=>void}){
   void loadTurnstile().then(loaded=>{
    if(cancelled)return;api=loaded;
    id=api.render(element,{
-    sitekey:key,theme:'dark',language:'nl',action:'login',size:compact?'compact':'flexible',
+    sitekey:key,theme:'dark',language:'nl',action,size:compact?'compact':'flexible',
     callback:(token:string)=>{if(!cancelled){setError('');callback.current(token);}},
     'expired-callback':()=>fail('De controle is verlopen. Probeer het nog eens.'),
     'timeout-callback':()=>fail('De controle duurde te lang. Probeer het nog eens.'),
@@ -61,7 +61,7 @@ export function Turnstile({onToken}:{onToken:(token:string)=>void}){
    cancelled=true;observer.disconnect();callback.current('');
    if(id!==undefined)api?.remove(id);
   };
- },[key,attempt]);
+ },[key,attempt,action]);
  if(!key)return null;
  return <div>
   <div ref={ref}/>

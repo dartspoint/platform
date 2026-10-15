@@ -1,4 +1,5 @@
 "use client";
+import {SupportQuickLinks} from "./darts-support-links";
 import {ChatBadge} from "./chat-badge";
 import {DesktopCommunity,RoomCommunity} from "./darts-workspace";
 import {invitationReason} from "@/lib/darts-social";
@@ -250,8 +251,8 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
           <button onClick={() => togglePanel("tournaments")} className={panel === "tournaments" ? "active" : ""}><Target size={17}/><span>Events</span></button>
           <button onClick={() => togglePanel("profile")} className={panel === "profile" ? "active" : ""} aria-label="Spelersmenu openen"><Settings2 size={17}/></button>
         </div>
-        <div className="dp-header-actions">
-          <button className="dp-header-notifications" onClick={() => setNotifications(true)} aria-label="Meldingen bekijken"><Bell size={19}/><i aria-hidden="true"/></button>
+        <div className="dp-header-actions"><a className="dp-header-notifications dp-header-help" href="/support" target="_blank" rel="noopener noreferrer" aria-label="Hulp en tickets openen in een nieuw tabblad"><CircleHelp size={19}/></a>
+          <button className="dp-header-notifications" onClick={() => setNotifications(true)} aria-label="Meldingen bekijken"><Bell size={19}/>{platform.notifications.some(notification=>!notification.read_at)&&<i aria-hidden="true"/>}</button>
           <button className="dp-header-profile" onClick={() => openProfile(selfName())} aria-label="Mijn profiel bekijken">
             <span className="dp-header-avatar" aria-hidden="true">{selfName().slice(0,1).toUpperCase()}<span/></span>
             <span className="dp-header-profile-details"><PlayerName name={selfName()}/><small><RatingValue player={playerByName(selfName())} interactive={false}/></small></span>
@@ -290,7 +291,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
             {!desktop && panel === "friends" && <><FriendsPanel {...friendProps}/><LiveMatches onSpectate={setSpectate}/></>}
             {panel === "tournaments" && <PublishedTournaments/>}
             {panel === "profile" && <>
-              <div className="dp-profile-menu">
+              <div className="dp-profile-menu"><SupportQuickLinks newTab/>
                 <button onClick={() => openProfile(selfName())}><UserRound size={18}/>Mijn profiel</button>
                 <button onClick={() => setPanel("friends")}><Users size={18}/>Vrienden</button>
                 <button onClick={() => setSettingsOpen(true)}><Settings2 size={18}/>Instellingen</button>

@@ -1,3 +1,4 @@
+import {assertLegalParticipation} from './legal';
 import {z} from 'zod';
 import {db,transaction,outbox,draining} from './db';
 import {actorById,type Actor} from './auth';
@@ -8,7 +9,7 @@ export async function queue(actor:Actor,input:unknown){const {matchId}=z.object(
  const m=(await c.query('select * from matches where id=$1 for update',[matchId])).rows[0];requireThat(m,'match_not_found',404);requireThat(!m.competition,'competition_queue_forbidden',403);await roomAccess(c,actor,m.room_id);
  requireThat((await c.query('select 1 from room_memberships where user_id=$1 and room_id=$2 and lease_until>now()',[actor.id,m.room_id])).rowCount,'join_room_first',403);
  const existing=(await c.query('delete from match_queues where match_id=$1 and user_id=$2 returning user_id',[matchId,actor.id])).rowCount;
- if(!existing){requireThat(!(await c.query('select 1 from active_player_reservations where user_id=$1',[actor.id])).rowCount,'already_playing',409);requireThat(Number((await c.query('select count(*) n from match_queues where match_id=$1',[matchId])).rows[0].n)<20,'queue_full',409);await c.query('insert into match_queues(match_id,user_id) values($1,$2)',[matchId,actor.id]);}return {ok:true};
+ if(!existing){await assertLegalParticipation([actor.id],c);requireThat(!(await c.query('select 1 from active_player_reservations where user_id=$1',[actor.id])).rowCount,'already_playing',409);requireThat(Number((await c.query('select count(*) n from match_queues where match_id=$1',[matchId])).rows[0].n)<20,'queue_full',409);await c.query('insert into match_queues(match_id,user_id) values($1,$2)',[matchId,actor.id]);}return {ok:true};
 });}
 async function handover(c:import('pg').PoolClient,actor:Actor,m:any){
  await c.query('insert into private.queue_advances(match_id) values($1) on conflict do nothing',[m.id]);
@@ -26,7 +27,7 @@ async function handover(c:import('pg').PoolClient,actor:Actor,m:any){
  const candidates=(await c.query('select q.user_id,p.username from match_queues q join profiles p on p.id=q.user_id and p.status=\'active\' join room_memberships rm on rm.user_id=q.user_id and rm.room_id=$2 and rm.lease_until>now() where q.match_id=$1 and not exists(select 1 from active_player_reservations a where a.user_id=q.user_id) order by q.joined_at,q.user_id for update of q skip locked',[m.id,m.room_id])).rows;
  for(const next of candidates){
   if(await blocked(c,actor.id,next.user_id))continue;
-  try{await actorById(next.user_id,Date.now()+3600000);}catch{continue;}
+  try{await actorById(next.user_id,Date.now()+3600000);await assertLegalParticipation([actor.id,next.user_id],c);}catch{continue;}
   await c.query('delete from match_queues where match_id=$1 and user_id=$2',[m.id,next.user_id]);
   const invitation=(await c.query("insert into game_invites(inviter_id,invitee_id,room_id,rules,ranked,expires_at) values($1,$2,$3,$4,$5,now()+interval '60 seconds') returning id",[actor.id,next.user_id,m.room_id,JSON.stringify(m.rules),m.mode==='ranked'])).rows[0];
   await c.query('update private.queue_advances set invite_id=$2 where match_id=$1',[m.id,invitation.id]);await outbox(c,'invite:'+invitation.id,'game-invite',next.user_id,{inviteId:invitation.id,name:actor.username});return {name:next.username,inviteId:invitation.id};

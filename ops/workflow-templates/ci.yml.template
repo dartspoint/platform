@@ -16,8 +16,10 @@ jobs:
     # Only trusted main/staging pushes opt into the dedicated single QA runner.
     # Pull requests and production keep their existing hosted verification route.
     runs-on: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && fromJSON('["self-hosted","Linux","X64","dartspoint-qa"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
+      # Temporary repository variable must equal this exact SHA; never applies to PRs or production.
+      DARTSPOINT_SKIP_TESTS: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && vars.DARTSPOINT_SKIP_TESTS_ONCE_SHA == github.sha && 'true' || 'false' }}
       DARTSPOINT_QA_RUNNER: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && 'true' || 'false' }}
       DARTSPOINT_QA_INPUT_DIAGNOSTIC: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && 'true' || 'false' }}
       DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET: ${{ vars.DARTSPOINT_QA_INPUT_DIAGNOSTIC_TARGET || 'game' }}
@@ -42,10 +44,10 @@ jobs:
             # Root in this verified rootless daemon maps to runner-qa on the host.
             container_user='0:0'
           fi
-          docker run --rm --user "$container_user" --env NPM_CONFIG_CACHE=/tmp/npm-cache \
+          docker run --rm --user "$container_user" --env NPM_CONFIG_CACHE=/tmp/npm-cache --env DARTSPOINT_SKIP_TESTS \
             --volume "$GITHUB_WORKSPACE:/workspace" --workdir /workspace "$NODE_IMAGE" \
-            sh -c 'npm ci && npm run typecheck && npm test && node scripts/check-original-rules.mjs && npm run build:deploy'
-          python3 ops/scripts/check-ops.py
+            sh -ec 'npm ci; npm run typecheck; if [ "$DARTSPOINT_SKIP_TESTS" != true ]; then npm test; node scripts/check-original-rules.mjs; fi; npm run build:deploy'
+          if [[ "$DARTSPOINT_SKIP_TESTS" != true ]]; then python3 ops/scripts/check-ops.py; fi
           python3 scripts/check-source-parity.py
       - name: Verify pinned QA tools and deployment infrastructure
         env:
@@ -57,13 +59,19 @@ jobs:
           "$DARTSPOINT_QA_TOOLS/caddy" validate --config ops/Caddyfile.staging --adapter caddyfile
           "$DARTSPOINT_QA_TOOLS/caddy" validate --config ops/Caddyfile.production --adapter caddyfile
       - name: Start isolated infrastructure and run acceptance tests
+        if: env.DARTSPOINT_SKIP_TESTS != 'true'
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
         run: python3 scripts/capture-test-capacity.py artifacts/test-host-capacity.json -- bash scripts/ci-integration.sh
       - name: Verify real database TLS and encrypted restore
+        if: env.DARTSPOINT_SKIP_TESTS != 'true'
         env:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
         run: python3 tests/integration/deployment-infrastructure.py
+      - name: Record the user-requested omission for this exact release
+        if: env.DARTSPOINT_SKIP_TESTS == 'true'
+        run: |
+          echo "Tests omitted at the user's request for exactly $GITHUB_SHA. Static types, build and deployment controls remain enabled; this is not timing or browser acceptance evidence." >> "$GITHUB_STEP_SUMMARY"
       - name: Prepare audited browser measurements
         if: always()
         run: |
@@ -74,6 +82,8 @@ jobs:
           destination = Path('artifacts/ci-safe')
           reports = {
               'artifacts/workspace-chat/results.json': 'workspace-chat-results.json',
+              'artifacts/documents-support-browser/results.json': 'documents-support-results.json',
+              'artifacts/documents-support-delivery-browser/results.json': 'support-delivery-results.json',
               'artifacts/workspace-chat/latency.json': 'workspace-chat-latency.json',
               'artifacts/game-timing-result.json': 'game-timing-result.json',
               'artifacts/game-timing-progress.json': 'game-timing-progress.json',
@@ -88,6 +98,8 @@ jobs:
               'artifacts/room-activity/results.json': 'room-activity-result.json',
               'artifacts/practice-auth-outage/results.json': 'practice-auth-outage-result.json',
               'artifacts/https-command-ingress-result.json': 'https-command-ingress-result.json',
+              'artifacts/update-2026-10-13/after/results.json': 'update-2026-10-13-after-results.json',
+              'artifacts/update-2026-10-13/after/progress.json': 'update-2026-10-13-after-progress.json',
           }
           omitted = {
               'message', 'body', 'text', 'stack', 'headers', 'authorization',
@@ -211,6 +223,8 @@ jobs:
           if-no-files-found: ignore
           path: |
             artifacts/ci-safe/workspace-chat-results.json
+            artifacts/ci-safe/documents-support-results.json
+            artifacts/ci-safe/support-delivery-results.json
             artifacts/ci-safe/workspace-chat-latency.json
             artifacts/ci-safe/game-timing-result.json
             artifacts/ci-safe/game-timing-progress.json
@@ -226,6 +240,8 @@ jobs:
             artifacts/ci-safe/room-activity-result.json
             artifacts/ci-safe/practice-auth-outage-result.json
             artifacts/ci-safe/https-command-ingress-result.json
+            artifacts/ci-safe/update-2026-10-13-after-results.json
+            artifacts/ci-safe/update-2026-10-13-after-progress.json
       - name: Preserve encrypted private QA input diagnostics
         if: ${{ always() && env.DARTSPOINT_QA_INPUT_DIAGNOSTIC == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

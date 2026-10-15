@@ -11,11 +11,12 @@ REPOSITORY = 'dartspoint/platform'
 SERVICES = ('web', 'realtime', 'worker')
 PUBLIC = ('NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_REALTIME_URL', 'NEXT_PUBLIC_SUPABASE_URL',
           'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY')
+OPTIONAL_SECRETS = ('TURNSTILE_SECRET_KEY', 'RESEND_WEBHOOK_SECRET')
 SECRETS = ('SUPABASE_SECRET_KEY', 'DATABASE_URL',
-           'RESEND_API_KEY', 'INTERNAL_DEPLOY_TOKEN', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY')
+           'RESEND_API_KEY', 'INTERNAL_DEPLOY_TOKEN', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY') + OPTIONAL_SECRETS
 PRIVATE_FIELDS = SECRETS + ('MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL')
 VARIABLES = PUBLIC + ('MAIL_FROM', 'MAIL_REPLY_TO', 'RESTIC_REPOSITORY', 'AWS_DEFAULT_REGION')
-OPTIONAL = ('DATABASE_CA_CERT_BASE64', 'LANDING_ORIGIN')
+OPTIONAL = ('DATABASE_CA_CERT_BASE64', 'LANDING_ORIGIN', 'SUPPORT_INBOUND_ADDRESS', 'SUPPORT_RESEND_DOMAIN_ID', 'GOOGLE_AUTH_ENABLED')
 
 def environment(value):
     if value not in ('staging', 'production'): raise ValueError('Invalid environment')
@@ -89,6 +90,7 @@ def validate_backup(values):
 def validate_values(env, values):
     if set(values) != set(SECRETS + VARIABLES + OPTIONAL): raise ValueError('Unexpected or missing configuration fields')
     for k in SECRETS + VARIABLES:
+        if k in OPTIONAL_SECRETS and not values[k] and env == 'staging': continue
         try: scalar(values[k])
         except ValueError: raise ValueError(k + ' is missing or invalid') from None
     values = {**values, 'DATABASE_URL':normalize_database_url(values['DATABASE_URL'])}
@@ -110,6 +112,13 @@ def validate_values(env, values):
             valid = env == 'staging' and p.scheme == 'https' and re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.dartspoint\.nl', p.hostname or '') and p.hostname not in ('staging.dartspoint.nl','realtime.staging.dartspoint.nl') and p.port is None and p.username is None and p.password is None and not p.path and not p.query and not p.fragment
         except Exception: valid = False
         if not valid: raise ValueError('LANDING_ORIGIN must be a separate explicit staging landing HTTPS origin')
+    for name in OPTIONAL_SECRETS:
+        if values[name]: scalar(values[name])
+    if values['RESEND_WEBHOOK_SECRET'] and not re.fullmatch(r'whsec_[A-Za-z0-9+/=_-]{20,}', values['RESEND_WEBHOOK_SECRET']): raise ValueError('Invalid Resend webhook signing secret')
+    if values['SUPPORT_INBOUND_ADDRESS'] and not re.fullmatch(r'[a-z0-9._+-]+@[a-z0-9.-]+\.dartspoint\.nl', values['SUPPORT_INBOUND_ADDRESS']): raise ValueError('Support receiving address must use a dedicated DartsPoint subdomain')
+    if values['SUPPORT_RESEND_DOMAIN_ID'] and not re.fullmatch(r'[A-Za-z0-9-]{1,100}', values['SUPPORT_RESEND_DOMAIN_ID']): raise ValueError('Invalid support sending domain identifier')
+    if values['GOOGLE_AUTH_ENABLED'] not in ('', 'true', 'false'): raise ValueError('GOOGLE_AUTH_ENABLED must be true or false')
+    if env == 'production' and (not values['SUPPORT_INBOUND_ADDRESS'] or not values['SUPPORT_RESEND_DOMAIN_ID']): raise ValueError('Production support receiving and sending must be configured')
     return values
 
 def validate_manifest(m, env, pins):

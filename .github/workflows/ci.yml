@@ -16,7 +16,7 @@ jobs:
     # Only trusted main/staging pushes opt into the dedicated single QA runner.
     # Pull requests and production keep their existing hosted verification route.
     runs-on: ${{ vars.DARTSPOINT_QA_ON_VPS == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && fromJSON('["self-hosted","Linux","X64","dartspoint-qa"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       # Temporary repository variable must equal this exact SHA; never applies to PRs or production.
       DARTSPOINT_SKIP_TESTS: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && vars.DARTSPOINT_SKIP_TESTS_ONCE_SHA == github.sha && 'true' || 'false' }}
@@ -82,6 +82,8 @@ jobs:
           destination = Path('artifacts/ci-safe')
           reports = {
               'artifacts/workspace-chat/results.json': 'workspace-chat-results.json',
+              'artifacts/documents-support-browser/results.json': 'documents-support-results.json',
+              'artifacts/documents-support-delivery-browser/results.json': 'support-delivery-results.json',
               'artifacts/workspace-chat/latency.json': 'workspace-chat-latency.json',
               'artifacts/game-timing-result.json': 'game-timing-result.json',
               'artifacts/game-timing-progress.json': 'game-timing-progress.json',
@@ -221,6 +223,8 @@ jobs:
           if-no-files-found: ignore
           path: |
             artifacts/ci-safe/workspace-chat-results.json
+            artifacts/ci-safe/documents-support-results.json
+            artifacts/ci-safe/support-delivery-results.json
             artifacts/ci-safe/workspace-chat-latency.json
             artifacts/ci-safe/game-timing-result.json
             artifacts/ci-safe/game-timing-progress.json

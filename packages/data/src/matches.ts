@@ -1,3 +1,4 @@
+import {assertLegalParticipation} from './legal';
 import {randomUUID,createHash} from 'node:crypto';
 import {meterPosition,admittedMoment,admittedSample,TIMING_VERSION,METER_SPEED_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../game-core/src/timing';
 import {acceptedTurnStop} from '../../game-core/src/turn-timeout';
@@ -28,7 +29,7 @@ async function playersAvailable(c:PoolClient,senderId:string,targetId:string){
  requireThat(!busy.includes(targetId),'target_already_playing',409,'Deze speler zit al in een wedstrijd');
 }
 export async function createMatch(c:PoolClient,a:Actor,b:string,roomId:string,rules:GameRules,mode:'casual'|'ranked'|'tournament'|'division',competition?:unknown,starterUserId?:string){
- await admission(c);const room=await roomAccess(c,a,roomId,true);const opponent=await actorById(b,Date.now()+3600000);
+ await admission(c);await assertLegalParticipation([a.id,b],c);const room=await roomAccess(c,a,roomId,true);const opponent=await actorById(b,Date.now()+3600000);
  await playersAvailable(c,a.id,b);
  await roomAccess(c,opponent,roomId);
  requireThat(!await blocked(c,a.id,b),'blocked',403);requireThat(a.id!==b,'self_target');
@@ -44,7 +45,7 @@ export async function createMatch(c:PoolClient,a:Actor,b:string,roomId:string,ru
  await ensureChannelReadState(c,a.id,channel.id);await ensureChannelReadState(c,b,channel.id);return {matchId:id,gameNumber:Number(created.game_number),publicGameId:Number(created.game_number)};
 }
 export async function invite(actor:Actor,input:unknown,starterUserId?:string){
- const p=z.object({targetId:uuid,roomId:uuid,rules:rulesSchema,ranked:z.boolean()}).strict().parse(input);
+ const p=z.object({targetId:uuid,roomId:uuid,rules:rulesSchema,ranked:z.boolean()}).strict().parse(input);await assertLegalParticipation([actor.id]);
  await rateLimit('invite:'+actor.id,10,60);
  return transaction(async c=>{
   await admission(c);await playersAvailable(c,actor.id,p.targetId);requireThat(!actor.renameRequired,'rename_required',403,'Kies eerst een nieuwe gebruikersnaam.');const room=await roomAccess(c,actor,p.roomId);requireThat(room.category!=='tournament','competition_only',403);await target(c,p.targetId);requireThat(p.targetId!==actor.id&&!await blocked(c,actor.id,p.targetId),'invalid_target',403);

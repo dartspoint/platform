@@ -68,14 +68,14 @@ def main():
         temporary.write_text(text);temporary.chmod(0o440);os.chown(temporary,0,0)
         try: subprocess.run(['/usr/sbin/visudo','-cf',str(temporary)],check=True);temporary.replace(sudoers)
         finally: temporary.unlink(missing_ok=True)
-        for operation,hour in (('backup','01' if env=='staging' else '03'),('retention','02' if env=='staging' else '04')):
+        for operation,hour in (('backup','01' if env=='staging' else '03'),('retention','02' if env=='staging' else '04'),('privacy-ledger',None)):
             stem='dartspoint-'+operation+'-'+env
             service=Path('/etc/systemd/system')/(stem+'.service')
             timer=Path('/etc/systemd/system')/(stem+'.timer')
             if service.is_symlink() or timer.is_symlink(): raise ValueError('Unexpected systemd path')
             service.write_text('[Unit]\nDescription=DartsPoint '+env+' '+operation+'\n[Service]\nType=oneshot\nUser='+app.pw_name+'\nGroup='+app.pw_name+'\nUMask=0077\nWorkingDirectory='+str(root)+'\nExecStart=/usr/bin/python3 -I /usr/local/libexec/dartspoint/periodic.py '+env+' '+operation+'\nCPUQuota=50%\nMemoryMax=768M\nTasksMax=128\nTimeoutStartSec=45min\n')
-            calendar=('*-*-* ' if operation=='backup' else 'Sun *-*-* ')+hour+':00:00'
-            timer.write_text('[Unit]\nDescription=DartsPoint scheduled '+operation+' '+env+'\n[Timer]\nOnCalendar='+calendar+'\nRandomizedDelaySec=5min\nPersistent=true\nUnit='+stem+'.service\n[Install]\nWantedBy=timers.target\n')
+            calendar='*-*-* *:*:00' if operation=='privacy-ledger' else '*-*-* '+hour+':00:00'
+            timer.write_text('[Unit]\nDescription=DartsPoint scheduled '+operation+' '+env+'\n[Timer]\nOnCalendar='+calendar+'\nRandomizedDelaySec='+('5s' if operation=='privacy-ledger' else '5min')+'\nPersistent=true\nUnit='+stem+'.service\n[Install]\nWantedBy=timers.target\n')
             for file in (service,timer):os.chown(file,0,0);file.chmod(0o644)
     subprocess.run(['/usr/sbin/visudo','-c'],check=True)
     print('Managed files installed. Enable reviewed timers only after the first healthy release; review Caddy separately.')

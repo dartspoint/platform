@@ -1,0 +1,20 @@
+DARTSPOINT DOCUMENTEN GOOGLE EN SUPPORT
+Uitwerking van 15 oktober 2026
+
+Begin met DartsPoint-Uitwerking-Documenten-Google-Tickets.docx.
+Dat document beschrijft de gekozen productinrichting, schermen, rollen,
+onderwerpen, e-mailafhandeling, privacyprocessen, bewaartermijnen en controle.
+
+01-Algemene-voorwaarden.docx, 02-Privacyverklaring.docx en 03-Handleiding.docx
+zijn de bijbehorende publieke teksten. Ze bevatten geen conceptmarkeringen,
+invulvelden of btw-nummer. De map source bevat dezelfde inhoud als bewerkbare
+tekst voor de latere implementatie.
+
+De teksten beschrijven de nieuwe inrichting en worden gepubliceerd zodra
+de betreffende functies en bewaartermijnen daadwerkelijk werken. Dit pakket
+bevat nog geen Codex-prompt. De website en repository zijn niet gewijzigd.
+
+De uitwerking benoemt onder andere 16+ als voorgestelde minimumleeftijd en
+de gekozen bewaartermijnen. De juiste bedrijfsgegevens voor /contact en de
+werkelijke mail- en providerconfiguratie moeten bij uitvoering worden gebruikt;
+deze zijn niet verzonnen of als open velden in de publieke teksten geplaatst.

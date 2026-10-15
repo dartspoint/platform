@@ -1,0 +1,6 @@
+import {currentSupportIdentity} from '@/lib/server/support-auth';
+import {privacyExportDownload} from '../../../../../../packages/data/src/privacy';
+import {DomainError} from '../../../../../../packages/contracts/src/index';
+export const dynamic='force-dynamic';export const runtime='nodejs';
+const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; sandbox"};
+export async function GET(request:Request,context:{params:Promise<{path:string[]}>}){try{const path=(await context.params).path;if(path.length!==2||path[0]!=='export')return Response.json({code:'not_found'},{status:404,headers});const file=await privacyExportDownload(await currentSupportIdentity(request),path[1]);return new Response(new Uint8Array(file.data).buffer,{headers:{...headers,'Content-Type':'application/json; charset=utf-8','Content-Disposition':'attachment; filename="dartspoint-mijn-gegevens.json"'}});}catch(e){return Response.json({code:e instanceof DomainError?e.code:'unavailable',error:e instanceof DomainError?e.message:'De download is tijdelijk niet beschikbaar.'},{status:e instanceof DomainError?e.status:503,headers});}}

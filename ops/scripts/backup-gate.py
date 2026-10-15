@@ -56,10 +56,12 @@ def backup(release):
         recovered=list(restored.rglob('database.dump'))
         if len(recovered)!=1:raise RuntimeError('Offsite snapshot did not restore exactly one database')
         spec=importlib.util.spec_from_file_location('restore_db',Path(__file__).with_name('restore-db.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        counts=module.restore(recovered[0],values['POSTGRES_IMAGE'],captured['extensions'])
+        ledger_spec=importlib.util.spec_from_file_location('privacy_ledger',Path(__file__).with_name('privacy-ledger.py'));ledger_module=importlib.util.module_from_spec(ledger_spec);ledger_spec.loader.exec_module(ledger_module)
+        erasures=ledger_module.recover(values,environment)
+        counts=module.restore(recovered[0],values['POSTGRES_IMAGE'],captured['extensions'],erasure_markers=erasures)
         if any(counts[k]!=value for k,value in expected.items()):raise RuntimeError('Restored row counts differ from the backup')
         now=dt.datetime.now(dt.timezone.utc).isoformat()
-        return {'ok':True,'environment':environment,'storage':'offsite','backupCompletedAt':now,'restoreVerifiedAt':now,'providerBackupId':snapshot,'release':sha,'verifiedCounts':counts}
+        return {'ok':True,'environment':environment,'storage':'offsite','backupCompletedAt':now,'restoreVerifiedAt':now,'providerBackupId':snapshot,'release':sha,'verifiedCounts':counts,'erasureMarkersApplied':len(erasures)}
 if __name__=='__main__':
     try:
         if len(sys.argv)!=2:raise ValueError('Backup accepts one validated release path')

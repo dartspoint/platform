@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """TARGET single-game-process deployment. Never force-stop an active match."""
-import argparse, contextlib, datetime as dt, fcntl, json, os, re, subprocess, sys, time, urllib.request
+import argparse, contextlib, datetime as dt, fcntl, json, os, re, subprocess, sys, tempfile, time, urllib.request
 from deployment_config import ROOT, CONFIG, MANAGED, PRIVATE_FIELDS, ports, read_env
 from pathlib import Path
 
@@ -21,14 +21,32 @@ def run(args, release):
     for path in release.glob('*.env'):
         for key, value in read_env(path).items():
             if key in PRIVATE_FIELDS and value: diagnostic = diagnostic.replace(value, '[redacted]')
-    with open(release / "operations.log", "a", encoding="utf-8") as log:
+    logfile=release/("operations-"+dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")+".log")
+    fd=os.open(logfile,os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,"a",encoding="utf-8") as log:
         log.write(diagnostic)
     if result.returncode:
-        raise RuntimeError("Operation failed; inspect owner-only operations.log on the VPS")
+        raise RuntimeError("Operation failed; inspect owner-only dated operations log on the VPS")
     return result.stdout
 
+def runtime_services(release):
+    return ('web','realtime','worker') + (('support',) if meta(release).get('supportRuntime') is True else ())
+
 def compose(release, *args):
-    return run(["docker", "compose", "--env-file", str(release / "deploy.env"), "-f", str(CONFIG / meta(release)["environment"] / "compose.yml"), *args], release)
+    # Older release env files predate CLAMAV_IMAGE; the installed reviewed pin is authoritative.
+    scanner = json.loads((CONFIG/'image-pins.json').read_text())['CLAMAV_IMAGE']
+    command=["env", "CLAMAV_IMAGE="+scanner, "docker", "compose", "--env-file", str(release / "deploy.env"), "-f", str(CONFIG / meta(release)["environment"] / "compose.yml")]
+    if meta(release).get('retainedLogs') is True:
+        return run([*command,*args],release)
+    # Installed Compose is shared by retained releases. Old images lack the
+    # logging launcher; restore their original runtime contract during rollback.
+    # Merely reading/configuring a retained release never restarts its containers.
+    with tempfile.TemporaryDirectory(prefix='.compose-legacy-',dir=release) as folder:
+        override=Path(folder)/'legacy.yml'
+        # Compose 2.30+ !reset removes the new log mount instead of merging it.
+        text='services:\n'+''.join('  '+name+':\n    command: [node, server.js]\n    volumes: !reset []\n    logging:\n      driver: json-file\n      options: {max-size: "10m", max-file: "3"}\n' for name in ('web','realtime','worker'))
+        override.write_text(text)
+        return run([*command,'-f',str(override),*args],release)
 
 def token(release):
     # Compare private current/next tokens to reject an uncoordinated rotation.
@@ -69,7 +87,7 @@ def health(release):
                 if status.get("ok") is not True or status.get("release") != expected:
                     raise ValueError("Wrong release or not ready")
             # Compose healthchecks also cover worker heartbeat freshness.
-            compose(release, "up", "-d", "--wait", "--wait-timeout", "60", "web", "realtime", "worker")
+            compose(release, "up", "-d", "--no-deps", "--wait", "--wait-timeout", "60", *runtime_services(release))
             return
         except Exception:
             time.sleep(3)
@@ -136,7 +154,7 @@ def execute(release, rollback=False, drain_timeout=1200, locked=False):
         current = release_path(root / "current") if (root / "current").is_symlink() else None
         if rollback and not current:
             raise RuntimeError("Rollback requires an existing active release")
-        if not current and compose(release, "ps", "--all", "--quiet", "web", "realtime", "worker").strip():
+        if not current and compose(release, "ps", "--all", "--quiet", *runtime_services(release)).strip():
             raise RuntimeError("Existing application containers without current release: operator inspection required")
         verify_images(release)
         if current and meta(current)["redisImage"] != meta(release)["redisImage"]:
@@ -159,8 +177,18 @@ def execute(release, rollback=False, drain_timeout=1200, locked=False):
             if not rollback:
                 try: compose(release, "run", "--rm", "--no-deps", "migrate")
                 finally: (release / 'migration.env').unlink(missing_ok=True)
+                # First support rollout introduces erasure/retention capabilities.
+                # Verify a second real offsite restore of the expanded schema
+                # before any new application or admissions can use it.
+                if meta(release).get('supportRuntime') and (not current or not meta(current).get('supportRuntime')):
+                    verify_backup(root, release)
+            # Scanner warmup does not hold gameplay admissions; attachments remain quarantined.
+            if meta(release).get("supportRuntime") is True:
+                compose(release, "up", "-d", "--no-deps", "clamav")
+            elif current and meta(current).get("supportRuntime") is True:
+                compose(current, "stop", "support", "clamav")
             replaced = True
-            compose(release, "up", "-d", "--no-deps", "web", "realtime", "worker")
+            compose(release, "up", "-d", "--no-deps", *runtime_services(release))
             health(release)
             if not rollback: verify_launch_storage(root, release)
             activate_link(root, release)
@@ -178,7 +206,11 @@ def execute(release, rollback=False, drain_timeout=1200, locked=False):
             if current:
                 if replaced:
                     # Only safe with the mandatory expand/contract migration policy.
-                    compose(current, "up", "-d", "--no-deps", "web", "realtime", "worker")
+                    if meta(release).get("supportRuntime") is True and not meta(current).get("supportRuntime"):
+                        compose(release, "stop", "support", "clamav")
+                    if meta(current).get("supportRuntime") is True:
+                        compose(current, "up", "-d", "--no-deps", "clamav")
+                    compose(current, "up", "-d", "--no-deps", *runtime_services(current))
                     health(current)
                 if drained:
                     control(current, "resume")

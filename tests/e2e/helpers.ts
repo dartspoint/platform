@@ -36,7 +36,7 @@ export async function login(browser:Browser,label:string,{hasTouch=false}:{hasTo
   }
   if(!code)throw new Error('OTP message not received');
  }catch(error){console.error(JSON.stringify({event:'otp_delivery_poll_failed',...otpPoll,elapsedMs:performance.now()-otpPollStartedAt}));throw error;}
- await page.getByLabel('Je eenmalige code').fill(code);await page.getByRole('button',{name:'Bevestig je code'}).click();await page.getByLabel('Spelersnaam',{exact:true}).waitFor();await page.getByLabel('Spelersnaam',{exact:true}).fill(name);await page.getByRole('button',{name:'Bevestig mijn spelersnaam'}).click();await page.getByRole('button',{name:'Open de lobby'}).waitFor();await page.getByRole('button',{name:'Open de lobby'}).click();await page.waitForURL('**/lobby');
+ await page.getByLabel('Je eenmalige code').fill(code);await page.getByRole('button',{name:'Bevestig je code'}).click();await page.getByLabel('Spelersnaam',{exact:true}).waitFor();await page.getByLabel('Spelersnaam',{exact:true}).fill(name);await page.getByRole('checkbox',{name:/Ik ben ten minste 16 jaar/}).check();await page.getByRole('checkbox',{name:/Ik aanvaard de/}).check();await page.getByRole('button',{name:'Bevestig mijn spelersnaam'}).click();await page.getByRole('button',{name:'Open de lobby'}).waitFor();await page.getByRole('button',{name:'Open de lobby'}).click();await page.waitForURL('**/lobby');
  const state=await get(page,'bootstrap');
  const cookies=await context.cookies();const parts=cookies.filter(c=>/^sb-.*-auth-token(?:\.\d+)?$/.test(c.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>c.value).join('');
  const session=JSON.parse(Buffer.from(parts.replace(/^base64-/,''),'base64url').toString());

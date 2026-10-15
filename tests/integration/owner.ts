@@ -15,7 +15,7 @@ try{
  let ready=false;for(let i=0;i<150;i++){if(spawnSync('docker',['exec',name,'pg_isready','-h','127.0.0.1','-U','postgres'],{stdio:'ignore'}).status===0){ready=true;break;}await new Promise(r=>setTimeout(r,200));}
  assert.equal(ready,true,'Disposable owner database did not become TCP-ready');
  const port=docker(['port',name,'5432/tcp']).split(':').at(-1),url=`postgresql://postgres@127.0.0.1:${port}/postgres`;isolated=new Pool({connectionString:url,max:1});
- await isolated.query("create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select null::uuid$$;create role anon;create role authenticated;create role service_role;");
+ await isolated.query("create schema auth;create table auth.users(id uuid primary key,email text);create table auth.sessions(id uuid primary key,user_id uuid,not_after timestamptz);create table auth.refresh_tokens(user_id text);create function auth.uid() returns uuid language sql as $$select null::uuid$$;create role anon;create role authenticated;create role service_role;");
  const env={...process.env,DATABASE_URL:url,MIGRATION_DATABASE_URL:url};const migrate=spawnSync('node',['node_modules/tsx/dist/cli.mjs','scripts/migrate.ts','--expand-only'],{env,encoding:'utf8'});assert.equal(migrate.status,0,'Fresh checksum migrations failed');
  const id=(await db().query("select p.id from profiles p where p.username like 'qa%' and p.status='active' order by p.created_at desc limit 1")).rows[0].id;const user=await authAdmin().auth.admin.getUserById(id);assert.ok(user.data.user?.email_confirmed_at);
  await isolated.query('insert into auth.users(id) values($1)',[id]);await isolated.query("update profiles set username='OwnerQA',onboarded_at=now() where id=$1",[id]);

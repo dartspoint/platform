@@ -1,3 +1,4 @@
+import {assertLegalParticipation} from './legal';
 import {validateHeroImage,heroAssetId,type HeroImage} from '../../contracts/src/hero';
 import {syncMediaReferences} from './lobby';
 import {randomUUID,randomInt} from 'node:crypto';
@@ -80,7 +81,7 @@ export async function tournamentAction(actor:Actor,input:unknown){
    }
    else if(action==='addTournamentParticipant'){
     const p=z.object({name:text,rulesAccepted:z.boolean().optional(),approved:z.boolean().optional(),rating:z.number().optional(),played:z.number().optional(),role:z.string().optional()}).strict().parse(args[1]);
-    const member=await userByName(c,p.name);const self=member.id===actor.id;
+    const member=await userByName(c,p.name);const self=member.id===actor.id;await assertLegalParticipation([member.id],c);
     requireThat(self||['owner','admin'].includes(actor.role),'forbidden',403);requireThat(!['live','completed','cancelled'].includes(t.status),'entries_locked',409);requireThat(!self||registrationIsOpen(t),'registration_closed',409);
     const previous=t.participants.find(p=>p.id===member.id);requireThat(!previous||previous.status==='withdrawn','already_entered',409);
     let candidate=await participant(c,member.id,previous?.seed??t.participants.length+1);candidate={...candidate,rulesAccepted:!!p.rulesAccepted,approved:self?!t.settings.approvalRequired:!!p.approved||!t.settings.approvalRequired};
@@ -91,7 +92,7 @@ export async function tournamentAction(actor:Actor,input:unknown){
    }else if(action==='updateTournamentParticipant'||action==='removeTournamentParticipant'){
     const pid=uuid.parse(args[1]);const current=t.participants.find(p=>p.id===pid);requireThat(current,'participant_not_found',404);const self=pid===actor.id;requireThat(self||['owner','admin'].includes(actor.role),'forbidden',403);
     const patch=action==='removeTournamentParticipant'?{status:'withdrawn' as const}:z.object({status:z.enum(['waiting','confirmed','checkedin','withdrawn']).optional(),rulesAccepted:z.boolean().optional(),approved:z.boolean().optional(),seed:z.number().int().min(1).max(64).optional()}).strict().parse(args[2]);
-    if(self){requireThat(patch.approved===undefined&&patch.seed===undefined&&(!patch.status||['checkedin','withdrawn'].includes(patch.status)),'staff_only',403);requireThat(patch.status!=='checkedin'||checkInIsOpen(t),'checkin_closed',409);}
+    if(self){if(patch.status==='checkedin')await assertLegalParticipation([actor.id],c);requireThat(patch.approved===undefined&&patch.seed===undefined&&(!patch.status||['checkedin','withdrawn'].includes(patch.status)),'staff_only',403);requireThat(patch.status!=='checkedin'||checkInIsOpen(t),'checkin_closed',409);}
     requireThat(!['completed','cancelled'].includes(t.status),'entries_locked',409);
     if(t.status==='live'){requireThat(patch.status==='withdrawn','entries_locked',409);for(const n of t.matches.filter(n=>n.players.includes(pid)&&['ready','playing'].includes(n.status))){const other=n.players.find(p=>p&&p!==pid);if(other){const linked=(await c.query('select m.id,m.state from tournament_nodes n join matches m on m.id=n.match_id where n.tournament_id=$1 and n.node_id=$2 for update of m',[t.id,n.id])).rows[0];if(linked){requireThat(!linked.state.pendingDart,'impact_pending',409);await c.query("update matches set lifecycle='cancelled',ended_at=now() where id=$1 and lifecycle in('assigned','playing','paused')",[linked.id]);await c.query('delete from active_player_reservations where match_id=$1',[linked.id]);await c.query('delete from board_reservations where match_id=$1',[linked.id]);await audit(c,actor.id,'competition.withdrawal',linked.id,{},'Deelnemer teruggetrokken');}t=applyTournamentResult(t,n.id,{score:[0,0],kind:'walkover',winnerId:other,reason:'Deelnemer teruggetrokken'});}}}
     const refreshed=await participant(c,pid,current.seed);let next={...current,rating:refreshed.rating,played:refreshed.played,role:refreshed.role,...patch};if(patch.status==='checkedin')next.ready=true;if(patch.status==='withdrawn')next.ready=false;

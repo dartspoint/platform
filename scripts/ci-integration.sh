@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+if [[ -n "${DARTSPOINT_QA_TOOLS:-}" ]]; then export PATH="$DARTSPOINT_QA_TOOLS:$PATH"; fi
 mkdir -p artifacts
 worker_pid=''
+support_pid=''
 realtime_pid=''
 web_pid=''
 worker_start=''
+support_start=''
 realtime_start=''
 web_start=''
 normal_game_reached=false
@@ -37,8 +40,8 @@ cleanup_owned_services() {
   result=$?
   trap - EXIT
   local index pid start
-  local -a child_pids=("$web_pid" "$realtime_pid" "$worker_pid")
-  local -a child_starts=("$web_start" "$realtime_start" "$worker_start")
+  local -a child_pids=("$web_pid" "$realtime_pid" "$worker_pid" "$support_pid")
+  local -a child_starts=("$web_start" "$realtime_start" "$worker_start" "$support_start")
   # Separate opt-in diagnostics run after the normal suite stops, while the
   # three exact native children and disposable database are still available.
   if [[ "${DARTSPOINT_QA_INPUT_DIAGNOSTIC:-false}" == true \
@@ -118,6 +121,9 @@ test -s dist/deploy/realtime/server.js
 node --env-file=.env.local dist/deploy/worker/server.js >artifacts/worker-private.log 2>&1 &
 worker_pid=$!
 worker_start=$(process_identity "$worker_pid" || true)
+node --env-file=.env.local dist/deploy/worker/scripts/support-worker.mjs >artifacts/support-worker-private.log 2>&1 &
+support_pid=$!
+support_start=$(process_identity "$support_pid" || true)
 node --env-file=.env.local dist/deploy/realtime/server.js >artifacts/realtime-private.log 2>&1 &
 realtime_pid=$!
 realtime_start=$(process_identity "$realtime_pid" || true)
@@ -125,10 +131,20 @@ HOSTNAME=127.0.0.1 PORT=4300 node --env-file=.env.local dist/deploy/web/apps/web
 web_pid=$!
 web_start=$(process_identity "$web_pid" || true)
 node --env-file=.env.local scripts/wait-local.mjs
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/test-legal-setup.ts
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts create >artifacts/public-launch-probe-create.json
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts check >artifacts/public-launch-probe-check.json
 cmp artifacts/public-launch-probe-create.json artifacts/public-launch-probe-check.json
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts remove >artifacts/public-launch-probe-remove.json
+python3 tests/ops/test_privacy_backups.py
+python3 tests/ops/test_restic_privacy.py
+if [[ -n "${DARTSPOINT_QA_TOOLS:-}" ]]; then python3 tests/integration/support-caddy.py "$DARTSPOINT_QA_TOOLS/caddy"; fi
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/legal.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/support.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/privacy-erasure.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/privacy.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/privacy-deadlines.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/retention.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/unit/domain.test.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/multiplayer.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/practice.ts
@@ -159,6 +175,8 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/turnstile.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/interface.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/documents-support.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/documents-support-delivery.ts
 
 python3 tests/integration/https-proxy.py
 

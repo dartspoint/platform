@@ -1,3 +1,6 @@
+import {currentSupportActor} from '@/lib/server/support-auth';
+import {markRecentReauthentication} from '../../../../../../packages/data/src/privacy';
+import {onboardWithLegal} from '../../../../../../packages/data/src/legal';
 import {lobbyAdmin,lobbyFeed,lobbyAction,lobbyPreview,lobbyVote,lobbyApplause} from '../../../../../../packages/data/src/lobby';
 import {boundedMediaForm,uploadMedia,readMedia,deleteMedia} from '../../../../../../packages/data/src/media';
 import {staff} from '../../../../../../packages/data/src/auth';
@@ -8,7 +11,7 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {currentActor,currentActorForLogout,serverAuth} from '@/lib/server/auth';
 import {bootstrap,publicProjection} from '../../../../../../packages/data/src/projections';
-import {onboard,joinRoom,heartbeat,preferences,social,privateChannel,chatHistory,sendMessage,chatPreference,resolveChannel} from '../../../../../../packages/data/src/community';
+import {joinRoom,heartbeat,preferences,social,privateChannel,chatHistory,sendMessage,chatPreference,resolveChannel} from '../../../../../../packages/data/src/community';
 import {invite,respondInvite,inviteStatus,matchAccess,spectateMatch} from '../../../../../../packages/data/src/matches';
 import {tournamentAction,divisionAction,startDivisionMatch} from '../../../../../../packages/data/src/competitions';
 import {adminAction,moderate,report,revokeSanction,moderationCapabilities,moderateMessage} from '../../../../../../packages/data/src/admin';
@@ -74,7 +77,7 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
    await rateLimit('otp-verify:'+createHash('sha256').update(email.toLowerCase()).digest('hex'),5,600);
    const {error}=await auth.auth.verifyOtp({email,token:code,type:'email'});
    if(error)throw new DomainError('invalid_code',400,'Deze code klopt niet of is verlopen. Vraag zo nodig een nieuwe code aan.');
-   return response(await currentActor(undefined,false));
+   const actor=await currentSupportActor();await markRecentReauthentication(actor);return response(actor);
   }
   if(path[1]==='logout'){try{await revokeSession(await currentActorForLogout(request));}catch(e){if(!(e instanceof DomainError&&e.status===401))throw e;}await auth.auth.signOut({scope:'local'});return response({ok:true});}
  }
@@ -83,6 +86,7 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
  if(path.join('/')==='timing/ping')return response(await timingPing(actor,receivedAt,input));
  if(path.join('/')==='timing/echo')return response(await timingEcho(actor,input,receivedAt));
  if(path[0]==='practice'){const capture=()=>practiceIngress(actor,receivedAt,input?.renderSample?.connectionId).then(ingress=>capturePracticeIngress(actor,input,ingress)),registered=practiceTicket?await practiceTicket.run(capture):await capture();return response(await practiceCommand(actor,input,{receivedAt},registered));}
- const actions:Record<string,(actor:any,input:unknown)=>Promise<unknown>>={lobby:lobbyAction,'lobby/preview':lobbyPreview,'lobby/vote':lobbyVote,'lobby/applause':lobbyApplause,'media/delete':deleteMedia,onboard,room:joinRoom,heartbeat,preferences,social,'private-channel':privateChannel,'chat/send':sendMessage,'chat/preference':chatPreference,'chat/resolve':resolveChannel,'profile/rename':renameProfile,'moderation/filter':filterAction,'moderation/message':moderateMessage,invite,'invite/respond':respondInvite,tournament:tournamentAction,division:divisionAction,'division/start':startDivisionMatch,admin:adminAction,moderation:moderate,"moderation/revoke":revokeSanction,report,settings:saveSettings,queue,'queue/advance':advanceQueue,'match/rematch':rematch,'match/spectate':spectateMatch};
+
+ const actions:Record<string,(actor:any,input:unknown)=>Promise<unknown>>={lobby:lobbyAction,'lobby/preview':lobbyPreview,'lobby/vote':lobbyVote,'lobby/applause':lobbyApplause,'media/delete':deleteMedia,onboard:onboardWithLegal,room:joinRoom,heartbeat,preferences,social,'private-channel':privateChannel,'chat/send':sendMessage,'chat/preference':chatPreference,'chat/resolve':resolveChannel,'profile/rename':renameProfile,'moderation/filter':filterAction,'moderation/message':moderateMessage,invite,'invite/respond':respondInvite,tournament:tournamentAction,division:divisionAction,'division/start':startDivisionMatch,admin:adminAction,moderation:moderate,"moderation/revoke":revokeSanction,report,settings:saveSettings,queue,'queue/advance':advanceQueue,'match/rematch':rematch,'match/spectate':spectateMatch};
  const action=actions[path.join('/')];if(!action)return response({code:'not_found'},404);return response(await action(actor,input));
 }catch(e){return failure(e);}finally{practiceTicket?.release();}}

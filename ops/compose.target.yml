@@ -19,6 +19,9 @@ services:
     env_file:
       - path: ${RELEASE_DIR:?RELEASE_DIR required}/web.env
         format: raw
+    command: [node, /app/retained-log.mjs, web, node, server.js]
+    logging: {driver: none}
+    volumes: [technical-logs:/var/log/dartspoint]
     environment: {PORT: "3000"}
     ports: ["127.0.0.1:${WEB_PORT:?WEB_PORT required}:3000"]
     depends_on:
@@ -34,6 +37,9 @@ services:
     env_file:
       - path: ${RELEASE_DIR}/realtime.env
         format: raw
+    command: [node, /app/retained-log.mjs, realtime, node, server.js]
+    logging: {driver: none}
+    volumes: [technical-logs:/var/log/dartspoint]
     environment: {PORT: "2567"}
     ports: ["127.0.0.1:${REALTIME_PORT:?REALTIME_PORT required}:2567"]
     mem_limit: 512m
@@ -46,6 +52,9 @@ services:
       retries: 12
   worker:
     <<: *runtime
+    command: [node, /app/retained-log.mjs, worker, node, server.js]
+    logging: {driver: none}
+    volumes: [technical-logs:/var/log/dartspoint]
     image: ${WORKER_IMAGE:?WORKER_IMAGE required}
     cpus: 0.5
     mem_limit: 384m
@@ -59,6 +68,67 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+  support:
+    <<: *runtime
+    image: ${WORKER_IMAGE:?WORKER_IMAGE required}
+    command: [node, /app/retained-log.mjs, support, node, scripts/support-worker.mjs]
+    logging: {driver: none}
+    volumes: [technical-logs:/var/log/dartspoint]
+    cpus: 0.25
+    mem_limit: 384m
+    env_file:
+      - path: ${RELEASE_DIR}/worker.env
+        format: raw
+    depends_on:
+      redis: {condition: service_healthy}
+      clamav: {condition: service_started}
+    healthcheck:
+      test: [CMD, node, scripts/support-health.mjs]
+      interval: 30s
+      timeout: 8s
+      retries: 6
+      start_period: 20s
+  clamav:
+    image: ${CLAMAV_IMAGE:?Pin CLAMAV_IMAGE by digest}
+    restart: unless-stopped
+    init: true
+    user: "100:101"
+    entrypoint: [/bin/sh]
+    command:
+      - -c
+      - >-
+        sed -e '/^ConcurrentDatabaseReload /d' -e '/^MaxThreads /d' -e '/^StreamMaxLength /d'
+        /etc/clamav/clamd.conf > /tmp/dartspoint-clamd.conf;
+        printf '\nConcurrentDatabaseReload no\nMaxThreads 2\nStreamMaxLength 11M\n' >> /tmp/dartspoint-clamd.conf;
+        freshclam --daemon --foreground --stdout --user=clamav --checks=4 &
+        exec clamd --foreground --config-file=/tmp/dartspoint-clamd.conf
+    cpus: 0.5
+    mem_limit: 3g
+    pids_limit: 128
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    volumes: [clamav-data:/var/lib/clamav]
+    healthcheck:
+      test: [CMD-SHELL, "printf 'zPING\\0' | nc -w 3 127.0.0.1 3310 | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      start_period: 180s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  log-prune:
+    <<: *runtime
+    restart: "no"
+    profiles: [log-maintenance]
+    image: ${WORKER_IMAGE:?WORKER_IMAGE required}
+    command: [node, /app/retained-log.mjs, --prune]
+    logging: {driver: none}
+    network_mode: none
+    cpus: 0.25
+    mem_limit: 64m
+    pids_limit: 32
+    volumes: [technical-logs:/var/log/dartspoint]
   migrate:
     <<: *runtime
     restart: "no"
@@ -89,4 +159,6 @@ services:
       options: {max-size: "10m", max-file: "3"}
 volumes:
   redis-data:
+  clamav-data:
+  technical-logs:
 # Each rootless daemon has its own project, network and persistent Redis volume.

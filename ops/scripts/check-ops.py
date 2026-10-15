@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Isolated behavioral verification. No Docker, network, VPS or real credentials."""
-import ast, contextlib, copy, importlib.util, io, json, os, subprocess, sys, tempfile, unittest
+import ast, contextlib, copy, importlib.util, io, json, os, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
 HERE = Path(__file__).resolve().parent
@@ -25,7 +25,7 @@ def fixture(env='staging'):
     pins=json.loads((HERE.parent/'image-pins.json').read_text())
     host='staging.dartspoint.nl' if env=='staging' else 'dartspoint.nl'
     values={'NEXT_PUBLIC_APP_URL':'https://'+host,'NEXT_PUBLIC_REALTIME_URL':'https://realtime.'+host,'NEXT_PUBLIC_SUPABASE_URL':'https://'+'a'*20+'.supabase.co','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY':'sb_publishable_example','NEXT_PUBLIC_TURNSTILE_SITE_KEY':'site-key',
-            'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':'','LANDING_ORIGIN':''}
+            'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':'','LANDING_ORIGIN':'','TURNSTILE_SECRET_KEY':'test-private-captcha','RESEND_WEBHOOK_SECRET':'whsec_'+'a'*44,'SUPPORT_INBOUND_ADDRESS':'support@ontvangen.dartspoint.nl','SUPPORT_RESEND_DOMAIN_ID':'00000000-0000-4000-8000-000000000001','GOOGLE_AUTH_ENABLED':'false'}
     values['DATABASE_URL']='postgresql://postgres:example-password@db.'+'a'*20+'.supabase.co/postgres?sslmode=verify-full'
     manifest={'version':1,'environment':env,'sha':'a'*40,'run':'100','attempt':'1','repository':'dartspoint/platform','workflow':'.github/workflows/deploy.yml','platform':'linux/amd64','public':{k:values[k] for k in config.PUBLIC},'pins':pins,'images':{s:'ghcr.io/dartspoint/platform-'+env+'-'+s+'@sha256:'+'b'*64 for s in config.SERVICES},'builtAt':'2026-10-12T00:00:00+00:00'}
     return manifest,values,pins
@@ -42,6 +42,7 @@ class DeploymentChecks(unittest.TestCase):
         (self.root / "current").symlink_to(self.old)
         self.events = []
         self.fail_at = None
+        self.fail_backup_occurrence = None
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -49,7 +50,7 @@ class DeploymentChecks(unittest.TestCase):
     def execute(self, rollback=False):
         def event(name, release):
             self.events.append((name, release.name))
-            if self.fail_at == (name, release.name):
+            if self.fail_at == (name, release.name) or name=='backup' and self.events.count((name,release.name))==self.fail_backup_occurrence:
                 raise RuntimeError("simulated failure")
         def compose(release, *args):
             event("migrate" if "migrate" in args else "containers", release)
@@ -72,10 +73,33 @@ class DeploymentChecks(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             deployment.main()
 
+    def test_old_release_rollback_does_not_start_unavailable_support_bundle(self):
+        self.assertEqual(deployment.runtime_services(self.old),('web','realtime','worker'))
+        value=json.loads((self.new/'release.json').read_text());value['supportRuntime']=True;(self.new/'release.json').write_text(json.dumps(value))
+        self.assertEqual(deployment.runtime_services(self.new),('web','realtime','worker','support'))
+
     def test_success_order(self):
         self.execute()
         for before, after in ((('drain','old'),('migrate','new')), (('migrate','new'),('containers','new')), (('health','new'),('activate','new')), (('activate','new'),('resume','new'))):
             self.assertLess(self.events.index(before),self.events.index(after))
+
+    def test_first_support_transition_verifies_expanded_backup_before_starting_apps(self):
+        value=json.loads((self.new/'release.json').read_text());value['supportRuntime']=True;(self.new/'release.json').write_text(json.dumps(value))
+        self.execute()
+        backups=[index for index,event in enumerate(self.events) if event==('backup','new')]
+        self.assertEqual(len(backups),2)
+        self.assertLess(backups[0],self.events.index(('drain','old')))
+        self.assertLess(self.events.index(('migrate','new')),backups[1])
+        self.assertLess(backups[1],self.events.index(('containers','new')))
+
+    def test_first_support_post_migration_backup_failure_retains_old_apps(self):
+        value=json.loads((self.new/'release.json').read_text());value['supportRuntime']=True;(self.new/'release.json').write_text(json.dumps(value))
+        self.fail_backup_occurrence=2
+        with self.assertRaises(RuntimeError):self.execute()
+        self.assertIn(('migrate','new'),self.events)
+        self.assertNotIn(('containers','new'),self.events)
+        self.assertIn(('resume','old'),self.events)
+        self.assertNotIn(('activate','new'),self.events)
 
     def test_drain_timeout_does_not_replace(self):
         self.fail_at=('drain','old')
@@ -266,8 +290,93 @@ class DeploymentContractChecks(unittest.TestCase):
         for name,value in (('AWS_DEFAULT_REGION','hel1'),('RESTIC_REPOSITORY','s3:http://fsn1.your-objectstorage.com/bucket'),('RESTIC_REPOSITORY','s3:https://secret:secret@fsn1.your-objectstorage.com/bucket'),('RESTIC_REPOSITORY','s3:https://127.0.0.1/bucket'),('RESTIC_REPOSITORY','s3:https://fsn1.your-objectstorage.com/bucket?password=secret')):
             bad={**v,name:value}
             with self.assertRaises(ValueError):config.validate_values('staging',bad)
-        for name in config.SECRETS:
+        for name in set(config.SECRETS)-set(config.OPTIONAL_SECRETS):
             with self.assertRaises(ValueError):config.validate_values('staging',{**v,name:''})
+
+    def test_support_optional_secrets_keep_classification_and_fail_closed_in_production(self):
+        _,staging,_=fixture();_,production,_=fixture('production')
+        disabled={**staging,**{name:'' for name in config.OPTIONAL_SECRETS},'SUPPORT_INBOUND_ADDRESS':'','SUPPORT_RESEND_DOMAIN_ID':''}
+        config.validate_values('staging',disabled)
+        for name in config.OPTIONAL_SECRETS:
+            self.assertIn(name,config.PRIVATE_FIELDS)
+            with self.assertRaises(ValueError):config.validate_values('production',{**production,name:''})
+        for name,value in [('SUPPORT_INBOUND_ADDRESS','support@dartspoint.nl'),('SUPPORT_INBOUND_ADDRESS','https://secret@example.invalid'),('SUPPORT_RESEND_DOMAIN_ID','../../private'),('GOOGLE_AUTH_ENABLED','yes')]:
+            with self.assertRaises(ValueError):config.validate_values('staging',{**staging,name:value})
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'releases').mkdir();manifest,values,_=fixture();release=prepare.prepare(manifest,values,root)
+            web=config.read_env(release/'web.env');realtime=config.read_env(release/'realtime.env');worker=config.read_env(release/'worker.env');deploy=config.read_env(release/'deploy.env')
+            for name in config.OPTIONAL_SECRETS:
+                self.assertEqual(web[name],values[name]);self.assertNotIn(name,realtime);self.assertNotIn(name,worker)
+            self.assertEqual(web['GOOGLE_AUTH_ENABLED'],'false');self.assertEqual(worker['CLAMAV_HOST'],'clamav');self.assertEqual(worker['CLAMAV_PORT'],'3310');self.assertIn('@sha256:',deploy['CLAMAV_IMAGE'])
+
+    def test_support_host_update_is_staging_only_and_pins_cannot_upgrade_existing_images(self):
+        path=HERE.parent/'update-support-host.template.py';spec=importlib.util.spec_from_file_location('support_host_update',path);host=importlib.util.module_from_spec(spec);spec.loader.exec_module(host)
+        staging=(HERE.parent/'Caddyfile.staging').read_text().replace(host.WEBHOOK_RULE,host.OUTSIDE)
+        production=(HERE.parent/'Caddyfile.production').read_text()
+        before=production+'\n# Existing countdown must remain byte-identical\ncountdown.example.invalid { respond 200 }\n'+staging
+        after=host.staging_webhook(before)
+        self.assertTrue(after.startswith(production+'\n# Existing countdown must remain byte-identical\ncountdown.example.invalid { respond 200 }\n'))
+        start,end=host.staging_span(before);changed_start,changed_end=host.staging_span(after)
+        self.assertEqual(before[:start],after[:changed_start]);self.assertEqual(before[end:],after[changed_end:])
+        self.assertIn('not path /api/support/inbound',after);self.assertIn('not method POST',after);self.assertIn('respond @support_wrong_method 405',after)
+        self.assertEqual(host.staging_webhook(after),after)
+        with self.assertRaises(RuntimeError):host.staging_webhook(before.replace('100.64.0.0/10','0.0.0.0/0'))
+        pins=fixture()[2];baseline={key:value for key,value in pins.items() if key!='CLAMAV_IMAGE'};host.validate_pins(baseline,pins)
+        for name in baseline:
+            changed={**pins,name:'changed'}
+            with self.assertRaises(RuntimeError):host.validate_pins(baseline,changed)
+        with self.assertRaises(RuntimeError):host.validate_pins(baseline,{**pins,'CLAMAV_IMAGE':'clamav/clamav:latest'})
+
+    def test_support_compose_is_resource_bounded_and_scanner_has_no_host_access(self):
+        import yaml
+        services=yaml.safe_load((HERE.parent/'compose.target.yml').read_text())['services'];scanner=services['clamav'];support=services['support']
+        self.assertEqual(scanner['user'],'100:101');self.assertEqual(scanner['mem_limit'],'3g');self.assertEqual(scanner['cap_drop'],['ALL']);self.assertNotIn('ports',scanner);self.assertNotIn('env_file',scanner)
+        self.assertEqual(scanner['volumes'],['clamav-data:/var/lib/clamav']);self.assertIn('ConcurrentDatabaseReload no',scanner['command'][1])
+        self.assertEqual(support['cpus'],0.25);self.assertEqual(support['mem_limit'],'384m');self.assertEqual(support['command'],['node','/app/retained-log.mjs','support','node','scripts/support-worker.mjs']);self.assertEqual(support['healthcheck']['test'],['CMD','node','scripts/support-health.mjs'])
+        self.assertEqual(support['depends_on']['clamav']['condition'],'service_started')
+        for name in ('web','realtime','worker','support'):
+            self.assertEqual(services[name]['logging'],{'driver':'none'});self.assertEqual(services[name]['volumes'],['technical-logs:/var/log/dartspoint']);self.assertEqual(services[name]['command'][:2],['node','/app/retained-log.mjs'])
+        self.assertNotIn('env_file',services['log-prune']);self.assertEqual(services['log-prune']['network_mode'],'none')
+
+    def test_real_compose_merge_keeps_retained_images_runnable_without_log_launcher(self):
+        if not shutil.which('docker'):self.skipTest('Docker CLI unavailable in this build stage; actual Compose merge runs on the host')
+        version=subprocess.run(['docker','compose','version'],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        if version.returncode:self.skipTest('Docker Compose plugin unavailable in this build stage')
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'releases').mkdir();manifest,values,pins=fixture();release=prepare.prepare(manifest,values,root)
+            config_root=root/'config';(config_root/'staging').mkdir(parents=True)
+            (config_root/'staging/compose.yml').write_text((HERE.parent/'compose.target.yml').read_text())
+            (config_root/'image-pins.json').write_text(json.dumps(pins))
+            with patch.object(deployment,'CONFIG',config_root):
+                modern=json.loads(deployment.compose(release,'config','--format','json'))
+                for name in ('web','realtime','worker'):
+                    self.assertEqual(modern['services'][name]['command'][:3],['node','/app/retained-log.mjs',name])
+                    self.assertEqual(modern['services'][name]['logging'],{'driver':'none'})
+                    self.assertEqual(modern['services'][name]['volumes'][0]['target'],'/var/log/dartspoint')
+                old_metadata=json.loads((release/'release.json').read_text());old_metadata.pop('retainedLogs');old_metadata.pop('supportRuntime');(release/'release.json').write_text(json.dumps(old_metadata))
+                # Old deploy.env predates the scanner pin, as on the first rollout.
+                deploy_values=config.read_env(release/'deploy.env');deploy_values.pop('CLAMAV_IMAGE');(release/'deploy.env').unlink();config.write_env(release/'deploy.env',deploy_values)
+                legacy=json.loads(deployment.compose(release,'config','--format','json'))
+                for name in ('web','realtime','worker'):
+                    self.assertEqual(legacy['services'][name]['command'],['node','server.js'])
+                    self.assertEqual(legacy['services'][name]['logging'],{'driver':'json-file','options':{'max-size':'10m','max-file':'3'}})
+                    self.assertFalse(legacy['services'][name].get('volumes'))
+                    self.assertEqual(legacy['services'][name]['image'],modern['services'][name]['image'])
+                    if name!='worker':self.assertEqual(legacy['services'][name]['ports'],modern['services'][name]['ports'])
+                self.assertEqual(deployment.runtime_services(release),('web','realtime','worker'))
+                self.assertEqual(list(release.glob('.compose-legacy-*')),[])
+
+    def test_log_retention_prunes_only_owned_expired_log_names_without_following_symlinks(self):
+        import datetime as dt
+        prune=load_script('log-retention').prune
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);releases=root/'releases';releases.mkdir(mode=0o700);release=releases/('a'*40+'-1-1');release.mkdir(mode=0o700)
+            now=dt.datetime(2026,10,15,tzinfo=dt.timezone.utc)
+            for name in ('operations-2026-09-01.log','operations-2026-10-15.log','operations.log','web.env','release.json'):
+                file=release/name;file.write_text('private fixture');file.chmod(0o600)
+            expired=release/'operations.log';os.utime(expired,(0,0));(release/'operations-2026-01-01.log').symlink_to(release/'web.env')
+            result=prune(root,now)
+            self.assertEqual(result['removedOperationsLogs'],2);self.assertTrue((release/'web.env').exists());self.assertTrue((release/'release.json').exists());self.assertTrue((release/'operations-2026-10-15.log').exists());self.assertTrue((release/'operations-2026-01-01.log').is_symlink())
 
     def test_single_login_adds_verified_tls_and_uses_session_port(self):
         _,values,_=fixture()

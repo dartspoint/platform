@@ -12,6 +12,7 @@
   "scripts": {
     "dev:web": "npm run dev --workspace @dartspoint/web",
     "dev:realtime": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/realtime/src/server.ts",
+    "dev:support": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/worker/src/support-worker.ts",
     "dev:worker": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/worker/src/worker.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit --project tests/tsconfig.throwing.json && npm run typecheck --workspace @dartspoint/web",
     "test": "tsx --test tests/unit/*.test.ts",

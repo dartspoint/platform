@@ -1,9 +1,11 @@
 # Both GitHub Environments: staging and production. docs/GITHUB-ENVIRONMENTS.md
-# Required SECRETS (7):
+# Required SECRETS (7), plus 2 private support settings:
 # SUPABASE_SECRET_KEY
 # DATABASE_URL
 # RESEND_API_KEY
 # INTERNAL_DEPLOY_TOKEN
+# TURNSTILE_SECRET_KEY (web only; staging may be empty until configured)
+# RESEND_WEBHOOK_SECRET (web only; staging may be empty until configured)
 # RESTIC_PASSWORD
 # AWS_ACCESS_KEY_ID
 # AWS_SECRET_ACCESS_KEY
@@ -17,10 +19,15 @@
 # MAIL_REPLY_TO
 # RESTIC_REPOSITORY
 # AWS_DEFAULT_REGION
-# Optional VARIABLE:
+# Optional VARIABLES:
+# LANDING_ORIGIN
+# SUPPORT_INBOUND_ADDRESS=support@ontvangen.dartspoint.nl
+# SUPPORT_RESEND_DOMAIN_ID (domain matching MAIL_FROM, open/click tracking both off)
+# GOOGLE_AUTH_ENABLED=false (enable only after provider configuration)
 # DATABASE_CA_CERT_BASE64
-# NODE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE: only ops/image-pins.json, not Environment vars.
+# NODE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE, CLAMAV_IMAGE: only ops/image-pins.json, not Environment vars.
 # AWS_* credentials come from Hetzner S3, not Amazon AWS.
 # RESTIC_PASSWORD: create for new repository and keep in password vault.
-# Turnstile private secret/OTP SMTP: Supabase Auth, not GitHub.
+# OTP SMTP and Auth CAPTCHA remain in Supabase; support Turnstile also needs the web-only secret above.
+# Production requires both private support secrets and configured support receiving/sending identifiers.
 # Owner UUID/email/confirmation: temporary private operator config, never automatic deployment.

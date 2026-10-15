@@ -10,7 +10,7 @@ def run(args, data=None):
         raise RuntimeError('Restore operation failed; inspect private diagnostics')
     return result.stdout
 
-def restore(dump, image, required_extensions=None):
+def restore(dump, image, required_extensions=None, erasure_markers=None):
     if not re.fullmatch(r'[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}', image):
         raise ValueError('Restore PostgreSQL image must be pinned by digest')
     required_extensions=required_extensions or []
@@ -42,6 +42,18 @@ def restore(dump, image, required_extensions=None):
         grants=b"grant usage on schema public,auth to authenticated;grant select on profiles,preferences,notifications,channels,chat_messages to authenticated;grant usage on schema public,private to dartspoint_app;grant select,insert,update,delete on all tables in schema public,private to dartspoint_app;grant usage,select on all sequences in schema public,private to dartspoint_app;revoke update,delete on private.audit_events,public.rating_ledger,public.match_events from dartspoint_app;"
         run(['docker','exec','-i',name,'psql','-U','postgres','-v','ON_ERROR_STOP=1'],grants)
         exists=lambda table: run(['docker','exec',name,'psql','-U','postgres','-At','-c',"select to_regclass('private."+table+"') is not null"]).decode().strip()=='t'
+        # pg_restore --no-privileges deliberately excludes provider ACLs. Reapply
+        # the reviewed capability grants, including the sensitive replay boundary.
+        function_grants="revoke all on all functions in schema private from public,anon,authenticated,dartspoint_app;"
+        reviewed=['support_roles_for(uuid)','support_can_staff(uuid,uuid)','erase_subject(uuid,uuid)','close_subject_sessions(uuid,uuid)','run_retention_batch(integer)','prepare_retention_accounts(integer)','confirm_retention_account(uuid)','complete_retention_account(uuid)']
+        for signature in reviewed:
+            available=run(['docker','exec',name,'psql','-U','postgres','-At','-c',"select to_regprocedure('private."+signature+"') is not null"]).decode().strip()=='t'
+            if available:function_grants+='grant execute on function private.'+signature+' to dartspoint_app;'
+        if exists('privacy_requests'):
+            function_grants+='grant usage on schema private to authenticated;grant execute on function private.auth_session_live() to authenticated;'
+        run(['docker','exec',name,'psql','-U','postgres','-v','ON_ERROR_STOP=1','-c',function_grants])
+        if exists('privacy_erasure_outcomes'):
+            run(['docker','exec',name,'psql','-U','postgres','-v','ON_ERROR_STOP=1','-c','revoke insert,update,delete on private.privacy_erasure_outcomes from dartspoint_app'])
         has_launch=exists('launch_subscriptions')
         if exists('command_ingress'):
             run(['docker','exec',name,'psql','-U','postgres','-v','ON_ERROR_STOP=1','-c','revoke update,delete on private.command_ingress from dartspoint_app'])
@@ -59,6 +71,31 @@ def restore(dump, image, required_extensions=None):
         result=json.loads(run(['docker','exec',name,'psql','-U','postgres','-At','-c',checks]))
         if result['badLedger'] or result['rlsMissing'] or not result['migrations']:raise RuntimeError('Restored integrity/RLS verification failed')
         if has_launch: result.update(launch)
+        markers=erasure_markers or []
+        if markers:
+            available=run(['docker','exec',name,'psql','-U','postgres','-At','-c',"select to_regprocedure('private.replay_erasure_marker(jsonb)') is not null"]).decode().strip()=='t'
+            if not available:raise RuntimeError('Restore predates privacy replay support; offline migration review is required before application access')
+            for marker in markers:
+                # JSON is data, quoted as a SQL literal, only inside this isolated disposable database.
+                value=json.dumps(marker,separators=(',',':')).replace("'","''")
+                run(['docker','exec',name,'psql','-U','postgres','-v','ON_ERROR_STOP=1','-c',"select private.replay_erasure_marker('"+value+"'::jsonb)"])
+            result['privacyRestoreVerified']=True
+            result['erasureMarkersApplied']=len(markers)
+        if exists('privacy_requests'):
+            retention_available=run(['docker','exec',name,'psql','-U','postgres','-At','-c',"select to_regprocedure('private.run_retention_batch(integer)') is not null"]).decode().strip()=='t'
+            if not retention_available:raise RuntimeError('Restore needs the reviewed retention migration before application access')
+            deadline=time.monotonic()+120
+            for batch in range(500):
+                counts=json.loads(run(['docker','exec',name,'psql','-U','postgres','-At','-v','ON_ERROR_STOP=1','-c','select private.run_retention_batch(200)']))
+                if counts.get('busy'):raise RuntimeError('Isolated restore retention lock is unexpectedly busy')
+                changed=sum(v for k,v in counts.items() if isinstance(v,int) and not isinstance(v,bool) and not k.startswith('overdue'))
+                if not changed:break
+                if time.monotonic()>deadline:raise RuntimeError('Restored retention needs an extended offline cleanup before application access')
+            else:raise RuntimeError('Restored retention needs additional offline cleanup before application access')
+            integrity=json.loads(run(['docker','exec',name,'psql','-U','postgres','-At','-c',checks]))
+            if integrity['badLedger'] or integrity['rlsMissing']:raise RuntimeError('Privacy replay/retention violated restored integrity')
+            result['postPrivacyCounts']={k:integrity[k] for k in ('profiles','authUsers','results','ledger')}
+            result['retentionReplayVerified']=True
         result['rlsIsolationVerified']=True
         result['extensionsRestored']=extensions
         return result

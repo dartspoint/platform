@@ -7,6 +7,8 @@ import { Activity, ArrowLeft, ArrowRight, ArrowUpRight, Bell, Check, ChevronRigh
 import { MotionConfig, motion } from "motion/react";
 import { Brand } from "@/components/design-studio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {DartsLegal} from "./darts-legal";
+import {useSupportIdentity} from "@/components/darts-support-links";
 import { AdminSeasons } from "./darts-seasons";
 import {AdminChatModeration} from './darts-chat-moderation';
 import { AdminLobbyContent } from "./darts-lobby-content";
@@ -33,6 +35,9 @@ const navigation = [
   { id: "elo", label: "DP & competitie", icon: Target },
   { id: "lobby", label: "Lobby & widgets", icon: LayoutGrid },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
+  { id: "legal", label: "Juridisch en informatie", icon: ClipboardList },
+  { id: "support", label: "Supporttickets", icon: Bell },
+  { id: "teamroles", label: "Gebruikers en teamrollen", icon: Users },
   { id: "audit", label: "Actielogboek", icon: ClipboardList },
 ] as const;
 type AdminTab = typeof navigation[number]["id"];
@@ -49,6 +54,9 @@ const titles: Record<AdminTab, { title: string; description: string }> = {
   elo: { title: "Een eerlijke plek op de ladder.", description: "Bekijk het actieve DP-beleid en reken een nieuw beleidsvoorstel door." },
   lobby: { title: "Een clubhuis met karakter.", description: "Beheer lobbywidgets, nieuws, kamerselecties en gedeelde publicaties." },
   platform: { title: "DartsPoint, zoals jij het wilt.", description: "Beheer platformvoorkeuren, aankondigingen en de toegang tot jouw community." },
+  legal: {title:"Duidelijke afspraken voor de club.",description:"Beheer de openbare documenten, versies en contactgegevens."},
+  support: {title:"Help spelers verder.",description:"Open de afgeschermde supportomgeving."},
+  teamroles: {title:"De juiste toegang voor het team.",description:"Ken ticketrollen toe zonder spel- of beheerrechten te verruimen."},
   audit: { title: "Iedere wijziging, inzichtelijk.", description: "Wie deed wat, wanneer en waarom? Volg je beheerhandelingen terug." },
 };
 function validTab(value?: string): AdminTab { return navigation.some(item => item.id === value) ? value as AdminTab : "overview"; }
@@ -88,7 +96,8 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
   const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
   const navigating = useRef(false);
   const registerNavigationGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
-  const visibleNavigation = navigation.filter(item => item.id !== "lobby" || getPlatform().actor?.role === "owner");
+  const supportIdentity=useSupportIdentity();
+  const visibleNavigation = navigation.filter(item => (item.id !== "lobby" || getPlatform().actor?.role === "owner")&&(item.id!=="teamroles"||supportIdentity?.canManageTeam));
   const operations = useAdminOperations();
   const settings = useAdminSettings();
   const tournamentState = useTournaments();
@@ -106,6 +115,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
     navigating.current = true;
     try { if (navigationGuard.current && !await navigationGuard.current()) return;
     navigationGuard.current = null;
+    if(next==="support"||next==="teamroles"){window.location.assign("/team/support"+(next==="teamroles"?"?view=team":""));return;}
     setTab(next); setTournamentId(id); setMenuOpen(false); setSearchOpen(false); setSearch("");
     const params = new URLSearchParams(); if (next !== "overview") params.set("tab", next); if (id) params.set("toernooi", id);
     window.history.replaceState(null, "", `/beheer${params.size ? `?${params}` : ""}`);
@@ -113,6 +123,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
     requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
     } finally { navigating.current = false; }
   }
+  useEffect(()=>{if(tab==="support"||tab==="teamroles")void navigate(tab);},[tab]);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 950px)");
     const update = () => { setMobile(query.matches); if (!query.matches) setMenuOpen(false); };
@@ -141,7 +152,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
           <section className="adm-panel"><div className="adm-panel-heading"><h2>Dit verdient aandacht</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? `${openCases} melding${openCases === 1 ? "" : "en"} open` : "Een rustige community"}</strong><p>Bekijk de context voordat je een maatregel neemt.</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} toernooiconcepten</strong><p>Controleer spelregels en deelname voordat je publiceert.</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>DP-beleid: K = 32</strong><p>10 wedstrijden en 5 verschillende tegenstanders voor plaatsing.</p></div></button></div></section>
 
         </div></div>
-      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : <AuditPanel entries={audit}/>}
+      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
       <footer className="adm-page-footer"><span>DARTSPOINT · PLATFORMBEHEER</span><span>Je wijzigingen vind je terug in het logboek.</span></footer>
       </main>
     </div>
