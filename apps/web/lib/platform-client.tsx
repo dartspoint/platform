@@ -28,7 +28,7 @@ let deferredRefresh:ReturnType<typeof setTimeout>|undefined,deferredAt=0,lastCha
  * projection. Keep a one-second bound even during continuous room activity. */
 export function schedulePlatformRefresh(){const now=Date.now();deferredAt||=now;clearTimeout(deferredRefresh);deferredRefresh=setTimeout(()=>{deferredAt=0;deferredRefresh=undefined;void refreshPlatform().catch(()=>{});},Math.min(500,Math.max(0,1000-(now-deferredAt))));}
 export async function mutate<T=any>(path:string,input:unknown):Promise<T>{try{const data=await api<T>(path,input);await refreshPlatform();return data;}catch(e){toast.error(e instanceof Error?e.message:'Dit is niet gelukt. Probeer het nog eens.');throw e;}}
-export function PlatformProvider({initial,children}:{initial:PlatformSnapshot;children:ReactNode}){
+export function PlatformProvider({initial,children,accessFailure="login"}:{initial:PlatformSnapshot;children:ReactNode;accessFailure?:"login"|"support"}){
  const [ready,setReady]=useState(false);
  useEffect(()=>{
   let disposed=false,room:any,retry:ReturnType<typeof setTimeout>,renew:ReturnType<typeof setInterval>;
@@ -63,9 +63,9 @@ export function PlatformProvider({initial,children}:{initial:PlatformSnapshot;ch
    catch{/* Keep unacknowledged user activity for the next heartbeat. */}
    finally{if(active)activePulseInFlight=false;else quietPulseInFlight=false;}
   };
-  const poll=setInterval(()=>{if(Date.now()-lastChatActivity<500){schedulePlatformRefresh();return;}void refreshPlatform().catch(e=>{if(e instanceof ApiError&&[401,403].includes(e.status))window.location.assign('/inloggen');});},3000);
+  const poll=setInterval(()=>{if(Date.now()-lastChatActivity<500){schedulePlatformRefresh();return;}void refreshPlatform().catch(e=>{if(e instanceof ApiError&&[401,403].includes(e.status)){if(accessFailure==='support')window.location.reload();else window.location.assign('/inloggen');}});},3000);
   const pulse=setInterval(()=>{void heartbeat();},20000);
   return ()=>{disposed=true;for(const name of ['pointerdown','keydown','wheel'])window.removeEventListener(name,activity,true);clearTimeout(activityPulse);clearInterval(poll);clearInterval(pulse);clearTimeout(deferredRefresh);deferredAt=0;snapshot=EMPTY_PLATFORM;};
- },[initial]);
- return ready?<>{children}<IncomingInvites/><RequiredRename/></>:<main className="dp-entry-loading" role="status" style={{minHeight:'100dvh',display:'grid',placeItems:'center',color:'#9fbcaa'}}>DartsPoint wordt geopend…</main>;
+ },[initial,accessFailure]);
+ return ready?<>{children}{accessFailure!=="support"&&<><IncomingInvites/><RequiredRename/></>}</>:<main className="dp-entry-loading" role="status" style={{minHeight:'100dvh',display:'grid',placeItems:'center',color:'#9fbcaa'}}>DartsPoint wordt geopend…</main>;
 }

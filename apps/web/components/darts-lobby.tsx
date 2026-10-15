@@ -9,7 +9,7 @@ import {unreadCount} from "@/lib/chat-unread";
 import {DartsNotifications} from "./darts-notifications";
 import {selfName,getPlatform,usePlatform,mutate,playerId} from "@/lib/platform-client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { ArrowRight, ArrowUpRight, Bell, Check, ChevronRight, CircleHelp, Heart, House, LogOut, MessageCircle, Search, Settings2, ShieldCheck, Target, Trophy, UserRound, Users, X } from "lucide-react";
 import { Brand } from "@/components/design-studio";
@@ -33,13 +33,14 @@ import { tournamentRoomDestination } from "@/lib/darts-tournament-navigation";
 import "./darts-app.css";
 import "./darts-lobby.css";
 
-type View = "home" | "friends" | "messages" | "profile";
+type View = "home" | "friends" | "messages" | "profile" | "support";
 const roomCategories = { social: "Sociaal", ranked: "Competitief", beginners: "Ontspannen", tournament: "Toernooi" };
 const roomSymbols = { social: "🎯", ranked: "⚡", beginners: "✨", tournament: "🏆" };
 const navigation = [
   { id: "home", label: "Lobby", icon: House },
   { id: "friends", label: "Vrienden", icon: Heart },
   { id: "messages", label: "Berichten", icon: MessageCircle },
+  { id: "support", label: "Support", icon: CircleHelp },
   { id: "profile", label: "Profiel", icon: UserRound },
 ] as const;
 
@@ -49,10 +50,10 @@ function Avatar({ name, online = true }: { name: string; online?: boolean }) {
   return <span className={`lobby-avatar lobby-role-${role} ${online ? "is-online" : "is-offline"}`} aria-hidden="true">{player.initials}<i/></span>;
 }
 
-export function DartsLobby() {
+export function DartsLobby({supportContent}:{supportContent?:ReactNode}) {
   const desktop=useDesktopWorkspace();
   const [selectingRoom,setSelectingRoom]=useState(false);
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>(supportContent ? "support" : "home");
   const platform=usePlatform();
   const operations = useAdminOperations();
   const { settings } = useAdminSettings();
@@ -119,6 +120,7 @@ export function DartsLobby() {
   }, [toast]);
 
   function navigate(next: View) {
+    if(next === "support" && !supportContent){window.location.assign("/mijn-tickets");return;}
     setView(next);
     window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
@@ -188,7 +190,7 @@ export function DartsLobby() {
     </div>;
   }
 
-  return <MotionConfig reducedMotion={preferences.lessMotion ? "always" : "user"}><div className={`darts-lobby ${desktop?"dp-lobby-fixed":""}`}>
+  return <MotionConfig reducedMotion={preferences.lessMotion ? "always" : "user"}><div className={`darts-lobby ${desktop?"dp-lobby-fixed":""} ${view==="support"?"dp-lobby-support":""}`}>
     <header className="lobby-header"><div className="lobby-header-inner">
       <a href="/lobby" className="lobby-brand" aria-label="DartsPoint lobby"><Brand/></a>
       <nav className="lobby-desktop-nav" aria-label="Hoofdnavigatie">{navigation.filter(item => item.id !== "profile").map(item => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigate(item.id)} aria-current={view === item.id ? "page" : undefined}>{item.label}{item.id === "messages" && unread.length > 0 && <ChatBadge count={unreadTotal}/>}{item.id === "friends" && pendingFriends.length > 0 && <b>{pendingFriends.length}</b>}</button>)}</nav>
@@ -196,13 +198,14 @@ export function DartsLobby() {
     </div></header>
 
     <div className={desktop?"dp-workspace dp-lobby-workspace":undefined}><main className="lobby-main" id="main-content">
-      <DartsLegalAcceptance activeMatch={platform.matches.some(match=>match.players?.some((player:any)=>player.id===platform.actor?.id))||extra==="settings"}/>
+      {view!=="support"&&<DartsLegalAcceptance activeMatch={platform.matches.some(match=>match.players?.some((player:any)=>player.id===platform.actor?.id))||extra==="settings"}/>}
       {resumeMatch&&<a className="lobby-resume-card" href={'/spelen?match='+resumeMatch.id} onClick={event=>{event.preventDefault();resumeActiveMatch();}} aria-label={'Je wedstrijd is nog bezig. Hervat wedstrijd '+resumeMatch.gameNumber+' tegen '+resumeMatch.opponent}>
         <span className="lobby-resume-icon"><Target size={26}/></span><span><strong>Je wedstrijd is nog bezig</strong><small>Tegen {resumeMatch.opponent} · {resumeMatch.room} · Game {resumeMatch.gameNumber}</small><span className="lobby-resume-explanation">Je tegenstander kan doorspelen. Hervat je wedstrijd wanneer je klaar bent.</span><span className="lobby-resume-action">Wedstrijd hervatten <ArrowUpRight size={18}/></span></span>
       </a>}
       {(settings.platform.announcementActive || settings.platform.maintenance) && <div className="lobby-platform-banners" role="status">{settings.platform.maintenance && <div className="lobby-platform-banner maintenance"><Settings2 size={18}/><span><strong>Onderhoudsbericht</strong>{settings.platform.maintenanceMessage}<small>Er is op dit moment onderhoud.</small></span>{isOwner && <a href="/beheer">Beheren<ArrowUpRight size={14}/></a>}</div>}{settings.platform.announcementActive && <div className="lobby-platform-banner"><Bell size={18}/><span>{settings.platform.announcement}</span></div>}</div>}
+      {supportContent&&<div hidden={view!=="support"}>{supportContent}</div>}
       {desktop&&confirmedRoom&&view==="home"&&!selectingRoom&&<RoomCommunity roomId={confirmedRoom.id} onChooseRoom={()=>setSelectingRoom(true)}/>}
-      {!(desktop&&confirmedRoom&&view==="home"&&!selectingRoom)&&<div className="lobby-page-heading lobby-overview-heading">
+      {view!=="support"&&!(desktop&&confirmedRoom&&view==="home"&&!selectingRoom)&&<div className="lobby-page-heading lobby-overview-heading">
         <div><span className="lobby-eyebrow">DARTSPOINT</span>{view!=="home"&&<button className="lobby-screen-back" onClick={()=>navigate("home")} aria-label="Terug naar de lobby"><ChevronRight size={20} style={{transform:"rotate(180deg)"}}/></button>}<h1 ref={headingRef} tabIndex={-1}>{view === "home" ? "Alle kamers." : view === "friends" ? "Vrienden." : view === "messages" ? "Privéberichten." : "Jouw profiel."}</h1><p>{view === "home" ? "Kies een kamer en schuif aan." : view === "friends" ? "Je vrienden en vriendschapsverzoeken, op één plek." : view === "messages" ? "Je persoonlijke gesprekken, ook buiten een kamer." : "Je prestaties, speelvoorkeuren en account."}</p></div>
         {view === "home" && <span className="lobby-room-total"><span className="lobby-online-dot"/>{rooms.length} kamers <i/> {totalOnline} {totalOnline === 1 ? "speler" : "spelers"} <small>online</small></span>}
       </div>}
@@ -224,7 +227,7 @@ export function DartsLobby() {
       {view === "messages" && <section className="lobby-card lobby-messages-page"><div className="lobby-card-heading"><h2>Gesprekken</h2>{unread.length > 0 && <span className="lobby-count">{unreadTotal} nieuwe berichten</span>}</div>{orderedConversations.map(conversationRow)}{orderedConversations.length === 0 && <div className="lobby-empty"><MessageCircle size={26}/><h2>Nog geen gesprekken.</h2><p>Open een vriend of speler om een privébericht te sturen.</p><button className="lobby-secondary" onClick={() => navigate("friends")}>Naar je vrienden<ArrowRight size={16}/></button></div>}</section>}
       {view === "profile" && <section className="lobby-card lobby-own-profile"><ProfileView name={selfName()}/><div className="lobby-profile-actions"><SupportQuickLinks className="lobby-secondary" newTab={Boolean(resumeMatch)}/><button className="lobby-secondary" onClick={() => setExtra("ladder")}><Trophy size={17}/>Bekijk de ladder</button><a className="lobby-secondary" href="/clubhuis"><Trophy size={17}/>Mijn wedstrijden en prestaties</a><a className="lobby-secondary" href="/divisies"><Trophy size={17}/>Mijn divisie & ladder</a><a className="lobby-secondary" href="/oefenen"><Target size={17}/>Oefenen</a><a className="lobby-secondary" href="/oefenen?les=1"><CircleHelp size={17}/>Speluitleg</a><button className="lobby-secondary" onClick={() => setExtra("settings")}><Settings2 size={17}/>Instellingen</button>{canManageRoom(currentRoom)&&<button className="lobby-secondary" onClick={() => setExtra("moderation")}><ShieldCheck size={17}/>Kamerbeheer</button>}{isOwner && <a className="lobby-secondary" href="/beheer"><ShieldCheck size={17}/>Platformbeheer</a>}<button className="lobby-text-button" onClick={signOut}><LogOut size={17}/>Uitloggen</button></div></section>}
       <footer className="lobby-footer" style={{flexWrap:"wrap"}}><span><span className="lobby-online-dot"/>DartsPoint · online darten</span><nav aria-label="Informatie" style={{display:"flex",gap:14,flexWrap:"wrap"}}><a href="/handleiding" target="_blank" rel="noopener noreferrer">Hulp</a><a href="/support" target="_blank" rel="noopener noreferrer">Support</a><a href="/algemene-voorwaarden" target="_blank" rel="noopener noreferrer">Voorwaarden</a><a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy</a><a href="/contact" target="_blank" rel="noopener noreferrer">Contact</a></nav><span>Ontwikkeld door <a href="https://dgwebservices.nl" target="_blank" rel="noopener noreferrer">DG Webservices</a></span></footer>
-    </main>{desktop&&<DesktopCommunity roomId={confirmedRoom?.id} roomName={confirmedRoom?.name} gameId={resumeMatch?.id} opponentName={resumeMatch?.opponent} activeTab={chatTab} onTabChange={setChatTab} onInvite={invitePlayer} onProfile={openProfile} onMessage={openChat} onSpectate={name=>enterGame(confirmedRoom?.name??currentRoom,currentOpponent,false,name)} readEnabled={!extra&&!profile&&!invite}/>}</div>
+    </main>{desktop&&view!=="support"&&<DesktopCommunity roomId={confirmedRoom?.id} roomName={confirmedRoom?.name} gameId={resumeMatch?.id} opponentName={resumeMatch?.opponent} activeTab={chatTab} onTabChange={setChatTab} onInvite={invitePlayer} onProfile={openProfile} onMessage={openChat} onSpectate={name=>enterGame(confirmedRoom?.name??currentRoom,currentOpponent,false,name)} readEnabled={!extra&&!profile&&!invite}/>}</div>
 
     <nav className="lobby-mobile-nav" aria-label="Appnavigatie">{navigation.map(item => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigate(item.id)} aria-current={view === item.id ? "page" : undefined}><span><item.icon size={21}/>{item.id === "messages" && unread.length > 0 && <ChatBadge count={unreadTotal}/>}{item.id === "friends" && pendingFriends.length > 0 && <b>{pendingFriends.length}</b>}</span><small>{item.label}</small></button>)}</nav>
 

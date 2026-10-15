@@ -187,3 +187,11 @@
 .lobby-resume-action { display:flex; width:fit-content; align-items:center; gap:8px; margin-top:6px; padding:9px 13px; border-radius:8px; background:#9be9b8; color:#123622; font-size:13px; font-weight:800; }
 .lobby-resume-card:focus-visible { outline:3px solid #ecfff1; outline-offset:4px; }
 @media(max-width:640px) { .lobby-resume-card { padding:16px; gap:12px; } .lobby-resume-card strong { font-size:16px; } }
+
+/* Support uses the same profile, notification and app navigation shell. */
+@media(min-width:1024px){
+ .dp-lobby-fixed.dp-lobby-support>.dp-workspace{grid-template-columns:minmax(0,1fr)}
+ .dp-lobby-fixed.dp-lobby-support .lobby-main{max-width:1320px;margin-inline:auto;border-right:0;padding:26px 32px 32px}
+ .dp-lobby-fixed.dp-lobby-support .lobby-footer{display:flex}
+}
+@media(max-width:760px){.lobby-mobile-nav{grid-template-columns:repeat(5,minmax(0,1fr))}}

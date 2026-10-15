@@ -1,5 +1,6 @@
 import {getLegalCompany} from '../../../../packages/data/src/legal';
 import '@/components/legal.css';
-export const metadata={title:'Contact | DartsPoint'};
+import {publicPageMetadata} from '@/lib/seo';
+export function generateMetadata(){return publicPageMetadata({path:'/contact',title:'Contact en hulp',description:'Neem contact op met DartsPoint en DG Webservices. Vind onze bedrijfsgegevens en hulp bij je account, het spel of een privacyvraag.'});}
 export const dynamic='force-dynamic';
 export default async function Page(){const company=await getLegalCompany();return <main className="dp-legal-page"><header><a href="/">DartsPoint</a><nav aria-label="Informatie"><a href="/algemene-voorwaarden">Voorwaarden</a><a href="/privacy">Privacy</a><a href="/handleiding">Handleiding</a><a href="/support">Support</a></nav></header><article><h1>Contact</h1><p>DartsPoint is ontwikkeld en wordt aangeboden door {company.name}.</p><address>{company.name}<br/>{company.address}<br/>{company.postalCode} {company.city}<br/>Nederland</address><p>KvK: {company.chamberOfCommerce}<br/>Bedrijfscontact: <a href={'mailto:'+company.email}>{company.email}</a></p><h2>Hulp en privacyvragen</h2><p><a href="/support">DartsPoint Support</a> is ook zonder account bereikbaar. Je kunt ook mailen naar <a href={'mailto:'+company.supportEmail}>{company.supportEmail}</a>.</p><p><a href="/support?topic=privacy&request=access">Privacyverzoek indienen</a> · <a href="/privacy">Privacyverklaring</a></p></article><footer>Ontwikkeld door {company.name}</footer></main>;}

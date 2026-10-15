@@ -97,3 +97,9 @@
 }
 @media(max-width:380px){.mk-hero h1{font-size:clamp(60px,19.5vw,76px);letter-spacing:-2.2px}.mk-hero .mk-cta{font-size:12px}.mk-hero-secondary{font-size:11px}.mk-header-actions{gap:10px}.mk-spotlight-controls{padding-inline:14px}.mk-slide-dots button,.mk-slide-buttons button{width:40px}.mk-ranking-card-head{padding-inline:15px}.mk-ladder-panel tbody th{font-size:11px}.mk-ladder-panel td{font-size:12px}.mk-ladder-panel th,.mk-ladder-panel td{padding-inline:2px}.mk-table-avatar{width:21px;height:21px;margin-right:4px}.mk-room-row{gap:9px}.mk-room-row strong{font-size:13px}.mk-final h2{font-size:clamp(50px,14.5vw,56px)}}
 @media(min-width:701px) and (max-width:760px){.mk-hero h1{font-size:clamp(68px,9.7vw,76px)}}
+
+/* Public search context and crawlable information links. */
+.mk-hero h1 .mk-hero-topic{display:block;font-family:"Manrope Variable",sans-serif;font-size:clamp(16px,1.5vw,21px);font-weight:600;line-height:1.4;letter-spacing:.1px;margin-bottom:17px;color:var(--mk-sage)}
+.mk-footer .mk-footer-info{flex-direction:row;flex-wrap:wrap;gap:8px 28px;padding-block:17px;border-bottom:1px solid var(--mk-line)}
+.mk-footer .mk-footer-info a{min-height:44px;display:flex;align-items:center}
+@media(max-width:700px){.mk-hero h1 .mk-hero-topic{font-size:16px;margin-bottom:15px}.mk-footer .mk-footer-info{gap:4px 22px;padding-block:14px}}

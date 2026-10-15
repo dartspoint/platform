@@ -6,3 +6,18 @@
 @media(max-width:1050px){.inbox{grid-template-columns:285px minmax(0,1fr)}.adminSplit{grid-template-columns:1fr}.card{padding:20px}.grid{grid-template-columns:minmax(0,1.2fr) minmax(230px,.8fr)}}
 @media(max-width:760px){.page{padding:0 15px 28px}.header{align-items:flex-start;padding:20px 0;gap:15px}.brand{font-size:21px}.nav{justify-content:flex-end;gap:8px 14px}.nav a{font-size:12px}.main{margin-top:27px}.grid,.inbox{grid-template-columns:1fr}.card{padding:19px;border-radius:13px}.intro{margin-bottom:22px}.intro h1{letter-spacing:-.9px}.ticketList{max-height:360px;overflow-y:auto;overscroll-behavior:contain}.footer{gap:15px}.row>*{flex-basis:100%}.row .button,.row .secondary,.row .danger{flex:1 1 140px}.message{padding:14px}.adminSplit{gap:18px}.table th,.table td{padding:10px 7px}.tabs{gap:6px}.tabs button{font-size:12px;padding:8px 11px}.header .nav{max-width:65%}}
 @media(prefers-reduced-motion:no-preference){.button,.secondary,.ticketButton{transition:background .15s,border-color .15s}}
+
+/* Ticket content shares the live platform shell for active players. */
+.embedded{min-height:0;background:none;padding:0;color:inherit}
+.embedded .main{max-width:none;margin:24px 0 0}
+.sectionNav{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #ffffff12}
+.sectionNav a{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 13px;border:1px solid #ffffff1b;border-radius:9px;background:#15271d;color:#afc7b8;text-decoration:none;font-size:13px;line-height:1.4}
+.sectionNav a[aria-current=page]{background:#2a4936;border-color:#598068;color:#fff;font-weight:700}
+.sectionNav a:hover{background:#2b4b36;color:#fff}
+.sectionNav a:focus-visible{outline:2px solid #91d4aa;outline-offset:3px}
+@media(max-width:760px){.embedded{padding:0}.embedded .main{margin-top:20px}.sectionNav{gap:7px;margin-bottom:20px;padding-bottom:14px}.sectionNav a{font-size:12px;padding:8px 11px}}
+
+/* Public support stays usable without a gameplay session, also at 320 px. */
+.header{flex-wrap:wrap}
+.header>.nav{flex:1 0 100%;order:3;max-width:none;justify-content:flex-start}
+.header>.secondary{margin-left:auto;flex-shrink:0}

@@ -3,16 +3,17 @@ import {DartsOpening} from '@/components/darts-opening';
 import {PublicDataProvider} from '@/lib/darts-public-data';
 import {openingStatus} from '@/lib/opening';
 import {publicProjection} from '../../../packages/data/src/projections';
+import {MARKETING_DESCRIPTION, MARKETING_TITLE, marketingStructuredData, publicPageMetadata} from '@/lib/seo';
 export const dynamic='force-dynamic';
-const structuredData={'@context':'https://schema.org','@type':'WebSite',name:'DartsPoint',url:'https://dartspoint.nl/',inLanguage:'nl-NL',description:'Online darten met kamers, vrienden, toernooien en divisies.'};
 export function generateMetadata() {
   if (process.env.APP_ENV === 'production' && !openingStatus().open) {
-    return {
+    return publicPageMetadata({
+      path: '/',
       title: 'Vanavond om 20:00 gaan de dartbanen open',
       description: 'DartsPoint opent op 15 oktober 2026 om 20:00 uur Nederlandse tijd. Zet je pijlen maar vast klaar.',
-    };
+    });
   }
-  return {};
+  return publicPageMetadata({path: '/', title: MARKETING_TITLE, description: MARKETING_DESCRIPTION});
 }
 
 export default async function Home() {
@@ -21,5 +22,6 @@ export default async function Home() {
     return <DartsOpening serverNow={status.serverNow} opensAt={status.opensAt}/>;
   }
   const data=await publicProjection();
-  return <><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(structuredData).replace(/</g,'\\u003c')}}/><PublicDataProvider data={data}><DartsMarketing/></PublicDataProvider></>;
+  const structuredData=marketingStructuredData();
+  return <>{structuredData&&<script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(structuredData).replace(/</g,'\\u003c')}}/>}<PublicDataProvider data={data}><DartsMarketing/></PublicDataProvider></>;
 }

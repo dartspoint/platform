@@ -7,7 +7,7 @@ export const metadata = {
   title: 'Vanavond om 20:00 gaan de dartbanen open',
   description: 'DartsPoint opent op 15 oktober 2026 om 20:00 uur Nederlandse tijd. Zet je pijlen maar vast klaar.',
   robots: {index: false, follow: false},
-  alternates: {canonical: '/'},
+  alternates: {canonical: null},
 };
 
 export default function OpeningPage() {
