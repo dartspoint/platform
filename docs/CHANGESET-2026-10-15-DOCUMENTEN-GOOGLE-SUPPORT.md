@@ -46,8 +46,11 @@ De controles gebruiken lokale eigen testdata, echte PostgreSQL/Supabase Auth, Ma
 | Mobiele en toetsenbordbediening, gast en team | 13 browsercontroles geslaagd |
 | Mailstatus en afscherming herstelpaneel | 4 browsercontroles geslaagd met echte Mailpitmail |
 | Webhookgrens en bestaande openbare staging | 13 echte lokale Caddy-HTTP-controles over beide inrichtingen geslaagd |
+| Zelfstandige worker-image | Echte PNG-metadata en supportworker-import geslaagd in de gepinde Node-container, zonder netwerk of ontwikkelafhankelijkheden, met alleen-lezen root en privé logvolume |
 
 Supabase database-lint meldt geen errors. De bestaande retentiefunctie geeft één waarschuwing over de expliciet getypeerde JSONB-initialisatie; de daadwerkelijke database-uitvoering van de retentietests slaagt. De oorspronkelijke aangeleverde assets en beschermde stijlprefixen zijn behouden. De hostupdate herkent ook echte `caddy fmt`-uitvoer zonder de bestaande toegangsregels te verruimen. Bestaande testaccounts ruimen hun eigen juridische acceptaties op voordat hun tijdelijke profiel wordt verwijderd; de productiebeperkingen blijven gelden. De uitnodigingstest controleert zowel geldige levering vóór annulering als geweigerde levering daarna; de testopruiming wordt met de bestaande transactievergrendeling geordend.
+
+De eerste staginguitrol werd automatisch teruggedraaid doordat de supportworker een ontbrekende native Sharp-bibliotheek niet kon laden. De zelfstandige workerbundel bevat nu uitsluitend de zes benodigde, vergrendelde runtimepackages. Elke worker-imagebuild controleert de echte bijlagenbibliotheek en de supportworker onder de productiegebruiker zonder netwerk; testlogs worden verwijderd vóór publicatie. Hiervoor is geen verdere hostupdate of schemawijziging nodig.
 
 ## Nog te bevestigen op staging en bij providers
 

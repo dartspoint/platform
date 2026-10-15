@@ -16,9 +16,23 @@ for(const service of ['realtime','worker']){
  const directory='dist/deploy/'+service;await mkdir(directory+'/scripts',{recursive:true});
  await writeFile(directory+'/package.json',JSON.stringify({type:'module',private:true}));
  // Bundling shared domain code and dependencies avoids copying unrelated sources or secrets.
- await build({entryPoints:[`apps/${service}/src/${service==='worker'?'worker':'server'}.ts`],outfile:directory+'/server.js',bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native']});
+ await build({entryPoints:[`apps/${service}/src/${service==='worker'?'worker':'server'}.ts`],outfile:directory+'/server.js',bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native','sharp']});
  if(service==='worker'){
-  await build({entryPoints:Object.fromEntries(['apps/worker/src/support-worker.ts','scripts/migrate.ts','scripts/owner-bootstrap.ts','scripts/worker-health.ts','scripts/support-health.ts','scripts/verify-database.ts','scripts/launch-export.ts','scripts/verify-launch-storage.ts'].map(p=>[p.split('/').at(-1).replace('.ts',''),p])),outdir:directory+'/scripts',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native']});
+  await build({entryPoints:Object.fromEntries(['apps/worker/src/support-worker.ts','scripts/migrate.ts','scripts/owner-bootstrap.ts','scripts/worker-health.ts','scripts/support-health.ts','scripts/verify-database.ts','scripts/launch-export.ts','scripts/verify-launch-storage.ts'].map(p=>[p.split('/').at(-1).replace('.ts',''),p])),outdir:directory+'/scripts',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:"import {createRequire as __createRequire} from 'node:module'; const require=__createRequire(import.meta.url);"},external:['pg-native','sharp']});
+  // Sharp's official esbuild guidance requires an external package and its
+  // native binaries. Deployment is pinned to Debian/glibc linux/amd64.
+  // Copy only this reviewed runtime closure, with the installed lock versions.
+  const native=['@img/sharp-linux-x64','@img/sharp-libvips-linux-x64'];
+  const packages=['sharp','@img/colour','detect-libc','semver',...native];
+  const lock=JSON.parse(await readFile('package-lock.json','utf8'));
+  for(const name of packages){
+   const source='node_modules/'+name,metadata=JSON.parse(await readFile(source+'/package.json','utf8'));
+   if(metadata.version!==lock.packages[source]?.version||Object.keys(metadata.dependencies??{}).some(dependency=>!packages.includes(dependency)))throw new Error('Unreviewed sharp runtime dependency: '+name);
+   if(native.includes(name)&&(!metadata.os?.includes('linux')||!metadata.cpu?.includes('x64')||!metadata.libc?.includes('glibc')))throw new Error('Sharp binary does not match the pinned runtime');
+   await cp(source,directory+'/'+source,{recursive:true,verbatimSymlinks:true});
+  }
+  await checkLinks(directory+'/node_modules',resolve(directory));
+  await cp('scripts/check-worker-runtime.mjs',directory+'/scripts/check-worker-runtime.mjs');
   await cp('supabase/migrations',directory+'/supabase/migrations',{recursive:true});await cp(directory+'/scripts/worker-health.mjs',directory+'/scripts/health.mjs');
  }
 }

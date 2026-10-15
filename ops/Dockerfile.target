@@ -41,5 +41,8 @@ COPY --from=build --chown=node:node /build/dist/deploy/${SERVICE}/ ./
 COPY --chown=node:node ops/retained-log.mjs /app/retained-log.mjs
 RUN mkdir -p /var/log/dartspoint && chown node:node /var/log/dartspoint && chmod 0700 /var/log/dartspoint
 USER node
+# Test the issued worker artifact in the actual final runtime/user, without
+# repository node_modules, credentials or network, before an image can publish.
+RUN --network=none if [ "$SERVICE" = worker ]; then node scripts/check-worker-runtime.mjs; fi
 EXPOSE 3000
 CMD ["node", "server.js"]
