@@ -8,7 +8,7 @@ import {authAdmin,actorById,type Actor} from '../../packages/data/src/auth';
 import {db,redis} from '../../packages/data/src/db';
 import {onboard,joinRoom,social,privateChannel,sendMessage} from '../../packages/data/src/community';
 import {usernameSchema} from '../../packages/contracts/src/index';
-import {login,post,get,origin} from './helpers';
+import {cleanupOwnedOnboarding,login,post,get,origin} from './helpers';
 
 // This creates actual owned Auth/DB fixtures, after the latency suite, locally only.
 assert.equal(process.env.APP_ENV,'development');
@@ -17,7 +17,7 @@ assert.equal(new URL(process.env.DATABASE_URL!).hostname,'127.0.0.1');
 assert.equal(new URL(origin).hostname,'127.0.0.1');assert.equal(process.env.E2E_STAGING_FIXTURE,undefined);
 const browser=await chromium.launch(),privileged=new Pool({...postgresOptions(process.env.MIGRATION_DATABASE_URL!),max:1});
 const prefix='Dense'+randomUUID().replaceAll('-','').slice(0,7),room=randomUUID(),channel=randomUUID(),owned:string[]=[],channelIds:string[]=[channel];
-const peers:Array<{actor:Actor;name:string}>=[],directory='artifacts/workspace-density';
+const ownedIdentities:{id:string;email:string}[]=[],peers:Array<{actor:Actor;name:string}>=[],directory='artifacts/workspace-density';
 const report:{ok:boolean;physicalDevices:boolean;fixture:Record<string,unknown>;desktop:unknown[];mobile:unknown[];zoom:unknown[];menus:unknown[];checks:Record<string,boolean>}={ok:false,physicalDevices:false,fixture:{players:21,friends:20,privateTabs:8,maximumValidUsernameLength:20,source:'Real local Auth users, persisted profiles, domain joins/friendships/private channels and native built application',zoomMethod:'HTML CSS zoom=2; physical browser CtrlPlus and physical phones are unmeasured'},desktop:[],mobile:[],zoom:[],menus:[],checks:{}};
 const pause=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 const layerState=(page:Page)=>page.evaluate(()=>({sheets:[...document.querySelectorAll('.dp-social-sheet')].map(e=>({state:e.getAttribute('data-state'),rect:{x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y,width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}})),menus:document.querySelectorAll('[role="menu"]').length,focus:{tag:document.activeElement?.tagName,label:document.activeElement?.getAttribute('aria-label')??null,className:document.activeElement?.className??null,connected:document.activeElement?.isConnected??false}}));
@@ -65,12 +65,12 @@ async function tabKeyboard(page:Page){
  await last.press('Home');await expect(tab).toBeFocused();await expect(tab).toHaveAttribute('data-state','active');return tabs;
 }
 try{
- await mkdir(directory,{recursive:true});const main=await login(browser,'Density');owned.push(main.id);main.page.setDefaultTimeout(15000);
+ await mkdir(directory,{recursive:true});const main=await login(browser,'Density');owned.push(main.id);ownedIdentities.push({id:main.id,email:main.email});main.page.setDefaultTimeout(15000);
  const actor=await actorById(main.id,Date.now()+3600000);
  await db().query("insert into community_rooms(id,name,slug,description,capacity,min_rating,max_rating) values($1,$2,$2,'Owned dense workspace acceptance',50,0,4000)",[room,prefix]);await db().query("insert into channels(id,kind,room_id) values($1,'community',$2)",[channel,room]);
  for(let i=0;i<20;i++){
   const name=prefix+'_'+String(i).padStart(7,'0');assert.equal(name.length,20);assert.equal(usernameSchema.parse(name),name);assert.equal(usernameSchema.safeParse(name+'X').success,false);
-  const user=await authAdmin().auth.admin.createUser({email:prefix+'-'+i+'@dartspoint.local',email_confirm:true});assert.equal(user.error,null);const id=user.data.user!.id;owned.push(id);
+  const user=await authAdmin().auth.admin.createUser({email:prefix+'-'+i+'@dartspoint.local',email_confirm:true});assert.equal(user.error,null);const id=user.data.user!.id;owned.push(id);ownedIdentities.push({id,email:user.data.user!.email!});
   await onboard(await actorById(id,Date.now()+3600000,false),{username:name});const peer=await actorById(id,Date.now()+3600000);peers.push({actor:peer,name});
   await joinRoom(peer,{roomId:room});await social(actor,{action:'request',targetId:id});await social(peer,{action:'accept',targetId:main.id});
  }
@@ -126,7 +126,7 @@ try{
   await client.query('delete from chat_messages where channel_id=any($1::uuid[])',[channelIds]);await client.query('delete from chat_preferences where channel_id=any($1::uuid[])',[channelIds]);await client.query('delete from channel_memberships where user_id=any($1::uuid[]) or channel_id=any($2::uuid[])',[owned,channelIds]);await client.query('delete from channels where id=any($1::uuid[])',[channelIds]);
   await client.query('delete from private.room_visits where user_id=any($1::uuid[])',[owned]);await client.query('delete from room_memberships where user_id=any($1::uuid[])',[owned]);await client.query('delete from community_rooms where id=$1',[room]);
   await client.query('delete from friend_requests where sender_id=any($1::uuid[]) or recipient_id=any($1::uuid[])',[owned]);await client.query('delete from friendships where user_low=any($1::uuid[]) or user_high=any($1::uuid[])',[owned]);
-  await client.query('delete from private.profile_private where user_id=any($1::uuid[])',[owned]);await client.query('delete from preferences where user_id=any($1::uuid[])',[owned]);await client.query('delete from player_ratings where user_id=any($1::uuid[])',[owned]);await client.query('delete from profiles where id=any($1::uuid[])',[owned]);await client.query('delete from auth.users where id=any($1::uuid[])',[owned]);await client.query('commit');
+  await cleanupOwnedOnboarding(client,ownedIdentities);await client.query('delete from private.profile_private where user_id=any($1::uuid[])',[owned]);await client.query('delete from preferences where user_id=any($1::uuid[])',[owned]);await client.query('delete from player_ratings where user_id=any($1::uuid[])',[owned]);await client.query('delete from profiles where id=any($1::uuid[])',[owned]);await client.query('delete from auth.users where id=any($1::uuid[])',[owned]);await client.query('commit');
   assert.equal((await client.query('select count(*)::int n from profiles where id=any($1::uuid[])',[owned])).rows[0].n,0);report.checks.ownedAuthAndDatabaseFixturesRemoved=true;
  }catch(error){report.ok=false;await client.query('rollback');throw error;}finally{client.release();await privileged.end();await db().end();await(await redis()).quit();await mkdir(directory,{recursive:true});await writeFile(directory+'/results.json',JSON.stringify(report,null,2));}
 }

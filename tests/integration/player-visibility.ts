@@ -83,7 +83,7 @@ try{
   await client.query('delete from room_memberships where user_id=any($1::uuid[])',[ids]);await client.query('delete from community_rooms where id=any($1::uuid[])',[[room,otherRoom]]);
   await client.query('delete from friendships where user_low=any($1::uuid[]) or user_high=any($1::uuid[])',[ids]);await client.query('delete from friend_requests where sender_id=any($1::uuid[]) or recipient_id=any($1::uuid[])',[ids]);
   await client.query('delete from personal_mutes where user_id=any($1::uuid[]) or muted_id=any($1::uuid[])',[ids]);await client.query('delete from user_blocks where blocker_id=any($1::uuid[]) or blocked_id=any($1::uuid[])',[ids]);
-  await client.query('delete from preferences where user_id=any($1::uuid[])',[ids]);await client.query('delete from player_ratings where user_id=any($1::uuid[])',[ids]);await client.query('delete from profiles where id=any($1::uuid[])',[ids]);await client.query('delete from auth.users where id=any($1::uuid[])',[ids]);await client.query('commit');
+  await client.query('delete from preferences where user_id=any($1::uuid[])',[ids]);await client.query('delete from player_ratings where user_id=any($1::uuid[])',[ids]);await client.query('delete from private.legal_acceptances where user_id=any($1::uuid[])',[ids]);await client.query('delete from profiles where id=any($1::uuid[])',[ids]);await client.query('delete from auth.users where id=any($1::uuid[])',[ids]);await client.query('commit');
   assert.equal((await client.query('select count(*)::int n from profiles where id=any($1::uuid[])',[ids])).rows[0].n,0);checks.ownedBulkFixturesRemoved=true;
  }catch(error){await client.query('rollback');throw error;}finally{client.release();await privileged.end();await db().end();await(await redis()).quit();}
 }

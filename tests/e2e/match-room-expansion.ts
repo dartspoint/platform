@@ -5,7 +5,7 @@ import {chromium,expect,type Page} from '@playwright/test';
 import {Room} from '@colyseus/sdk';
 import {Pool} from 'pg';
 import {postgresOptions} from '../../packages/data/src/postgres';
-import {login,get,post,origin} from './helpers';
+import {cleanupOwnedOnboarding,login,get,post,origin} from './helpers';
 import {forfeitGame} from './game-command';
 import {commandSchema} from '../../packages/contracts/src/index';
 
@@ -250,7 +250,7 @@ finally{
    for(const table of ['private.match_commands','match_darts','match_events','match_statistics','rating_ledger','user_badges','player_opponents','active_player_reservations','match_players','match_results'])await c.query(`delete from ${table} where ${table==='player_opponents'?'first_match_id':'match_id'}=any($1::uuid[])`,[matches]);
    await c.query('delete from private.command_ingress where actor_id=any($1::uuid[])',[owned]);await c.query('delete from private.audit_events where actor_id=any($1::uuid[]) or subject=any($2::text[])',[owned,[room,...matches,...owned]]);await c.query('delete from matches where id=any($1::uuid[])',[matches]);
    await c.query('delete from private.room_visits where user_id=any($1::uuid[])',[owned]);await c.query('delete from room_memberships where user_id=any($1::uuid[])',[owned]);await c.query('delete from room_access where room_id=$1',[room]);await c.query('delete from community_rooms where id=$1',[room]);
-   await c.query('delete from user_badges where user_id=any($1::uuid[])',[owned]);await c.query('delete from preferences where user_id=any($1::uuid[])',[owned]);await c.query('delete from player_ratings where user_id=any($1::uuid[])',[owned]);await c.query('delete from profiles where id=any($1::uuid[])',[owned]);await c.query('delete from auth.users where id=any($1::uuid[])',[owned]);await c.query('commit');
+   await cleanupOwnedOnboarding(c,actors);await c.query('delete from user_badges where user_id=any($1::uuid[])',[owned]);await c.query('delete from preferences where user_id=any($1::uuid[])',[owned]);await c.query('delete from player_ratings where user_id=any($1::uuid[])',[owned]);await c.query('delete from profiles where id=any($1::uuid[])',[owned]);await c.query('delete from auth.users where id=any($1::uuid[])',[owned]);await c.query('commit');
    assert.equal((await c.query('select count(*)::int n from profiles where id=any($1::uuid[])',[owned])).rows[0].n,0);proof.cleanup.ownedRows=true;
   }catch(error){await c.query('rollback');throw error;}finally{c.release();}
  }catch{failed=true;proof.cleanup.ownedRows=false;}

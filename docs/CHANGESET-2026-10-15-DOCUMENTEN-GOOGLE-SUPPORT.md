@@ -33,7 +33,7 @@ De controles gebruiken lokale eigen testdata, echte PostgreSQL/Supabase Auth, Ma
 | --- | --- |
 | TypeScript en productiebuild | Geslaagd |
 | Unittests | 78 geslaagd |
-| Beheerde deployment en rollback | 47 geslaagd, inclusief echte Compose-samenvoeging voor oude en nieuwe images |
+| Beheerde deployment en rollback | 48 geslaagd, inclusief echte Compose-samenvoeging voor oude en nieuwe images |
 | Juridische versies en gesloten registratie | Database-integratie geslaagd |
 | Ticketrechten en mailherstel | 69 databasecontroles geslaagd |
 | Bewaarbeleid | 36 databasecontroles geslaagd |
@@ -47,7 +47,7 @@ De controles gebruiken lokale eigen testdata, echte PostgreSQL/Supabase Auth, Ma
 | Mailstatus en afscherming herstelpaneel | 4 browsercontroles geslaagd met echte Mailpitmail |
 | Publieke webhookgrens | 6 echte lokale Caddy-HTTP-controles geslaagd |
 
-Supabase database-lint meldt geen errors. De bestaande retentiefunctie geeft één waarschuwing over de expliciet getypeerde JSONB-initialisatie; de daadwerkelijke database-uitvoering van de retentietests slaagt. De oorspronkelijke aangeleverde assets en beschermde stijlprefixen zijn behouden.
+Supabase database-lint meldt geen errors. De bestaande retentiefunctie geeft één waarschuwing over de expliciet getypeerde JSONB-initialisatie; de daadwerkelijke database-uitvoering van de retentietests slaagt. De oorspronkelijke aangeleverde assets en beschermde stijlprefixen zijn behouden. De hostupdate herkent ook echte `caddy fmt`-uitvoer zonder de bestaande toegangsregels te verruimen. Bestaande testaccounts ruimen hun eigen juridische acceptaties op voordat hun tijdelijke profiel wordt verwijderd; de productiebeperkingen blijven gelden.
 
 ## Nog te bevestigen op staging en bij providers
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {Pool} from 'pg';
 import {chromium,expect,type Route} from '@playwright/test';
-import {login,get,post,origin} from './helpers';
+import {cleanupOwnedOnboarding,login,get,post,origin} from './helpers';
 
 assert.equal(process.env.APP_ENV,'development');
 for(const value of [origin,process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.DATABASE_URL!,process.env.MIGRATION_DATABASE_URL!])assert.equal(new URL(value).hostname,'127.0.0.1');
@@ -85,7 +85,7 @@ try{
    await client.query('delete from notifications where user_id=$1',[actor.id]);await client.query('delete from private.email_deliveries where event_id in(select id from private.outbox_events where user_id=$1)',[actor.id]);await client.query('delete from private.outbox_events where user_id=$1',[actor.id]);await client.query('delete from private.audit_events where actor_id=$1',[actor.id]);
    await client.query('delete from private.command_ingress where actor_id=$1',[actor.id]);await client.query('delete from private.practice_commands where user_id=$1',[actor.id]);await client.query('delete from practice_results where user_id=$1',[actor.id]);await client.query('delete from practice_sessions where user_id=$1',[actor.id]);await client.query('delete from practice_progress where user_id=$1',[actor.id]);await client.query('delete from user_badges where user_id=$1',[actor.id]);
    await client.query('delete from chat_messages where sender_id=$1 or actor_id=$1',[actor.id]);await client.query('delete from chat_preferences where user_id=$1',[actor.id]);await client.query('delete from channel_memberships where user_id=$1',[actor.id]);await client.query('delete from private.room_visits where user_id=$1',[actor.id]);await client.query('delete from room_memberships where user_id=$1',[actor.id]);
-   await client.query('delete from private.profile_private where user_id=$1',[actor.id]);await client.query('delete from preferences where user_id=$1',[actor.id]);await client.query('delete from player_ratings where user_id=$1',[actor.id]);await client.query('delete from profiles where id=$1',[actor.id]);await client.query('delete from auth.users where id=$1',[actor.id]);await client.query('commit');
+   await cleanupOwnedOnboarding(client,[actor]);await client.query('delete from private.profile_private where user_id=$1',[actor.id]);await client.query('delete from preferences where user_id=$1',[actor.id]);await client.query('delete from player_ratings where user_id=$1',[actor.id]);await client.query('delete from profiles where id=$1',[actor.id]);await client.query('delete from auth.users where id=$1',[actor.id]);await client.query('commit');
    assert.equal((await client.query('select count(*)::int n from profiles where id=$1',[actor.id])).rows[0].n,0);report.ownedFixtureRemoved=true;
   }catch(error){await client.query('rollback');throw error;}finally{client.release();}}
  }catch(error){cleanupError??=error;}

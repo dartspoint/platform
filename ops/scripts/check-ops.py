@@ -327,6 +327,20 @@ class DeploymentContractChecks(unittest.TestCase):
             with self.assertRaises(RuntimeError):host.validate_pins(baseline,changed)
         with self.assertRaises(RuntimeError):host.validate_pins(baseline,{**pins,'CLAMAV_IMAGE':'clamav/clamav:latest'})
 
+    def test_support_host_update_accepts_only_the_same_whitespace_formatted_boundary(self):
+        path=HERE.parent/'update-support-host.template.py';spec=importlib.util.spec_from_file_location('support_host_whitespace',path);host=importlib.util.module_from_spec(spec);spec.loader.exec_module(host)
+        old=(HERE.parent/'Caddyfile.staging').read_text().replace(host.WEBHOOK_RULE,host.OUTSIDE)
+        old_start,old_end=host.staging_span(old);app=old[old_start:old_end]
+        spaced=app.replace('    ','\t').replace('@outside not remote_ip','@outside\t not\tremote_ip').replace('respond @outside 403','respond\t@outside\t403').replace('reverse_proxy 127.0.0.1:3001','reverse_proxy\t127.0.0.1:3001')
+        source='production.example.invalid { respond 200 }\n# Preserve all surrounding bytes\n'+spaced+old[old_end:]
+        changed=host.staging_webhook(source);before_start,before_end=host.staging_span(source);after_start,after_end=host.staging_span(changed)
+        self.assertEqual(source[:before_start],changed[:after_start]);self.assertEqual(source[before_end:],changed[after_end:]);self.assertEqual(host.staging_webhook(changed),changed)
+        for unsafe in (spaced.replace('100.64.0.0/10','0.0.0.0/0'),spaced.replace('3001','3000'),spaced.replace('@outside\t403','@outside\t200'),spaced.replace('reverse_proxy\t127.0.0.1:3001','reverse_proxy\t127.0.0.1:3001 malicious.example.invalid')):
+            with self.assertRaises(RuntimeError) as raised:host.staging_webhook(unsafe)
+            diagnostic=str(raised.exception);self.assertNotIn('malicious.example.invalid',diagnostic);self.assertNotIn('0.0.0.0/0',diagnostic);self.assertIn('manual inspection',diagnostic)
+        for unsafe in (changed.replace('not path /api/support/inbound','not path /api/support/*'),changed.replace('not method POST','not method GET'),changed.replace('respond @support_wrong_method 405','respond @support_wrong_method 200')):
+            with self.assertRaises(RuntimeError):host.staging_webhook(unsafe)
+
     def test_support_compose_is_resource_bounded_and_scanner_has_no_host_access(self):
         import yaml
         services=yaml.safe_load((HERE.parent/'compose.target.yml').read_text())['services'];scanner=services['clamav'];support=services['support']

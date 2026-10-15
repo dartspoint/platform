@@ -1,6 +1,8 @@
 import {chromium,type Page,type Browser} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {readFileSync,statSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import type {PoolClient} from 'pg';
 export const origin=process.env.E2E_ORIGIN??'http://127.0.0.1:4300';
 let stagingAccount=0;
 // Isolate local browser IP budgets; native QA bypasses the production Caddy ingress.
@@ -44,3 +46,23 @@ export async function login(browser:Browser,label:string,{hasTouch=false}:{hasTo
 }
 export async function post(page:Page,path:string,input:unknown){const response=await page.request.post(origin+'/api/platform/'+path,{data:input});const data=await response.json();if(!response.ok())throw new Error(`API ${path}: ${response.status()} ${data.code}`);return data;}
 export async function get(page:Page,path:string){const response=await page.request.get(origin+'/api/platform/'+path);if(!response.ok())throw new Error(`API ${path}: ${response.status()}`);return response.json();}
+
+/** Only for the caller's newly created local player fixtures, inside its cleanup
+ * transaction. Keep normal Auth onboarding intact; remove its owned evidence
+ * before the existing fixture-specific profile/Auth cleanup. Never use this for
+ * privacy/retention tests or to remove published legal documents. */
+export async function cleanupOwnedOnboarding(client:PoolClient,fixtures:readonly {id:string;email:string;name?:string}[]){
+ assert.equal(process.env.APP_ENV,'development');
+ assert.equal(process.env.E2E_STAGING_FIXTURE,undefined);
+ for(const value of [origin,process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.DATABASE_URL!,process.env.MIGRATION_DATABASE_URL!])assert.equal(new URL(value).hostname,'127.0.0.1');
+ if(!fixtures.length)return;
+ const ids=fixtures.map(fixture=>fixture.id);
+ assert.equal(new Set(ids).size,ids.length,'Each owned fixture UUID is supplied once');
+ for(const fixture of fixtures){assert.match(fixture.id,/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);assert.ok(fixture.email.toLowerCase().endsWith('@dartspoint.local'));}
+ const rows=(await client.query('select p.id,p.username,u.email,exists(select 1 from user_roles r where r.user_id=p.id) staff from profiles p join auth.users u on u.id=p.id where p.id=any($1::uuid[]) order by p.id for update of p',[ids])).rows;
+ assert.equal(rows.length,fixtures.length,'All cleanup identities must still be the exact owned local fixtures');
+ for(const fixture of fixtures){const row=rows.find(value=>value.id===fixture.id);assert.ok(row&&!row.staff&&row.email.toLowerCase()===fixture.email.toLowerCase(),'Cleanup is restricted to the exact owned normal-player identity');if(fixture.name!==undefined)assert.equal(row.username,fixture.name);}
+ await client.query('delete from private.legal_acceptances where user_id=any($1::uuid[])',[ids]);
+ await client.query('delete from private.privacy_reauths where user_id=any($1::uuid[])',[ids]);
+ await client.query('delete from private.revoked_sessions where user_id=any($1::uuid[])',[ids]);
+}

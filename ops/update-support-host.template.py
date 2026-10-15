@@ -42,13 +42,39 @@ def staging_span(text):
 
 def staging_webhook(text):
     start,end=staging_span(text);block=text[start:end]
-    if WEBHOOK_RULE in block:
-        if OUTSIDE in block:raise RuntimeError('Conflicting staging access rules')
-        return text
-    if block.count(OUTSIDE)!=1 or block.count('respond @outside 403')!=1 or 'reverse_proxy 127.0.0.1:3001' not in block:
-        raise RuntimeError('Staging access rules require manual inspection')
-    updated=block.replace(OUTSIDE,WEBHOOK_RULE)
-    return text[:start]+updated+text[end:]
+    def tokens(line):return line.split('#',1)[0].split()
+    def lines(name):return list(re.finditer(r'(?m)^[ \t]*'+re.escape(name)+r'(?=[ \t\r\n]|$)[^\r\n]*(?:\r?\n|$)',block))
+    def matcher_body(match):
+        # Only the two known flat matcher forms are accepted. Unknown nested
+        # blocks or additional predicates require inspection, never guessing.
+        if tokens(match.group())!=[tokens(match.group())[0],'{']:return None
+        body=[]
+        for line in block[match.end():].splitlines():
+            value=tokens(line)
+            if value==['}']:return body
+            if value:body.append(value)
+        return None
+    def same_allowlist(value):
+        expected=OUTSIDE.split()[3:]
+        return value[:2]==['not','remote_ip'] and len(value[2:])==len(expected) and set(value[2:])==set(expected)
+    outside=lines('@outside');denials=[tokens(m.group()) for m in lines('respond') if tokens(m.group())[1:2]==['@outside']]
+    upstreams=[tokens(m.group()) for m in lines('reverse_proxy')]
+    method=lines('@support_wrong_method');method_denials=[tokens(m.group()) for m in lines('respond') if tokens(m.group())[1:2]==['@support_wrong_method']]
+    checks={'singleOutsideMatcher':len(outside)==1,'outsideDenyExpected':denials==[['respond','@outside','403']],'upstreamExpected':upstreams==[['reverse_proxy','127.0.0.1:3001']]}
+    def refuse(reason):raise RuntimeError('Staging access rules require manual inspection: '+json.dumps({'reason':reason,**checks},sort_keys=True))
+    if not all(checks.values()):refuse('unrecognized_staging_boundary')
+    value=tokens(outside[0].group())
+    if same_allowlist(value[1:]):
+        if method or method_denials:refuse('conflicting_webhook_method_rule')
+        prior=outside[0];ending='\r\n' if prior.group().endswith('\r\n') else '\n' if prior.group().endswith('\n') else ''
+        updated=block[:prior.start()]+WEBHOOK_RULE+ending+block[prior.end():]
+        return text[:start]+updated+text[end:]
+    body=matcher_body(outside[0]);checks['outsideAllowlistExpected']=bool(body and len(body)==2 and sum(same_allowlist(item) for item in body)==1 and ['not','path','/api/support/inbound'] in body)
+    method_body=matcher_body(method[0]) if len(method)==1 else None
+    checks['webhookMethodExpected']=bool(method_body and len(method_body)==2 and ['path','/api/support/inbound'] in method_body and ['not','method','POST'] in method_body and method_denials==[['respond','@support_wrong_method','405']])
+    if not checks['outsideAllowlistExpected'] or not checks['webhookMethodExpected']:refuse('unrecognized_staging_matcher')
+    # caddy fmt changes indentation; semantic recognition must still be a no-op.
+    return text
 
 def validate_pins(previous,following):
     baseline={'NODE_IMAGE','REDIS_IMAGE','POSTGRES_IMAGE'}

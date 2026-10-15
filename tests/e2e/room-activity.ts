@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {Pool} from 'pg';
 import {chromium,type Route} from '@playwright/test';
-import {login,get,post,origin} from './helpers';
+import {cleanupOwnedOnboarding,login,get,post,origin} from './helpers';
 
 // This fixture changes one newly-created actor's idle metadata. Never use a
 // staging fixture, remote database or fake browser/server clock for it.
@@ -79,7 +79,7 @@ try{
    await client.query('delete from private.audit_events where actor_id=$1',[actor.id]);
    await client.query("delete from chat_messages where actor_id=$1 and kind='room.member_joined' and event_id in(select id from private.room_visits where user_id=$1)",[actor.id]);
    await client.query('delete from chat_preferences where user_id=$1',[actor.id]);await client.query('delete from channel_memberships where user_id=$1',[actor.id]);await client.query('delete from private.room_visits where user_id=$1',[actor.id]);await client.query('delete from room_memberships where user_id=$1',[actor.id]);
-   await client.query('delete from private.profile_private where user_id=$1',[actor.id]);await client.query('delete from preferences where user_id=$1',[actor.id]);await client.query('delete from player_ratings where user_id=$1',[actor.id]);await client.query('delete from profiles where id=$1',[actor.id]);await client.query('delete from auth.users where id=$1',[actor.id]);
+   await cleanupOwnedOnboarding(client,[actor]);await client.query('delete from private.profile_private where user_id=$1',[actor.id]);await client.query('delete from preferences where user_id=$1',[actor.id]);await client.query('delete from player_ratings where user_id=$1',[actor.id]);await client.query('delete from profiles where id=$1',[actor.id]);await client.query('delete from auth.users where id=$1',[actor.id]);
    await client.query('commit');report.ownedFixtureRemoved=true;
   }catch(error){report.ok=false;await client.query('rollback');throw error;}finally{client.release();}}
  }catch(error){cleanupError=error;report.ok=false;report.cleanupFailure=true;}
