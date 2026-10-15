@@ -155,6 +155,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/game-timing.t
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/render-sample-timing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/visual.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/chat-moderation-ui.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/turnstile.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/interface.ts
