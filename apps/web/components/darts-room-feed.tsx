@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, BarChart3, Bell, CalendarDays, Check, ChevronRight, Flame, Heart, Megaphone, Newspaper, Sparkles, Target, Trophy, Users, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerName } from "@/components/player-identity";
+import { ReleaseUpdatesWidget } from "@/components/darts-release-updates";
 import { DartsHeroBackground } from "@/components/darts-hero-background";
 import { registrationIsOpen, type Tournament } from "@/lib/darts-tournament-model";
 import { visibleLobbyWidgets, safeLobbyHref, type LobbyLayout, type LobbyWidget, type LobbyArticle, type LobbyFeedPayload } from "@/lib/darts-lobby-content";
@@ -14,7 +15,7 @@ import "./darts-room-feed.css";
 
 const filters = ["Ontdekken", "Toernooien", "Community", "Nieuws"] as const;
 type FeedFilter = typeof filters[number];
-const widgetFilters: Record<LobbyWidget["type"], FeedFilter> = { announcement: "Nieuws", tournament: "Toernooien", players: "Community", challenge: "Community", moment: "Community", news: "Nieuws", poll: "Community", divisions: "Community" };
+const widgetFilters: Record<LobbyWidget["type"], FeedFilter> = { announcement: "Nieuws", tournament: "Toernooien", releases: "Nieuws", players: "Community", challenge: "Community", moment: "Community", news: "Nieuws", poll: "Community", divisions: "Community" };
 const articleLabels: Record<LobbyArticle["category"], string> = { news: "NIEUWS", update: "NIEUW OP DARTSPOINT", guide: "VOOR NIEUWE SPELERS" };
 const articleIcons = { news: Users, update: Sparkles, guide: Target };
 type Reaction = LobbyFeedPayload["reactions"][string];
@@ -166,6 +167,7 @@ export function RoomLobbyFeed({ roomId, roomName, roomCount, onPlayers, onTourna
                 </div><div className="dpf-hero-bottom"><span><i/>{featured ? eventStatus(featured) : "NIEUWE EVENTS VOLGEN"}</span><span>{featured ? `${featured.settings.startScore} · ${featured.settings.doubleOut ? "double-out" : "single-out"} · best of ${featured.settings.bestOf}` : "Samen spelen. Samen beter."}</span></div>
               </article>;
             }
+            case "releases": return <article key={`${widget.id}:${platform.actor?.id ?? ""}:${roomId ?? ""}`} className={widgetClass(widget, "dpf-card dpf-releases")} data-widget-id={widget.id}><ReleaseUpdatesWidget updates={projection?.releases ?? []} title={widget.title} description={widget.description} limit={widget.settings.releaseLimit ?? 3} allowIdeas={widget.settings.allowIdeas !== false} preview={preview}/></article>;
             case "players": return <div className={widgetClass(widget, "dpf-play-invitation")} key={widget.id} data-widget-id={widget.id}><span className="dpf-play-icon"><Target size={23}/></span><div><strong>{widget.title}</strong><p>{widget.description}</p></div><button type="button" onClick={() => previewAction(onPlayers)}>{widget.settings.ctaLabel || "Zoek een speler"}<ArrowRight size={15}/></button></div>;
             case "challenge": return <article className={widgetClass(widget, "dpf-card dpf-challenge")} key={widget.id} data-widget-id={widget.id}><div className="dpf-card-top"><span className="dpf-label"><Flame size={15}/>WEEKCHALLENGE</span><span className="dpf-small-count">{completed}/{challenge.targets.length}</span></div><h3>{widget.title}</h3><p>{widget.description}</p><div className="dpf-targets">{challenge.targets.map(target => <span key={target} className={hit.includes(target) ? "is-hit" : ""}>{hit.includes(target) ? <Check size={13}/> : null}{target}</span>)}</div><div className="dpf-progress" role="progressbar" aria-label="Geraakte dubbels deze week" aria-valuemin={0} aria-valuemax={challenge.targets.length} aria-valuenow={completed}><span style={{ width: `${challenge.targets.length ? completed / challenge.targets.length * 100 : 0}%` }}/></div><FeedLink {...linkProps} className="dpf-text-link" href={widget.settings.ctaHref} fallback="/oefenen?uitdaging=1">{widget.settings.ctaLabel || (completed === challenge.targets.length ? "Nog even oefenen" : "Pak je pijlen")}<ArrowUpRight size={15}/></FeedLink></article>;
             case "moment": return <MomentWidget key={`${widget.id}:${preview}`} widget={widget} preview={preview} reaction={projection?.reactions[widget.id]?.applause} busy={busy !== null} onApplause={active => { void react(widget.id, "applause", active); }} onProfile={name => previewAction(() => onProfile(name))}/>;

@@ -1,0 +1,109 @@
+import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {mkdtemp,readdir,cp,rm,readFile,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {Pool} from 'pg';
+import {migrate} from '../../scripts/migrate';
+import {db,redis} from '../../packages/data/src/db';
+import {releaseAdmin,releaseAdminAction,releaseMine,releasePublications,releaseSubmit} from '../../packages/data/src/releases';
+import {lobbyFeed,lobbyPreview} from '../../packages/data/src/lobby';
+import {applyDatabaseErasure} from '../../packages/data/src/privacy-erasure';
+import type {Actor} from '../../packages/data/src/auth';
+import {DomainError} from '../../packages/contracts/src/index';
+
+assert.equal(process.env.APP_ENV,'development');
+const source=new URL(process.env.MIGRATION_DATABASE_URL!);assert.equal(source.hostname,'127.0.0.1');
+const database='release_test_'+randomUUID().replaceAll('-',''),control=new Pool({connectionString:source.toString(),max:1});
+await control.query('create database '+database);
+const url=new URL(source);url.pathname='/'+database;
+const setup=new Pool({connectionString:url.toString(),max:3});
+process.env.DATABASE_URL=url.toString();process.env.DATABASE_ROLE='dartspoint_app';process.env.MIGRATION_DATABASE_URL=url.toString();process.argv.push('--expand-only');
+const directory=await mkdtemp(join(tmpdir(),'dartspoint-releases-'));
+let checks=0;
+const denied=async(fn:()=>Promise<unknown>,code:string)=>{await assert.rejects(fn,e=>e instanceof DomainError&&e.code===code);checks++;};
+function securityAdvisors(){const result=spawnSync('node_modules/.bin/supabase',['db','advisors','--db-url',url.toString(),'--type','security','--level','warn','--fail-on','error'],{encoding:'utf8'});assert.equal(result.status,0,'Security advisors must run without errors');return JSON.parse(result.stdout).results as {cacheKey:string;level:string}[];}
+try{
+ await setup.query("create schema auth;create table auth.users(id uuid primary key,email text);create table auth.sessions(id uuid primary key,user_id uuid,not_after timestamptz);create table auth.refresh_tokens(user_id text);create function auth.uid() returns uuid language sql stable as $$select null::uuid$$");
+ const files=(await readdir('supabase/migrations')).sort(),releaseMigration=files.find(f=>f.endsWith('_release_management.sql'))!;
+ for(const file of files)if(file!==releaseMigration)await cp('supabase/migrations/'+file,join(directory,file));
+ await migrate(directory);
+ const baselineAdvisors=securityAdvisors();
+ const before=(await setup.query('select * from private.lobby_configuration where id=1')).rows[0];
+ const draft={...before.draft,headline:'Bestaand ongepubliceerd concept',widgets:[...before.draft.widgets].reverse()};
+ draft.widgets[0].audience={mode:'rooms',roomIds:[(await setup.query('select id from community_rooms limit 1')).rows[0].id]};
+ await setup.query('update private.lobby_configuration set draft=$1 where id=1',[JSON.stringify(draft)]);
+ await cp('supabase/migrations/'+releaseMigration,join(directory,releaseMigration));await migrate(directory);
+ const after=(await setup.query('select * from private.lobby_configuration where id=1')).rows[0];
+ assert.equal(after.draft.headline,draft.headline);assert.deepEqual(after.draft.widgets.slice(0,-1),draft.widgets);assert.equal(after.draft.widgets.at(-1).type,'releases');
+ assert.equal(Number(after.draft_version),Number(before.draft_version)+1);assert.equal(Number(after.published_revision),Number(before.published_revision)+1);
+ assert.equal((await setup.query('select layout from private.lobby_revisions where revision=$1',[before.published_revision])).rows[0].layout.widgets.some((w:any)=>w.type==='releases'),false,'Archived publications remain unchanged');checks++;
+ await setup.query("update private.lobby_configuration set draft=jsonb_set(draft,'{widgets}',(select jsonb_agg(w) from jsonb_array_elements(draft->'widgets') w where w->>'type'<>'releases')) where id=1");await migrate(directory);
+ assert.equal((await setup.query('select draft from private.lobby_configuration where id=1')).rows[0].draft.widgets.some((w:any)=>w.type==='releases'),false,'Checksum migration never restores a later removed widget');checks++;
+ const widgetMigration=(await readFile('supabase/migrations/'+releaseMigration,'utf8')).match(/do \$\$[\s\S]*?end \$\$;/)![0];
+ const testWidgetMigration=async(widgets:any[],check:(row:any)=>void)=>{
+  const client=await setup.connect();try{await client.query('begin');await client.query('update private.lobby_configuration set draft=jsonb_set(draft,\'{widgets}\',$1) where id=1',[JSON.stringify(widgets)]);await client.query('update private.lobby_revisions set layout=jsonb_set(layout,\'{widgets}\',$1) where revision=(select published_revision from private.lobby_configuration where id=1)',[JSON.stringify(widgets)]);const original=(await client.query('select * from private.lobby_configuration where id=1')).rows[0];await client.query(widgetMigration);check({original,...(await client.query('select * from private.lobby_configuration where id=1')).rows[0]});}finally{await client.query('rollback');client.release();}
+ };
+ const configuredWidget={...after.draft.widgets.at(-1),title:'Bestaande eigen releasetitel',settings:{releaseLimit:5,allowIdeas:false}};
+ await testWidgetMigration([configuredWidget],row=>{assert.deepEqual(row.draft.widgets,[configuredWidget]);assert.equal(row.draft_version,row.original.draft_version);assert.equal(row.published_revision,row.original.published_revision);});checks++;
+ await testWidgetMigration(Array.from({length:30},(_,n)=>({...draft.widgets[0],id:'widget-'+n})),row=>{assert.equal(row.draft.widgets.length,30);assert.equal(row.draft_version,row.original.draft_version);assert.equal(row.published_revision,row.original.published_revision);});checks++;
+ await testWidgetMigration([{...draft.widgets[0],id:'lobby-releases'}],row=>{assert.equal(row.draft.widgets.length,2);assert.equal(new Set(row.draft.widgets.map((w:any)=>w.id)).size,2);assert.equal(row.draft.widgets.at(-1).type,'releases');});checks++;
+ const users:Actor[]=[];
+ for(let n=0;n<5;n++){const id=randomUUID();await setup.query('insert into auth.users(id,email) values($1,$2)',[id,'releases-'+n+'@example.invalid']);await setup.query('update profiles set username=$2,onboarded_at=now() where id=$1',[id,'ReleasePlayer'+n]);users.push({id,username:'UNTRUSTED NAME',role:n===0?'owner':n===1?'admin':'player',sessionVersion:1,expiresAt:Date.now()+3600000,onboarded:true,sessionId:randomUUID()});}
+ const [owner,admin,player,other,ticketPlatform]=users;
+ await setup.query("insert into user_roles(user_id,role) values($1,'owner'),($2,'admin')",[owner.id,admin.id]);
+ await setup.query("insert into private.support_team_roles(user_id,role,granted_by,reason) values($1,'platform',$2,'Separate ticket authority')",[ticketPlatform.id,owner.id]);
+ await denied(()=>releaseAdmin(player),'forbidden');await denied(()=>releaseAdmin(ticketPlatform),'forbidden');await denied(()=>releaseAdmin({...other,role:'admin'}),'forbidden');checks++;
+ const submission={requestId:randomUUID(),title:'Samen een verbeteridee',description:'Privé oorspronkelijke toelichting',category:'community'};
+ const [idea,retry]=await Promise.all([releaseSubmit(player,submission),releaseSubmit(player,submission)]);assert.equal(idea.id,retry.id);assert.equal((await releaseMine(player)).ideas.length,1);assert.equal((await releaseMine(other)).ideas.length,0);assert.equal((await releaseAdmin(admin)).items.length,1);checks++;
+ assert.deepEqual(Object.keys(idea).sort(),['id','number','title','description','category','status','createdAt','updatedAt'].sort());
+ await denied(()=>releaseSubmit(player,{...submission,title:'Een gewijzigd verzoek'}),'idempotency_conflict');
+ await assert.rejects(releaseSubmit(player,{...submission,requestId:randomUUID(),authorName:'Vervalst',userId:other.id}));checks++;
+ let card=(await releaseAdmin(owner)).items[0];assert.equal(card.authorName,'ReleasePlayer2');assert.equal(card.source,'player');
+ const action=async(payload:Record<string,unknown>)=>{card=await releaseAdminAction(admin,{id:card.id,expectedRevision:card.revision,requestId:randomUUID(),...payload});return card;};
+ for(const status of ['considering','doing','added'])await action({action:'status',status});assert.equal((await releasePublications(other)).updates.length,0,'Added status does not publish');checks++;
+ await action({action:'update',patch:{releaseTitle:'Een veilige openbare titel',releaseSummary:'Deze openbare samenvatting bevat alleen de gekozen release-inhoud.',version:'1.2',notes:'PRIVATE NOTES MUST NEVER LEAK'}});
+ await action({action:'publish'});const first=(await releasePublications(other)).updates[0];assert.equal(first.title,'Een veilige openbare titel');assert.equal(first.id,card.publication?.id);
+ assert.deepEqual(Object.keys(first).sort(),['id','number','title','summary','category','version','publishedAt'].sort());
+ const publicJson=JSON.stringify(await releasePublications(other)),ownJson=JSON.stringify(await releaseMine(player));assert.equal(publicJson.includes('PRIVATE'),false);assert.equal(ownJson.includes('PRIVATE'),false);assert.equal(publicJson.includes('ReleasePlayer'),false);assert.equal(JSON.stringify((await releaseAdmin(owner)).audit).includes('PRIVATE'),false);checks++;
+ await action({action:'update',patch:{releaseTitle:'Een andere openbare titel',category:'game',version:'1.3',notes:'CHANGED PRIVATE NOTES'}});assert.deepEqual((await releasePublications(other)).updates[0],first,'Editing does not mutate a published snapshot');checks++;
+ await action({action:'publish'});const second=(await releasePublications(other)).updates[0];assert.notEqual(second.id,first.id);assert.equal(second.title,'Een andere openbare titel');assert.equal(second.category,'game');assert.equal(second.version,'1.3');checks++;
+ await assert.rejects(db().query("update private.release_publications set title='changed' where id=$1",[second.id]),/permission denied/);checks++;
+ const staleRevision=card.revision;
+ const raced=await Promise.allSettled(['Eerste invoer','Tweede invoer'].map(title=>releaseAdminAction(admin,{action:'update',requestId:randomUUID(),id:card.id,expectedRevision:staleRevision,patch:{title}})));
+ assert.equal(raced.filter(v=>v.status==='fulfilled').length,1);const failed=raced.find(v=>v.status==='rejected') as PromiseRejectedResult;assert.equal(failed.reason.code,'release_version_conflict');card=(await releaseAdmin(owner)).items[0];checks++;
+ await denied(()=>action({action:'status',status:'ideas'}),'release_withdraw_confirmation');assert.equal((await releasePublications(other)).updates.length,1);checks++;
+ await action({action:'status',status:'ideas',confirmWithdraw:true});assert.equal(card.publication,undefined);assert.equal((await releasePublications(other)).updates.length,0);checks++;
+ await action({action:'status',status:'added'});await action({action:'publish'});await action({action:'withdraw'});assert.equal((await releasePublications(other)).updates.length,0);checks++;
+ const existing=structuredClone(card);
+ await setup.query("create function private.release_test_fail() returns trigger language plpgsql as $$begin raise exception 'owned test write failure';end$$;create trigger release_test_fail before insert on private.release_history for each row execute function private.release_test_fail()");
+ await assert.rejects(action({action:'update',patch:{notes:'This write must roll back'}}),/owned test write failure/);assert.deepEqual((await releaseAdmin(owner)).items[0],existing);await setup.query('drop trigger release_test_fail on private.release_history;drop function private.release_test_fail()');checks++;
+ const repeated={action:'update',requestId:randomUUID(),id:card.id,expectedRevision:card.revision,patch:{title:'Herhaalbare beheerwijziging'}};card=await releaseAdminAction(admin,repeated);assert.equal((await releaseAdminAction(admin,repeated)).revision,card.revision);
+ await setup.query("update user_roles set revoked_at=now() where user_id=$1 and role='admin'",[admin.id]);await denied(()=>releaseAdminAction(admin,repeated),'forbidden');checks++;
+ await denied(()=>releaseMine({...other,expiresAt:Date.now()-1}),'session_expired');await setup.query('insert into private.revoked_sessions(session_id,user_id,expires_at) values($1,$2,now()+interval \'1 hour\')',[other.sessionId,other.id]);await denied(()=>releaseMine(other),'session_revoked');
+ assert.equal((await setup.query("select count(*)::int n from pg_tables where schemaname='private' and tablename like 'release_%' and not rowsecurity")).rows[0].n,0);assert.equal((await setup.query("select has_table_privilege('authenticated','private.release_cards','select') allowed")).rows[0].allowed,false);checks++;
+ const ticket=(await setup.query("insert into private.support_tickets(requester_id,topic_id,title,acl_roles,protected_kind) values($1,'privacy','Delete own release ideas',array['platform'],'privacy') returning id",[player.id])).rows[0].id;
+ const partialTicket=(await setup.query("insert into private.support_tickets(requester_id,topic_id,title,acl_roles,protected_kind) values($1,'privacy','Delete only own chat',array['platform'],'privacy') returning id",[player.id])).rows[0].id;
+ const partialRequest=(await setup.query("insert into private.privacy_requests(ticket_id,user_id,kind,state,received_at,due_at,identity_verified_at,confirmed_at,decision_at,scopes) values($1,$2,'delete_data','confirmed',now(),now()+interval '1 month',now(),now(),now(),array['chat']) returning id",[partialTicket,player.id])).rows[0].id;
+ const partialLedger=(await setup.query("insert into private.privacy_erasure_ledger(request_id,user_id,scopes,durable_at,receipt) values($1,$2,array['chat'],now(),'release-test-partial-receipt') returning id",[partialRequest,player.id])).rows[0].id;
+ await applyDatabaseErasure(partialRequest,partialLedger);assert.equal((await releaseMine(player)).ideas.length,1,'Partial chat erasure preserves unrelated own ideas');checks++;
+ const request=(await setup.query("insert into private.privacy_requests(ticket_id,user_id,kind,state,received_at,due_at,identity_verified_at,confirmed_at,decision_at,scopes) values($1,$2,'delete_account','confirmed',now(),now()+interval '1 month',now(),now(),now(),array['account','chat','support','technical']) returning id",[ticket,player.id])).rows[0].id;
+ const ledger=(await setup.query("insert into private.privacy_erasure_ledger(request_id,user_id,scopes,durable_at,receipt) values($1,$2,array['account','chat','support','technical'],now(),'release-test-durable-receipt') returning id",[request,player.id])).rows[0].id;
+ const team=await releaseAdminAction(owner,{action:'create',requestId:randomUUID(),title:'Teamidee blijft bestaan',description:'',category:'other'});assert.equal(team.source,'team');
+ await applyDatabaseErasure(request,ledger);assert.equal((await setup.query('select count(*)::int n from private.release_cards where id=$1',[idea.id])).rows[0].n,0);assert.equal((await setup.query('select count(*)::int n from private.release_publications where card_id=$1',[idea.id])).rows[0].n,0);assert.equal((await setup.query('select count(*)::int n from private.release_history where card_id=$1',[idea.id])).rows[0].n,0);assert.equal((await releaseAdmin(owner)).items.length,1);checks++;
+ for(let n=0;n<4;n++){
+  let published=await releaseAdminAction(owner,{action:'create',requestId:randomUUID(),title:'Publicatie voor preview '+n,category:'other'});
+  published=await releaseAdminAction(owner,{action:'update',requestId:randomUUID(),id:published.id,expectedRevision:published.revision,patch:{status:'added',releaseTitle:'Openbare previewtitel '+n,releaseSummary:'Een volledige openbare samenvatting voor de alleen-lezen beheervoorvertoning.'}});
+  await releaseAdminAction(owner,{action:'publish',requestId:randomUUID(),id:published.id,expectedRevision:published.revision});
+ }
+ const roomId=(await setup.query("select id from community_rooms where status='open' and min_rating<=1500 and max_rating>=1500 limit 1")).rows[0].id;
+ const normalFeed=await lobbyFeed(owner,{roomId});assert.equal(normalFeed.releases.length,3,'Ordinary room feed stays bounded by releaseLimit');
+ const beforePreview=await releaseAdmin(owner),configurationBefore=(await setup.query('select * from private.lobby_configuration where id=1')).rows[0];
+ const preview=await lobbyPreview(owner,{roomId,layout:normalFeed.layout});assert.equal(preview.releases.length,4,'Read-only preview can show every publication in its history dialog');
+ assert.deepEqual(preview.releases,((await releasePublications(owner)).updates));assert.deepEqual(await releaseAdmin(owner),beforePreview);assert.deepEqual((await setup.query('select * from private.lobby_configuration where id=1')).rows[0],configurationBefore,'Preview preserves draft and publication state');checks++;
+ const advisors=securityAdvisors(),newIssues=advisors.filter(issue=>!baselineAdvisors.some(old=>old.cacheKey===issue.cacheKey));await writeFile('artifacts/releases-schema-advisors-private.json',JSON.stringify({baseline:baselineAdvisors,after:advisors,newIssues},null,2));assert.deepEqual(newIssues,[],'Release migration must introduce no security advisor warnings');checks++;
+ console.log(JSON.stringify({event:'release_acceptance_passed',checks,isolatedDatabase:true,securityAdvisors:true,migration:releaseMigration}));
+}finally{
+ await db().end();await (await redis()).quit();await setup.end();await rm(directory,{recursive:true,force:true});await control.query('drop database '+database);await control.end();
+}

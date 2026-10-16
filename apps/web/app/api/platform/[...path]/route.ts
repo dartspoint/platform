@@ -2,6 +2,7 @@ import {currentSupportActor} from '@/lib/server/support-auth';
 import {markRecentReauthentication} from '../../../../../../packages/data/src/privacy';
 import {onboardWithLegal} from '../../../../../../packages/data/src/legal';
 import {lobbyAdmin,lobbyFeed,lobbyAction,lobbyPreview,lobbyVote,lobbyApplause} from '../../../../../../packages/data/src/lobby';
+import {releaseAdmin,releaseMine,releasePublications,releaseSubmit,releaseAdminAction} from '../../../../../../packages/data/src/releases';
 import {boundedMediaForm,uploadMedia,readMedia,deleteMedia} from '../../../../../../packages/data/src/media';
 import {staff} from '../../../../../../packages/data/src/auth';
 import {timingPing,timingEcho,practiceIngress} from '../../../../../../packages/data/src/timing';
@@ -34,6 +35,9 @@ export async function GET(request:Request,context:Context){try{
  if(path[0]==='public')return response(await publicProjection());
  const actor=await currentActor(request,path[0]!=='profile');
  if(path.join('/')==='lobby/admin')return response(await lobbyAdmin(actor));
+ if(path.join('/')==='releases/admin')return response(await releaseAdmin(actor));
+ if(path.join('/')==='releases/mine')return response(await releaseMine(actor));
+ if(path.join('/')==='releases/publications')return response(await releasePublications(actor));
  if(path.join('/')==='lobby/feed')return response(await lobbyFeed(actor,{roomId:new URL(request.url).searchParams.get('roomId')}));
  if(path[0]==='media'&&path[1]){const asset=await readMedia(actor,{id:path[1],variant:new URL(request.url).searchParams.get('variant')??'wide'});return new Response(new Uint8Array(asset.data).buffer,{headers:{...headers,'Content-Type':asset.mime,'Cache-Control':'private, no-cache','ETag':'"'+asset.etag+'"','Content-Disposition':'inline'}});}
  if(path[0]==='profile')return response(actor);
@@ -47,9 +51,9 @@ export async function GET(request:Request,context:Context){try{
  if(path[0]==='match'&&path[1])return response(await matchAccess(actor,path[1]));
  return response({code:'not_found'},404);
 }catch(e){return failure(e);}}
-async function boundedLobbyJson(request:Request){
+async function boundedLobbyJson(request:Request,maximum=1048576){
  const reader=request.body?.getReader();if(!reader)return '';let bytes=0,text='';const decoder=new TextDecoder();
- try{for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>1048576){await reader.cancel();throw new DomainError('request_too_large',413);}text+=decoder.decode(part.value,{stream:true});}return text+decoder.decode();}finally{reader.releaseLock();}
+ try{for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>maximum){await reader.cancel();throw new DomainError('request_too_large',413);}text+=decoder.decode(part.value,{stream:true});}return text+decoder.decode();}finally{reader.releaseLock();}
 }
 export async function POST(request:Request,context:Context){const receivedAt=Date.now();let practiceTicket:ReturnType<IngressOrder['reserve']>|undefined;try{
  // The hash supplies ordering only, never identity or permission. The request
@@ -59,7 +63,8 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
  const path=(await context.params).path;
  if(path.join('/')==='media/upload'){const actor=await currentActor(request);staff(actor);requireThat(!actor.renameRequired,'rename_required',403);requireThat(request.headers.get('content-type')?.startsWith('multipart/form-data'),'multipart_required',415);return response(await uploadMedia(actor,await boundedMediaForm(request)));}
  requireThat(request.headers.get('content-type')?.startsWith('application/json'),'json_required',415);
- const raw=path[0]==='lobby'?await boundedLobbyJson(request):await request.text();requireThat(raw.length<=(['lobby','lobby/preview'].includes(path.join('/'))?1048576:16384),'request_too_large',413);const input=JSON.parse(raw);
+ const bodyLimit=path[0]==='lobby'?1048576:path[0]==='releases'?65536:16384;
+ const raw=['lobby','releases'].includes(path[0])?await boundedLobbyJson(request,bodyLimit):await request.text();requireThat(raw.length<=bodyLimit,'request_too_large',413);const input=JSON.parse(raw);
  if(path[0]==='auth'){
   if(['request','verify'].includes(path[1])){const key=createHash('sha256').update(request.headers.get('x-forwarded-for')?.split(',')[0]??'local').digest('hex');await rateLimit('auth:'+key,20,300);}
   const auth=await serverAuth();
@@ -82,6 +87,8 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
   if(path[1]==='logout'){try{await revokeSession(await currentActorForLogout(request));}catch(e){if(!(e instanceof DomainError&&e.status===401))throw e;}await auth.auth.signOut({scope:'local'});return response({ok:true});}
  }
  const actor=await currentActor(request,path[0]!=='onboard');
+ if(path.join('/')==='releases/submit')return response(await releaseSubmit(actor,input));
+ if(path.join('/')==='releases/admin')return response(await releaseAdminAction(actor,input));
  if(actor.renameRequired)requireThat(['profile/rename','heartbeat','preferences','chat/preference','timing/ping','timing/echo'].includes(path.join('/')),'rename_required',403,'Kies eerst een nieuwe gebruikersnaam.');
  if(path.join('/')==='timing/ping')return response(await timingPing(actor,receivedAt,input));
  if(path.join('/')==='timing/echo')return response(await timingEcho(actor,input,receivedAt));

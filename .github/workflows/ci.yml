@@ -84,6 +84,7 @@ jobs:
               'artifacts/workspace-chat/results.json': 'workspace-chat-results.json',
               'artifacts/documents-support-browser/results.json': 'documents-support-results.json',
               'artifacts/documents-support-delivery-browser/results.json': 'support-delivery-results.json',
+              'artifacts/release-management-browser/result.json': 'release-management-results.json',
               'artifacts/workspace-chat/latency.json': 'workspace-chat-latency.json',
               'artifacts/game-timing-result.json': 'game-timing-result.json',
               'artifacts/game-timing-progress.json': 'game-timing-progress.json',

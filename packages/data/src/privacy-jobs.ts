@@ -37,6 +37,7 @@ async function createExport(approved:any){return transaction(async c=>{
   ['ownChatMessages','select id,channel_id,body,created_at,redacted_at from public.chat_messages where sender_id=$1 order by created_at',[r.user_id]],
   ['tickets','select id,number,title,status,created_at,closed_at from private.support_tickets where requester_id=$1 order by created_at',[r.user_id]],
   ['ownTicketMessages',"select m.ticket_id,m.body,m.created_at from private.support_messages m join private.support_tickets t on t.id=m.ticket_id where t.requester_id=$1 and m.author_id=$1 and visibility='public' order by m.created_at",[r.user_id]],
+  ['ownReleaseIdeas',"select id,number,title,description,category,status,created_at,updated_at from private.release_cards where submitter_id=$1 and source='player' order by created_at",[r.user_id]],
   ['legalAcceptances','select terms_version_id,privacy_version_id,accepted_at,age16_confirmed from private.legal_acceptances where user_id=$1',[r.user_id]],
   ['sanctions','select kind,reason,starts_at,ends_at,revoked_at from public.sanctions where target_id=$1',[r.user_id]]
  ];

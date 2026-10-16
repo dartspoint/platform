@@ -12,6 +12,7 @@ import {useSupportIdentity} from "@/components/darts-support-links";
 import { AdminSeasons } from "./darts-seasons";
 import {AdminChatModeration} from './darts-chat-moderation';
 import { AdminLobbyContent } from "./darts-lobby-content";
+import { AdminReleases } from "./darts-releases";
 import { DartsTournaments } from "./darts-tournaments";
 import { AdminPlayers, AdminRooms, AdminModeration } from "./darts-operations";
 import { AdminGameSettings, AdminPlatformSettings, AdminEloSettings } from "./darts-settings";
@@ -34,6 +35,7 @@ const navigation = [
   { id: "game", label: "Spel & deelname", icon: SlidersHorizontal, group: "HET PLATFORM" },
   { id: "elo", label: "DP & competitie", icon: Target },
   { id: "lobby", label: "Lobby & widgets", icon: LayoutGrid },
+  { id: "releases", label: "Releasebeheer", icon: LayoutGrid },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
   { id: "legal", label: "Juridisch en informatie", icon: ClipboardList },
   { id: "support", label: "Supporttickets", icon: Bell },
@@ -53,6 +55,7 @@ const titles: Record<AdminTab, { title: string; description: string }> = {
   game: { title: "Jouw spelregels.", description: "Stel de basis in voor nieuwe toernooien en bepaal wie mag deelnemen." },
   elo: { title: "Een eerlijke plek op de ladder.", description: "Bekijk het actieve DP-beleid en reken een nieuw beleidsvoorstel door." },
   lobby: { title: "Een clubhuis met karakter.", description: "Beheer lobbywidgets, nieuws, kamerselecties en gedeelde publicaties." },
+  releases: { title: "Samen maken we DartsPoint beter.", description: "Van idee naar toevoeging. Beoordeel voorstellen, volg de uitvoering en deel wat nieuw is in de lobby." },
   platform: { title: "DartsPoint, zoals jij het wilt.", description: "Beheer platformvoorkeuren, aankondigingen en de toegang tot jouw community." },
   legal: {title:"Duidelijke afspraken voor de club.",description:"Beheer de openbare documenten, versies en contactgegevens."},
   support: {title:"Help spelers verder.",description:"Open de afgeschermde supportomgeving."},
@@ -82,9 +85,10 @@ function AuditPanel({ entries }: { entries: AuditEntry[] }) {
   return <><div className="adm-toolbar"><label className="adm-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek een actie, speler of toernooi…" aria-label="Doorzoek actielogboek"/></label><select className="adm-filter-select" value={period} onChange={event => setPeriod(event.target.value)} aria-label="Periode"><option value="all">Alle periodes</option><option value="1">Afgelopen 24 uur</option><option value="7">Afgelopen 7 dagen</option><option value="30">Afgelopen 30 dagen</option></select><button className="adm-btn" disabled={!filtered.length} onClick={download}><Download size={15}/>Exporteer CSV</button></div><div className="adm-panel adm-table-wrap"><table className="adm-table"><thead><tr><th>Datum</th><th>Beheerder</th><th>Actie</th><th>Onderwerp & toelichting</th></tr></thead><tbody>{filtered.map(entry => <tr key={entry.id}><td className="adm-no-wrap">{formatTime(entry.at)}</td><td>{entry.actor}</td><td>{formatAudit(entry).action}</td><td>{formatAudit(entry).subject}<small>{formatAudit(entry).change}</small><details><summary>Technische details</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(formatAudit(entry).technical,null,2)}</pre></details></td></tr>)}{!filtered.length && <tr><td colSpan={4}>Nog geen acties gevonden voor deze selectie.</td></tr>}</tbody></table></div><p className="adm-audit-meta">{filtered.length} van {entries.length} acties. Je export bevat alleen de huidige selectie.</p></>;
 }
 
-export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: { initialTab?: string; initialTournamentId?: string; initialRoomId?: string }) {
+export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId, initialWidgetType }: { initialTab?: string; initialTournamentId?: string; initialRoomId?: string; initialWidgetType?: string }) {
   const [tab, setTab] = useState<AdminTab>(validTab(initialTab));
   const [tournamentId, setTournamentId] = useState(initialTournamentId);
+  const [lobbyWidgetType, setLobbyWidgetType] = useState<"releases" | undefined>(initialWidgetType === "releases" ? "releases" : undefined);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -97,7 +101,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
   const navigating = useRef(false);
   const registerNavigationGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
   const supportIdentity=useSupportIdentity();
-  const visibleNavigation = navigation.filter(item => (item.id !== "lobby" || getPlatform().actor?.role === "owner")&&(item.id!=="teamroles"||supportIdentity?.canManageTeam));
+  const visibleNavigation = navigation.filter(item => (item.id !== "lobby" || getPlatform().actor?.role === "owner") && (item.id !== "releases" || ["owner", "admin"].includes(getPlatform().actor?.role)) && (item.id!=="teamroles"||supportIdentity?.canManageTeam));
   const operations = useAdminOperations();
   const settings = useAdminSettings();
   const tournamentState = useTournaments();
@@ -110,14 +114,14 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
   const activeRooms = operations.rooms.filter(room => room.status !== "closed");
   const capacity = activeRooms.reduce((sum, room) => sum + room.capacity, 0);
   const population = activeRooms.reduce((sum, room) => sum + room.count, 0);
-  async function navigate(next: AdminTab, id?: string) {
+  async function navigate(next: AdminTab, id?: string, widgetType?: "releases") {
     if (navigating.current) return;
     navigating.current = true;
     try { if (navigationGuard.current && !await navigationGuard.current()) return;
     navigationGuard.current = null;
     if(next==="support"||next==="teamroles"){window.location.assign("/team/support"+(next==="teamroles"?"?view=team":""));return;}
-    setTab(next); setTournamentId(id); setMenuOpen(false); setSearchOpen(false); setSearch("");
-    const params = new URLSearchParams(); if (next !== "overview") params.set("tab", next); if (id) params.set("toernooi", id);
+    setTab(next); setTournamentId(id); setLobbyWidgetType(next === "lobby" ? widgetType : undefined); setMenuOpen(false); setSearchOpen(false); setSearch("");
+    const params = new URLSearchParams(); if (next !== "overview") params.set("tab", next); if (id) params.set("toernooi", id); if (next === "lobby" && widgetType) params.set("widget", widgetType);
     window.history.replaceState(null, "", `/beheer${params.size ? `?${params}` : ""}`);
     window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
@@ -148,11 +152,11 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId }: {
           <section className="adm-panel"><div className="adm-panel-heading"><div><h2>Kameroverzicht</h2></div><button className="adm-text-btn" onClick={() => navigate("rooms")}>Beheer<ArrowRight size={13}/></button></div><div className="adm-room-bars">{operations.rooms.slice(0,6).map(room => <div key={room.id} className={room.status === "closed" ? "closed" : ""}><div><span>{room.name}{room.status === "closed" ? " · gesloten" : room.status === "private" ? " · privé" : ""}</span><small>{room.count} / {room.capacity}</small></div><i><span className={room.count / room.capacity > .9 ? "full" : ""} style={{ width: `${Math.min(100,room.count / room.capacity * 100)}%` }}/></i></div>)}</div></section>
           <section className="adm-panel"><div className="adm-panel-heading"><div><h2>Recente acties</h2></div><button className="adm-text-btn" onClick={() => navigate("audit")}>Alles<ArrowRight size={13}/></button></div><AuditPreview entries={audit.slice(0,4)}/></section>
         </div><div className="adm-dashboard-side">
-          <section className="adm-panel"><div className="adm-panel-heading"><h2>Snel geregeld</h2><Sparkles size={16} color="#b2bf94"/></div><div className="adm-quick-actions"><button onClick={() => navigate("tournaments")}><Trophy/><strong>Toernooi organiseren</strong><small>Inschrijven, plaatsen, spelen</small></button><button onClick={() => navigate("seasons")}><ListChecks/><strong>Seizoen organiseren</strong><small>Divisies, ladder en speelrondes</small></button><button onClick={() => navigate(getPlatform().actor?.role === "owner" ? "lobby" : "platform")}><Bell/><strong>{getPlatform().actor?.role === "owner" ? "Lobby & widgets" : "Aankondiging"}</strong><small>Zichtbaar in de lobby</small></button><button onClick={() => navigate("game")}><ListChecks/><strong>Deelname instellen</strong><small>DP, check-in en toelating</small></button></div></section>
+          <section className="adm-panel"><div className="adm-panel-heading"><h2>Snel geregeld</h2><Sparkles size={16} color="#b2bf94"/></div><div className="adm-quick-actions"><button onClick={() => navigate("releases")}><LayoutGrid/><strong>Releasebeheer</strong><small>Ideeën, uitvoering en toevoegingen</small></button><button onClick={() => navigate("tournaments")}><Trophy/><strong>Toernooi organiseren</strong><small>Inschrijven, plaatsen, spelen</small></button><button onClick={() => navigate("seasons")}><ListChecks/><strong>Seizoen organiseren</strong><small>Divisies, ladder en speelrondes</small></button><button onClick={() => navigate(getPlatform().actor?.role === "owner" ? "lobby" : "platform")}><Bell/><strong>{getPlatform().actor?.role === "owner" ? "Lobby & widgets" : "Aankondiging"}</strong><small>Zichtbaar in de lobby</small></button><button onClick={() => navigate("game")}><ListChecks/><strong>Deelname instellen</strong><small>DP, check-in en toelating</small></button></div></section>
           <section className="adm-panel"><div className="adm-panel-heading"><h2>Dit verdient aandacht</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? `${openCases} melding${openCases === 1 ? "" : "en"} open` : "Een rustige community"}</strong><p>Bekijk de context voordat je een maatregel neemt.</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} toernooiconcepten</strong><p>Controleer spelregels en deelname voordat je publiceert.</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>DP-beleid: K = 32</strong><p>10 wedstrijden en 5 verschillende tegenstanders voor plaatsing.</p></div></button></div></section>
 
         </div></div>
-      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
+      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialWidgetType={lobbyWidgetType} initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "releases" ? <AdminReleases onConfigureWidget={getPlatform().actor?.role === "owner" ? () => { void navigate("lobby", undefined, "releases"); } : undefined} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
       <footer className="adm-page-footer"><span>DARTSPOINT · PLATFORMBEHEER</span><span>Je wijzigingen vind je terug in het logboek.</span></footer>
       </main>
     </div>

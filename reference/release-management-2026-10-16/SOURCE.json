@@ -1,0 +1,17 @@
+{
+  "sourceCommit": "3ab5c477a8f038aca40ef320e6028ea9e88ae844",
+  "source": "https://dartspoint-afterhours-studio.dgwebserv.chatgpt.site",
+  "purpose": "Read-only visual/interaction reference; local demo state is not production data.",
+  "sha256": {
+    "components/admin/darts-releases.tsx": "1fec49ec883c8f1ce5a75811f17a0d56cd4cd7f105047854448d670602c74b9f",
+    "components/admin/darts-releases.module.css": "92c1e57e2f8c7d016c5a2ff6174e934d795449956b2cd3a51177d4492253efb5",
+    "components/darts-release-updates.tsx": "d082910ad129df8b8753b4e38c8f1d8c8fbbb6e08480cbe51cac1d1d7eed6463",
+    "components/darts-release-updates.module.css": "dbda6cd5befee285c510e3fe3b37378566c8c3c7a960c69c47952daad93212f7",
+    "lib/darts-releases.ts": "40768ffdfd5340225b2ec622ee169d3c8afe27e87a9bcead0f69bb255260aea5",
+    "lib/darts-lobby-content.ts": "a5987d2905d9cab5028369aab56e3091f68eb5852ff85401c1f7449b30323728",
+    "components/admin/darts-lobby-content.tsx": "bbb58126f43740ffe0236f2fa2cc38254529fcd54f82c33613294b6735e5e06d",
+    "components/darts-room-feed.tsx": "76fc65b9c9d025781dd0e4f1da20684c63255c9fe8ea333652e5172f1e4cbca7",
+    "app/updates/page.tsx": "112b87b66aebcaa41a96032234a1c0813008a47c985977855c023f261e16ffd6",
+    "docs/DARTSPOINT-RELEASEBEHEER.md": "67d5474f5ec2b1071fba6b0295d4e9240649e2eec3a7b651d3a5b48167b46aae"
+  }
+}
