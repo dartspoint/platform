@@ -30,7 +30,7 @@ Er zijn geen nieuwe secrets, environmentvariabelen of hosthelpers nodig. Deze op
 
 - Gerichte database-integratie: 32 scenario's met echte migraties en de beperkte applicatierol, waaronder rechten, idempotentie, gelijktijdig wijzigen, publicatiemomentopnamen, privacy en behoud van lobbyconfiguraties. De normale feed houdt de widgetlimiet aan; het leesvoorbeeld bevat de volledige openbare geschiedenis zonder gegevens te wijzigen.
 - Twee unittests voor widgetdefaults en grenswaarden, opgenomen in de bestaande suite.
-- TypeScript, de deploymentbuild, 83 unittests, 49 deploymentcontroles, oorspronkelijke spelregelcontroles en bronpariteit slagen lokaal.
+- TypeScript, de deploymentbuild, 86 unittests, 49 deploymentcontroles, oorspronkelijke spelregelcontroles en bronpariteit slagen lokaal. De Supabase-beveiligingscontrole vraagt expliciete JSON-uitvoer; onbekende of misvormde controleverslagen worden afgewezen. De databasecontrole slaagt ook met de CI-omgeving ingeschakeld.
 - De releasebrowsercontrole slaagt voor 18 controles met echte lokale Auth en opslag: inzenden, verloren antwoorden, beheer, publicatie, revisieconflicten, behoud van de kamer en het chatconcept, mobiel- en toetsenbordgebruik en het sluiten van geneste bevestigingen. Schermafbeeldingen zijn visueel gecontroleerd. Beide bestaande acceptatiescripts voeren de nieuwe controles uit.
 - De oorspronkelijke assets en beschermde stijlen blijven onder de bestaande broncontrole vallen.
 

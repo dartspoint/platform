@@ -12,6 +12,7 @@ import {lobbyFeed,lobbyPreview} from '../../packages/data/src/lobby';
 import {applyDatabaseErasure} from '../../packages/data/src/privacy-erasure';
 import type {Actor} from '../../packages/data/src/auth';
 import {DomainError} from '../../packages/contracts/src/index';
+import {parseSecurityAdvisorOutput} from '../helpers/security-advisors';
 
 assert.equal(process.env.APP_ENV,'development');
 const source=new URL(process.env.MIGRATION_DATABASE_URL!);assert.equal(source.hostname,'127.0.0.1');
@@ -23,7 +24,7 @@ process.env.DATABASE_URL=url.toString();process.env.DATABASE_ROLE='dartspoint_ap
 const directory=await mkdtemp(join(tmpdir(),'dartspoint-releases-'));
 let checks=0;
 const denied=async(fn:()=>Promise<unknown>,code:string)=>{await assert.rejects(fn,e=>e instanceof DomainError&&e.code===code);checks++;};
-function securityAdvisors(){const result=spawnSync('node_modules/.bin/supabase',['db','advisors','--db-url',url.toString(),'--type','security','--level','warn','--fail-on','error'],{encoding:'utf8'});assert.equal(result.status,0,'Security advisors must run without errors');return JSON.parse(result.stdout).results as {cacheKey:string;level:string}[];}
+function securityAdvisors(){const result=spawnSync('node_modules/.bin/supabase',['db','advisors','--db-url',url.toString(),'--type','security','--level','warn','--fail-on','error','--output-format','json'],{encoding:'utf8'});assert.equal(result.status,0,'Security advisors must run without errors');return parseSecurityAdvisorOutput(result.stdout);}
 try{
  await setup.query("create schema auth;create table auth.users(id uuid primary key,email text);create table auth.sessions(id uuid primary key,user_id uuid,not_after timestamptz);create table auth.refresh_tokens(user_id text);create function auth.uid() returns uuid language sql stable as $$select null::uuid$$");
  const files=(await readdir('supabase/migrations')).sort(),releaseMigration=files.find(f=>f.endsWith('_release_management.sql'))!;
