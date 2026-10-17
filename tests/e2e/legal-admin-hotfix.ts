@@ -37,8 +37,12 @@ async function assertNearSave(message:Locator,form:Locator){
  assert.ok(Math.abs(status.y+status.height/2-button.y-button.height/2)<360,'Save feedback must remain beside the action');
 }
 async function noHorizontalClip(page:Page){
- const fit=await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1);
- if(!fit)console.error(JSON.stringify(await page.evaluate(()=>({event:'legal_admin_overflow',viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('body *')].map(el=>({tag:el.tagName,css:String(el.className),left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width})).filter(el=>el.right>innerWidth+1||el.left< -1).sort((a,b)=>b.right-a.right).slice(0,16)}))));
+ // Chromium can acknowledge the emulated viewport before applying its responsive
+ // layout. Measure the rendered viewport, with the original one-pixel bound.
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ const measurement=await page.evaluate(()=>({event:'legal_admin_overflow',viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('body *')].map(el=>({tag:el.tagName,css:String(el.className),left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width})).filter(el=>el.right>innerWidth+1||el.left< -1).sort((a,b)=>b.right-a.right).slice(0,16)}));
+ const fit=measurement.scrollWidth<=measurement.viewport+1;
+ if(!fit)console.error(JSON.stringify(measurement));
  assert.equal(fit,true,'Legal administration must fit the viewport');
 }
 async function capture(page:Page,name:string){const height=await page.evaluate(()=>Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)),width=page.viewportSize()!.width,fullPage=height<=5000;await page.screenshot({path:directory+'/'+name,fullPage,mask:[page.locator('input'),page.locator('textarea')]});report.screenshots.push({width,height,fullPage});}

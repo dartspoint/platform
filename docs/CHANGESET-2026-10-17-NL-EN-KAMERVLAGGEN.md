@@ -142,3 +142,8 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   binnen hun container. De ongewijzigde viewportassertie wordt met een gevulde
   bronselectie uitgevoerd. De 12 legal-adminchecks slagen lokaal tweemaal achter
   elkaar op 320/390 px. Deze bestaande CI-test draait nu ook in `test:integration`.
+- De volgende CI-run mat direct na viewportemulatie nog de desktopmarges bij
+  `innerWidth=320`; in de tweede diagnostische meting was staging al 320 px breed.
+  De browsercheck wacht nu twee renderframes op de responsive layout en meet
+  resultaat en foutdiagnostiek in hetzelfde frame. De oorspronkelijke
+  éénpixelgrens, beide viewportbreedtes en alle opslagasserties blijven gelijk.
