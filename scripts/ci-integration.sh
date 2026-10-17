@@ -178,6 +178,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/interface.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/documents-support.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/documents-support-delivery.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/legal-admin-hotfix.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/releases.ts
 
 python3 tests/integration/https-proxy.py
