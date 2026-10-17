@@ -67,8 +67,10 @@ geïgnoreerde map `artifacts/i18n`; secrets en lokale envfiles worden niet gecom
 ## Staging
 
 De uitrol loopt via de bestaande `main` → `staging`-workflow met hosted verificatie,
-imagepublicatie en de bestaande beperkte self-hosted stagingrunner. De concrete
-release-SHA en workflowuitkomst worden na de uitrol hieronder geregistreerd.
+imagepublicatie en de bestaande beperkte self-hosted stagingrunner. De actuele
+[staginguitrol met exacte release-SHA en testuitkomst](https://github.com/dartspoint/platform/actions/workflows/deploy.yml?query=branch%3Astaging)
+is de bron voor de uitrolstatus; `/healthz` en `/readyz` tonen de werkelijk actieve
+SHA. De eindoplevering controleert die tegen de succesvolle workflow.
 
 Test via Tailscale op `https://staging.dartspoint.nl/en` en `/nl`, wijzig daarna in
 het profiel de taal binnen dezelfde kamer. Kies als bevoegde beheerder bij een
@@ -96,3 +98,10 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
 - De gekoppelde Supabase-beheerconnector weigert toegang tot het stagingproject.
   Providerwijzigingen of publicatie buiten de bestaande apprechten zijn daarom
   niet als uitgevoerd gemarkeerd.
+
+- De bestaande losse Turnstile-fixture gebruikt nu dezelfde `LocaleProvider` als
+  de echte app. Alle oude lifecycle-, token-, retry- en 320px-checks blijven
+  behouden. De fouttekstassertie controleert nu exact de gecatalogiseerde
+  `auth_provider`-melding; het OTP-request controleert ook `locale: nl`.
+  Een extra EN-check bewijst een nieuw widget, ongeldig oud token en geen extra
+  OTP-request na taalwisseling. Deze geïsoleerde browsertest slaagt.

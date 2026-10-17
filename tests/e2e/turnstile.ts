@@ -13,9 +13,17 @@ const fixture=await build({
   import {createRoot} from 'react-dom/client';
   import {DartsAuthFlow} from './apps/web/components/darts-login';
   import {Turnstile} from './apps/web/components/turnstile';
+  import {LocaleProvider} from './apps/web/lib/i18n/provider';
+  import loginNl from './packages/i18n/src/catalogs/login.nl.json';
+  import loginEn from './packages/i18n/src/catalogs/login.en.json';
+  import turnstileNl from './packages/i18n/src/catalogs/turnstile.nl.json';
+  import turnstileEn from './packages/i18n/src/catalogs/turnstile.en.json';
+  import designStudioNl from './packages/i18n/src/catalogs/designStudio.nl.json';
+  import designStudioEn from './packages/i18n/src/catalogs/designStudio.en.json';
+  const catalogs={nl:{login:loginNl,turnstile:turnstileNl,designStudio:designStudioNl},en:{login:loginEn,turnstile:turnstileEn,designStudio:designStudioEn}};
   function Probe(){const [token,setToken]=useState('');return <><Turnstile onToken={setToken}/><output aria-label="Current token">{token}</output></>;}
   const root=createRoot(document.getElementById('root'));let generation=0;
-  window.mountFixture=(mode)=>root.render(<StrictMode key={++generation}>{mode==='widget'?<Probe/>:mode==='register'?<DartsAuthFlow intent="register"/>:mode==='auth'?<DartsAuthFlow/>:null}</StrictMode>);
+  window.mountFixture=(mode)=>root.render(<StrictMode key={++generation}><LocaleProvider initialLocale="nl" publicPage={false} catalogs={catalogs}>{mode==='widget'?<Probe/>:mode==='register'?<DartsAuthFlow intent="register"/>:mode==='auth'?<DartsAuthFlow/>:null}</LocaleProvider></StrictMode>);
   window.mountFixture(new URLSearchParams(location.search).get('mode')||'widget');
  `,resolveDir:process.cwd(),loader:'tsx'},
  bundle:true,write:false,outfile:'fixture.js',platform:'browser',format:'iife',jsx:'automatic',
@@ -104,8 +112,8 @@ try{
   await signal(authPage,'callback','ready');await expect(requestButton(authPage)).toBeEnabled();await signal(authPage,name);await expect(requestButton(authPage)).toBeDisabled();
  }
  await signal(authPage,'callback','request-token');await requestButton(authPage).click();await rendered(authPage,2);
- await expect(requestButton(authPage)).toBeDisabled();await expect(authPage.getByRole('alert')).toContainText('Probeer het nog eens');
- assert.deepEqual(auth.requests,[{path:'/api/platform/auth/request',body:{email:'player@example.test',captchaToken:'request-token'}}]);
+ await expect(requestButton(authPage)).toBeDisabled();await expect(authPage.getByRole('alert')).toHaveText('De inlogcode kon niet worden verstuurd. Probeer het later opnieuw.');
+ assert.deepEqual(auth.requests,[{path:'/api/platform/auth/request',body:{email:'player@example.test',locale:'nl',captchaToken:'request-token'}}]);
  await signal(authPage,'callback','stale-request-token',0);await expect(requestButton(authPage)).toBeDisabled();
  auth.allowAuth();await signal(authPage,'callback','new-request-token');await requestButton(authPage).click();
  await expect(authPage.getByLabel('Je eenmalige code')).toBeVisible();await rendered(authPage,3);
@@ -116,6 +124,15 @@ try{
  await signal(authPage,'callback','fresh-email-token');await expect(requestButton(authPage)).toBeEnabled();
  assert.equal(auth.requests.length,3);assert.equal(auth.requests[1].body.captchaToken,'new-request-token');assert.equal(auth.requests[2].path,'/api/platform/auth/logout');
  report.checks.push('Real auth form blocks click/Enter until CAPTCHA, forwards only current token, resets after failed request and email change, and retains resend cooldown');await auth.context.close();
+
+ const bilingual=await pageFor('auth');await rendered(bilingual.page,1);
+ await signal(bilingual.page,'callback','old-language-token');
+ await bilingual.page.getByLabel('Nederlands / English').selectOption('en');await rendered(bilingual.page,2);
+ assert.equal(await bilingual.page.evaluate(()=>(window as any).__sdk.records[1].options.language),'en');
+ await expect(bilingual.page.getByRole('button',{name:'Get your sign-in code',exact:true})).toBeDisabled();
+ assert.equal(bilingual.requests.length,0,'Changing language resets the CAPTCHA without sending an OTP');
+ await signal(bilingual.page,'callback','stale-language-token',0);await expect(bilingual.page.getByRole('button',{name:'Get your sign-in code',exact:true})).toBeDisabled();
+ report.checks.push('Changing language chooses the English widget, clears the old token and does not request an OTP');await bilingual.context.close();
 
  const narrow=await pageFor('register',{width:320});await rendered(narrow.page,1);
  assert.equal(await narrow.page.evaluate(()=>(window as any).__sdk.records[0].options.size),'compact');
