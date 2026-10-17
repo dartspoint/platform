@@ -136,3 +136,9 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   stagingdeployhelper blijven gelden. De oorspronkelijke waarde `true` wordt
   na de uitrol hersteld. De nog benodigde QA-opruiming blijft een expliciet
   operationeel punt zolang Tailscale extra authenticatie vereist.
+- De volledige hosted main-CI op `48771b7` slaagde. De parallelle stagingrun
+  vond mobiele overloop in de nieuwe vertaalbronselectie. Het paneel deelt nu
+  de bestaande documentbundle en ververst mee na opslaan; native velden blijven
+  binnen hun container. De ongewijzigde viewportassertie wordt met een gevulde
+  bronselectie uitgevoerd. De 12 legal-adminchecks slagen lokaal tweemaal achter
+  elkaar op 320/390 px. Deze bestaande CI-test draait nu ook in `test:integration`.

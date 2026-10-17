@@ -5,7 +5,7 @@ import {FixedCopy} from "@/components/fixed-copy";
 import {browserLocale} from '../../../../packages/i18n/src/errors';
 import {formatLocales} from '../../../../packages/i18n/src/locale';
 
-import {LegalTranslations} from './legal-translations';
+import {LegalTranslations,type LegalTranslationEdition} from './legal-translations';
 import {localiseStaticCopy} from "../../../../packages/i18n/src/static-copy";
 import {useI18n} from '@/lib/i18n/provider';
 
@@ -14,7 +14,7 @@ import {LegalMarkdown} from '@/components/legal-markdown';
 import {companyDetails,legalTitles,legalPaths,legalDraftSchema,legalPublishSchema,type LegalVersion,type LegalDocumentKey} from '../../../../packages/contracts/src/legal';
 import '../legal.css';
 
-type Bundle={company:typeof companyDetails;canPublish:boolean;isOwner:boolean;environment:string;versions:LegalVersion[]};
+type Bundle={company:typeof companyDetails;canPublish:boolean;isOwner:boolean;environment:string;versions:LegalVersion[];translations?:LegalTranslationEdition[]};
 type Draft={key:LegalDocumentKey;title:string;version:string;language:'nl';markdown:string;summary:string;material:boolean;requiresAcceptance:boolean;reason:string};
 type FormKey='draft'|'publish'|'publisher'|'company';
 type Feedback={tone:'success'|'error'|'warning'|'pending';message:string;fields?:Record<string,string>};
@@ -121,7 +121,7 @@ export function DartsLegal(){
    {bundle.canPublish&&<details className="dp-legal-card dp-legal-advanced"><summary>{dpT("legal.bedrijfs_en_contactgegevens")}</summary><form aria-label={dpT("legal.contactgegevens_bewerken")} noValidate onSubmit={submitCompany} aria-busy={busy==='company'}><p>{dpT("legal.deze_gegevens_worden_bij_de_gepubliceerde_documenten_getoond")}</p><fieldset disabled={blocked}><div className="dp-legal-field-grid">{([['name','Bedrijfsnaam',150],['address','Adres',150],['postalCode','Postcode',20],['city','Plaats',100],['chamberOfCommerce','KvK-nummer',8],['email','Bedrijfse-mail',254]] as const).map(([key,label,maxLength])=><label htmlFor={`legal-company-${key}`} key={key}><FixedCopy value={label}/><input id={`legal-company-${key}`} type={key==='email'?'email':'text'} required maxLength={maxLength} value={company[key]} onChange={event=>setCompany({...company,[key]:event.target.value})}/></label>)}</div><p>{dpT("legal.supportadres_support_dartspoint_nl")}</p><label htmlFor="legal-company-reason">{dpT("legal.reden_voor_de_wijziging")}<input id="legal-company-reason" required minLength={5} maxLength={500} value={companyReason} onChange={event=>setCompanyReason(event.target.value)}/></label></fieldset><div className="dp-legal-submit"><button disabled={blocked}>{busy==='company'?dpT("legal.contactgegevens_opslaan"):dpT("legal.contactgegevens_publiceren")}</button><FormFeedback form="company" feedback={feedback.company}/></div></form></details>}
    {bundle.isOwner&&<details className="dp-legal-card dp-legal-advanced"><summary>{dpT("legal.publicatiemachtigingen")}</summary><p>{dpT("legal.huidige_omgeving")} <strong>{bundle.environment==='production'?dpT("legal.productie"):bundle.environment==='staging'?dpT("legal.staging"):bundle.environment}</strong>{dpT("legal.geef_een_bestaande_eigenaar_of_beheerder_toestemming_om")}</p><form aria-label={dpT("legal.publicatiemachtiging_bewerken")} noValidate onSubmit={submitPublisher} aria-busy={busy==='publisher'}><fieldset disabled={blocked}><label htmlFor="legal-publisher-userId">{dpT("legal.gebruikers_id")}<input id="legal-publisher-userId" value={publisher.userId} required onChange={event=>setPublisher({...publisher,userId:event.target.value})}/></label><label className="dp-legal-check"><input type="checkbox" checked={publisher.enabled} onChange={event=>setPublisher({...publisher,enabled:event.target.checked})}/>{dpT("legal.publiceren_toestaan")}</label><label htmlFor="legal-publisher-reason">{dpT("legal.reden")}<input id="legal-publisher-reason" required minLength={5} maxLength={500} value={publisher.reason} onChange={event=>setPublisher({...publisher,reason:event.target.value})}/></label></fieldset><div className="dp-legal-submit"><button disabled={blocked}>{busy==='publisher'?dpT("legal.machtiging_opslaan"):dpT("legal.machtiging_opslaan_2")}</button><FormFeedback form="publisher" feedback={feedback.publisher}/></div></form></details>}
   </>}
- <LegalTranslations/>
+ <LegalTranslations bundle={bundle} onRefresh={refresh}/>
  </section>;
 }
 export default DartsLegal;

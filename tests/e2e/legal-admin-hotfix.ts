@@ -36,7 +36,11 @@ async function assertNearSave(message:Locator,form:Locator){
  assert.ok(status&&button,'Feedback and save button must have rendered bounds');
  assert.ok(Math.abs(status.y+status.height/2-button.y-button.height/2)<360,'Save feedback must remain beside the action');
 }
-async function noHorizontalClip(page:Page){assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'Legal administration must fit the viewport');}
+async function noHorizontalClip(page:Page){
+ const fit=await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1);
+ if(!fit)console.error(JSON.stringify(await page.evaluate(()=>({event:'legal_admin_overflow',viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('body *')].map(el=>({tag:el.tagName,css:String(el.className),left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width})).filter(el=>el.right>innerWidth+1||el.left< -1).sort((a,b)=>b.right-a.right).slice(0,16)}))));
+ assert.equal(fit,true,'Legal administration must fit the viewport');
+}
 async function capture(page:Page,name:string){const height=await page.evaluate(()=>Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)),width=page.viewportSize()!.width,fullPage=height<=5000;await page.screenshot({path:directory+'/'+name,fullPage,mask:[page.locator('input'),page.locator('textarea')]});report.screenshots.push({width,height,fullPage});}
 
 try{
@@ -133,6 +137,7 @@ try{
  await page.getByRole('button',{name:'Algemene voorwaarden',exact:true}).click();
  await expect(history.getByText(termsVersion,{exact:true})).toBeVisible();await expect(history.getByText(privacyVersion,{exact:true})).toHaveCount(0);
  checks.versionHistoryCanBeFilteredByDocument=true;
+ await expect.poll(()=>page.getByRole('combobox',{name:'Nederlandse bronversie',exact:true}).locator('option').count()).toBeGreaterThan(1);
  await capture(page,'legal-desktop.png');
  for(const width of [320,390]){await page.setViewportSize({width,height:844});await noHorizontalClip(page);await editor(page).getByRole('button',{name:'Werkversie opslaan',exact:true}).scrollIntoViewIfNeeded();await expect(editor(page).getByRole('button',{name:'Werkversie opslaan',exact:true})).toBeVisible();await capture(page,'legal-'+width+'.png');}
  checks.mobile320And390FitViewport=true;

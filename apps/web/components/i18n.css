@@ -18,3 +18,7 @@
 
 .mk-mobile-menu .mk-menu-top {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;}
 .mk-mobile-menu .mk-menu-top > .dp-language-picker {grid-column:1/-1;grid-row:2;}
+/* Native source options must not impose their text width on the legal grid. */
+.legal-translations,.legal-translations form,.legal-translations label,.legal-translations li {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.legal-translations label {display:grid;gap:6px;}
+.legal-translations :is(select,input,textarea) {box-sizing:border-box;min-width:0;width:100%;max-width:100%;}
