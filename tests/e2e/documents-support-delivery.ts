@@ -80,6 +80,10 @@ try{
  await panel.screenshot({path:directory+'/staff-mail-status.png'});
  await writeFile(directory+'/results.json',JSON.stringify({ok:true,realAuth:true,realPersistence:true,realMailpit:true,checks},null,2),{mode:0o600});
  console.log(JSON.stringify({event:'documents_support_delivery_browser_passed',checks:Object.keys(checks).length,noEmailOrTokenArtifacts:true}));
+}catch(error){
+ const page=sessions.at(-1)?.page;
+ if(page){await page.screenshot({path:directory+'/failure.png',fullPage:true}).catch(()=>{});console.error(JSON.stringify({event:'support_delivery_browser_failure',path:new URL(page.url()).pathname,language:await page.locator('html').getAttribute('lang'),headings:await page.getByRole('heading').allTextContents(),buttons:await page.getByRole('button').allTextContents()}));}
+ throw error;
 }finally{
  for(const session of sessions)try{await session.page.request.post(origin+'/api/platform/auth/logout',{data:{},headers:{origin}});}catch{}
  if(ownerId)await db().query("update user_roles set revoked_at=coalesce(revoked_at,now()) where user_id=$1 and role='owner'",[ownerId]);

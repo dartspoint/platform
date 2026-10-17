@@ -34,7 +34,7 @@ werkelijk verbonden domeinen. Een gesimuleerde `.app`-host bewijst geen DNS/TLS.
 | 12 | Kamerregio instellen/wijzigen/verwijderen | Geautoriseerde DB-mutaties en projectie lokaal geslaagd |
 | 13 | Geen regio/internationaal | Afzonderlijke waarden en labels, unit + DB geslaagd |
 | 14 | Voertaal los van regio | Contracts en DB-mutaties geslaagd |
-| 15 | Kamerfilters | Gecombineerde velden/reset geïmplementeerd; mobiele bediening gecontroleerd |
+| 15 | Kamerfilters | Echte opgeslagen GB-SCT/nl en internationaal/meertalig; gecombineerde browserfilters, reset en mobiele 390px-weergave geslaagd |
 | 16 | Onbevoegde mutatie | Vreemde-accountpayload, ongeldige locale en onbevoegde kamerwijziging lokaal geweigerd |
 | 17 | Actuele documenten NL/EN | Volledige gepubliceerde 2.0-bron gekoppeld via hash; openbare EN-weergave lokaal geslaagd; geen juridische goedkeuring |
 | 18 | Akkoord en taalwisseling | Zelfde inhoudsversie, nieuwe taal/revisie-evidence en geen dubbel akkoord lokaal geslaagd |
@@ -50,7 +50,7 @@ werkelijk verbonden domeinen. Een gesimuleerde `.app`-host bewijst geen DNS/TLS.
 ## Uitgevoerde opdrachten
 
 - `npm run build:deploy`: standalone web-, realtime- en workerbundles gebouwd.
-- `npm run verify:ci`: typechecks, 98 unitchecks en 49 bestaande opschecks geslaagd.
+- `npm run verify:ci`: typechecks, 99 unitchecks en 49 bestaande opschecks geslaagd.
 - `tests/integration/internationalisation.ts`: echte lokale DB/Auth-integratie.
 - `tests/e2e/internationalisation.ts`: echte browsers, OTP/Mailpit, onboarding en
   taalwissel tijdens een actieve wedstrijd.
@@ -109,3 +109,15 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   van de taalkeuze. Een headercontainerquery gebruikt bij beperkte werkelijke
   breedte het bestaande mobiele menu. De volledige interfacecheck, inclusief
   toetsenbord, verlopen render-sample, offline oefenen en 200% zoom, slaagt.
+
+- Native mobiele taalbediening is met echte browsers op 320 en 390 px gecontroleerd:
+  de oorspronkelijke sluitknop blijft 44 px en het menu heeft geen horizontale
+  overloop. De 200%-zoomcontrole slaagt met de actuele bundel.
+- `tests/e2e/room-metadata.ts` maakt uitsluitend eigen lokale fixtures: GB-SCT met
+  Nederlandse voertaal en internationaal/meertalig. De echte vlag, opslag,
+  gecombineerde filters, reset en mobiele weergave slagen; fixtures worden opgeruimd.
+- Expliciete manifestquery `locale=nl|en` gaat vóór een afwijkende gastcookie.
+- De oude keyboardfixture accepteert nu ook de native taalselectie als geldig
+  tabdoel. Document/supportacceptatie: 18 checks geslaagd. Bezorgstatusacceptatie:
+  4 checks geslaagd bij herhaling na een eerste timeout bij claimen. Releasebeheer:
+  opslag, idempotentie, privérechten, publicatie en mobiele bediening geslaagd.

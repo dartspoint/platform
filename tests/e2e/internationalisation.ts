@@ -13,6 +13,14 @@ try{
  const headers=testClientHeaders();await context.route('**/api/platform/auth/**',route=>route.continue({headers:{...route.request().headers(),...headers}}));
  await page.goto(origin+'/en');assert.equal(await page.locator('html').getAttribute('lang'),'en');await page.getByRole('heading',{name:/last leg/i}).waitFor();
  assert.equal(await page.locator('html').evaluate(el=>el.scrollWidth>innerWidth),false);
+ for(const width of [320,390]){
+  await page.setViewportSize({width,height:844});await page.getByRole('button',{name:'Open menu',exact:true}).click();
+  const menu=page.locator('.mk-mobile-menu');await menu.waitFor();
+  assert.equal(await menu.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'Mobile language menu fits');
+  assert.ok((await menu.locator('.mk-menu-top button').boundingBox())!.width>=44,'Close control keeps its touch target');
+  assert.equal(await menu.getByLabel('Nederlands / English').inputValue(),'en');await menu.locator('.mk-menu-top button').click();
+ }
+ await page.setViewportSize({width:1366,height:900});
  for(const locale of ['nl','en']){
   const response=await fetch(origin+'/api/auth/google/callback?flow=invalid',{redirect:'manual',headers:{Cookie:'dp-locale='+locale}});
   assert.equal(response.status,307);assert.equal(new URL(response.headers.get('location')!).pathname,'/'+locale+'/inloggen');

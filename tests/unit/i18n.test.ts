@@ -70,3 +70,11 @@ test('Known game messages render from a safe event without changing source state
  assert.equal(gameMessageEvent('Human text joined the room',[]),null);assert.equal(renderGameMessage('Unknown historical event','en'),'Unknown historical event');
  assert.equal(renderGameMessage('1 over — je moet eindigen op een dubbel.','en'),'1 left — you must finish on a double.');
 });
+
+test('Explicit manifest locale is stable even with a different guest preference',async()=>{
+ const {GET}=await import('../../apps/web/app/api/manifest/route');
+ for(const locale of ['nl','en']){
+  const result=GET(new Request('https://dartspoint.nl/api/manifest?locale='+locale,{headers:{host:'dartspoint.nl',cookie:'dp-ui-locale='+(locale==='nl'?'en':'nl')}}));
+  const manifest=await result.json();assert.equal(manifest.lang,locale);assert.equal(manifest.scope,'/');assert.match(result.headers.get('cache-control')??'',/private.*no-store/);
+ }
+});

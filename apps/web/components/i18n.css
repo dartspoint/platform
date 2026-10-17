@@ -11,7 +11,10 @@
 /* Keep the existing mobile menu available when zoom reduces header space. */
 .mk-header {container-type:inline-size;}
 @container(max-width:900px) {
-  .mk-desktop-nav {display:none;}
-  .mk-menu-trigger {display:flex;}
-  .mk-header-register {display:none;}
+  .mk-header .mk-desktop-nav {display:none;}
+  .mk-header .mk-menu-trigger {display:flex;}
+  .mk-header .mk-header-register {display:none;}
 }
+
+.mk-mobile-menu .mk-menu-top {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;}
+.mk-mobile-menu .mk-menu-top > .dp-language-picker {grid-column:1/-1;grid-row:2;}
