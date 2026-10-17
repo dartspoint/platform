@@ -105,3 +105,7 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   `auth_provider`-melding; het OTP-request controleert ook `locale: nl`.
   Een extra EN-check bewijst een nieuw widget, ongeldig oud token en geen extra
   OTP-request na taalwisseling. Deze geïsoleerde browsertest slaagt.
+- De ongewijzigde 200%-zoomassertie vond overloop in de navigatie na toevoeging
+  van de taalkeuze. Een headercontainerquery gebruikt bij beperkte werkelijke
+  breedte het bestaande mobiele menu. De volledige interfacecheck, inclusief
+  toetsenbord, verlopen render-sample, offline oefenen en 200% zoom, slaagt.

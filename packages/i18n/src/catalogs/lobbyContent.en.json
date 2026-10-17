@@ -149,7 +149,7 @@
   "lobbyContent.concept_opgeslagen_nog_niet_gepubliceerd": "Draft saved · not published yet",
   "lobbyContent.lobby_is_bijgewerkt": "Lobby updated",
   "lobbyContent.sla_op_als_concept_of_publiceer_direct": "Save as a draft or publish directly.",
-  "lobbyContent.laatst_opgeslagen": "Last saved: {value0}",
+  "lobbyContent.laatst_opgeslagen": "Last saved: {saved,select,true {{time}} other {default layout}}",
   "lobbyContent.standaardindeling": "default layout",
   "lobbyContent.concept_opslaan": "Save draft",
   "lobbyContent.publiceren": "Publish",

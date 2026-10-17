@@ -166,7 +166,7 @@
   "tournaments.wachtend": "wachtend",
   "tournaments.beide_spelers_zijn_gereed": "Beide spelers zijn gereed",
   "tournaments.wacht_op_een_vrij_bord": "Wacht op een vrij bord",
-  "tournaments.bord_voor": "Bord voor {value0}",
+  "tournaments.bord_voor": "Bord voor {player} tegen {opponent}",
   "tournaments.tegen_2": " tegen ",
   "tournaments.geen_vrij_bord": "Geen vrij bord",
   "tournaments.toewijzen": "Toewijzen",

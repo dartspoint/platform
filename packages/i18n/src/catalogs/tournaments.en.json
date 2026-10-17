@@ -166,7 +166,7 @@
   "tournaments.wachtend": "waiting",
   "tournaments.beide_spelers_zijn_gereed": "Both players are ready",
   "tournaments.wacht_op_een_vrij_bord": "Waiting for a free board",
-  "tournaments.bord_voor": "Board for {value0}",
+  "tournaments.bord_voor": "Board for {player} v {opponent}",
   "tournaments.tegen_2": " against ",
   "tournaments.geen_vrij_bord": "No free board",
   "tournaments.toewijzen": "Assign",

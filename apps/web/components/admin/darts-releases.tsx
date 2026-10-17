@@ -230,7 +230,7 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
     if (!begin()) return false;
     try {
       const updated = await moveReleaseItem(item.id, status, item.revision, false, requestId(["move", item.id, status, item.revision, false]));
-      setNotice({ text: dpFeedback("feedback.value0_staat_nu_bij_value1_value2",{value0:updated.number,value1:RELEASE_STATUSES[status],value2:item.publication && status !== "added" ? " De lobbypublicatie is ingetrokken." : status === "added" && !updated.publication ? " Nog niet gepubliceerd in de lobby." : ""}) });
+      setNotice({ text: dpFeedback("feedback.value0_staat_nu_bij_value1_value2",{value0:updated.number,value1:RELEASE_STATUSES[status],publicationState:item.publication&&status!=="added"?"withdrawn":status==="added"&&!updated.publication?"unpublished":"unchanged"}) });
       setMobileStatus(status);
       return true;
     } catch (error) { statusReturn.current = null; setNotice({ text: errorText(error), error: true }); if (isReleaseVersionConflict(error)) void board.reload().catch(() => {}); return false; }

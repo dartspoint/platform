@@ -8,3 +8,10 @@
 .dp-room-filters select,.dp-room-filters button {max-width:100%;font:inherit;color:inherit;background:#10271c;border:1px solid #365343;border-radius:6px;padding:6px;}
 .dp-room-editor {min-width:0;border:1px solid #365343;border-radius:8px;padding:12px;display:grid;gap:10px;}
 .dp-room-editor p {font-size:12px;color:#9fbcaa;}.dp-room-preview {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+/* Keep the existing mobile menu available when zoom reduces header space. */
+.mk-header {container-type:inline-size;}
+@container(max-width:900px) {
+  .mk-desktop-nav {display:none;}
+  .mk-menu-trigger {display:flex;}
+  .mk-header-register {display:none;}
+}

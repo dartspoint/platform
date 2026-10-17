@@ -100,7 +100,7 @@
   "feedback.behandelstatus_bijgewerkt": "Handling status updated.",
   "feedback.idee_value0_toegevoegd_aan_ideeen": "Idea #{value0} added to Ideas.",
   "feedback.kaart_value0_opgeslagen": "Card #{value0} saved.",
-  "feedback.value0_staat_nu_bij_value1_value2": "#{value0} is now in {value1}.{value2}",
+  "feedback.value0_staat_nu_bij_value1_value2": "#{value0} is now in {value1}.{publicationState,select,withdrawn { The lobby publication has been withdrawn.} unpublished { Not yet published in the lobby.} other {}}",
   "feedback.value0_verplaatst_naar_value1_de_lobbypublicatie_is_ingetrokken": "#{value0} moved to {value1}. The lobby publication is withdrawn.",
   "feedback.divisies_spelers": "Divisions & players",
   "feedback.speelschema": "Fixtures",

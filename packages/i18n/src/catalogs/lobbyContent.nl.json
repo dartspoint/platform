@@ -149,7 +149,7 @@
   "lobbyContent.concept_opgeslagen_nog_niet_gepubliceerd": "Concept opgeslagen · nog niet gepubliceerd",
   "lobbyContent.lobby_is_bijgewerkt": "Lobby is bijgewerkt",
   "lobbyContent.sla_op_als_concept_of_publiceer_direct": "Sla op als concept of publiceer direct.",
-  "lobbyContent.laatst_opgeslagen": "Laatst opgeslagen: {value0}",
+  "lobbyContent.laatst_opgeslagen": "Laatst opgeslagen: {saved,select,true {{time}} other {standaardindeling}}",
   "lobbyContent.standaardindeling": "standaardindeling",
   "lobbyContent.concept_opslaan": "Concept opslaan",
   "lobbyContent.publiceren": "Publiceren",

@@ -100,7 +100,7 @@
   "feedback.behandelstatus_bijgewerkt": "Behandelstatus bijgewerkt.",
   "feedback.idee_value0_toegevoegd_aan_ideeen": "Idee #{value0} toegevoegd aan Ideeën.",
   "feedback.kaart_value0_opgeslagen": "Kaart #{value0} opgeslagen.",
-  "feedback.value0_staat_nu_bij_value1_value2": "#{value0} staat nu bij {value1}.{value2}",
+  "feedback.value0_staat_nu_bij_value1_value2": "#{value0} staat nu bij {value1}.{publicationState,select,withdrawn { De lobbypublicatie is ingetrokken.} unpublished { Nog niet gepubliceerd in de lobby.} other {}}",
   "feedback.value0_verplaatst_naar_value1_de_lobbypublicatie_is_ingetrokken": "#{value0} verplaatst naar {value1}. De lobbypublicatie is ingetrokken.",
   "feedback.divisies_spelers": "Divisies & spelers",
   "feedback.speelschema": "Speelschema",
