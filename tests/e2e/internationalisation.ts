@@ -58,7 +58,14 @@ try{
  let connections=0;page.on('websocket',()=>connections++);
  await page.goto(origin+'/spelen?match='+matchId);await peer.page.goto(origin+'/spelen?match='+matchId);
  await page.getByRole('button',{name:'Start the match',exact:true}).click();await peer.page.getByRole('button',{name:'Begin de wedstrijd',exact:true}).click();
- await page.getByRole('button',{name:'Stop horizontal indicator',exact:true}).waitFor();await page.getByRole('button',{name:'Stop horizontal indicator',exact:true}).click();await page.getByRole('button',{name:'Stop vertical indicator and throw',exact:true}).waitFor();
+ // The peer's confirmation left its page in front. Like the existing timing
+ // fixtures, foreground the actual player and wait for a real new phase draw.
+ await page.bringToFront();
+ assert.equal(await page.evaluate(()=>document.visibilityState==='visible'&&document.hasFocus()),true);
+ const horizontal=page.getByRole('button',{name:'Stop horizontal indicator',exact:true});await expect(horizontal).toBeEnabled();
+ const previousDraw=await page.locator('.dp-meter-row .dp-meter-indicator').evaluate(element=>(element as HTMLElement).style.left);
+ await page.waitForFunction(previous=>(document.querySelector('.dp-meter-row .dp-meter-indicator') as HTMLElement)?.style.left!==previous,previousDraw,{polling:'raf'});
+ await horizontal.click();await page.getByRole('button',{name:'Stop vertical indicator and throw',exact:true}).waitFor();
  const before=await get(page,'match/'+matchId),baselineConnections=connections;
  await page.evaluate(()=>{(window as any).__i18nBoard=document.querySelector('svg[aria-label]');(window as any).__i18nInput=document.querySelector('.aim-meter-vertical');});
  const draft='Vrije tekst <b>exact hetzelfde</b>';
@@ -74,7 +81,8 @@ try{
  await writeFile('artifacts/i18n/e2e-result.json',JSON.stringify({ok:true,reducedMotionHydration:true,reducedMotionDoesNotAutoplay:true,actualEnglishOtp:true,languageChangeDoesNotResend:true,accountPreference:true,realTwoPlayerMatch:true,statePreserved:true,boardNodePreserved:true,socketsPreserved:true,draftPreserved:true},null,2));console.log('Real English OTP, bilingual registration and language switch in an active match passed');
 }catch(error){
  await page.screenshot({path:'artifacts/i18n/match-language-failure.png',fullPage:true}).catch(()=>{});
- console.error(JSON.stringify({event:'i18n_browser_failure',path:new URL(page.url()).pathname,language:await page.locator('html').getAttribute('lang'),buttons:await page.getByRole('button').allTextContents(),errors}));throw error;
+ const timing=await page.evaluate(()=>({visible:document.visibilityState,focused:document.hasFocus(),outcomes:((window as any).__dpTimingTraces??[]).slice(-4).map((item:any)=>({event:item.event,code:item.code}))}));
+ console.error(JSON.stringify({event:'i18n_browser_failure',path:new URL(page.url()).pathname,language:await page.locator('html').getAttribute('lang'),buttons:await page.getByRole('button').allTextContents(),timing,errors}));throw error;
 }finally{
  if(matchId&&token){try{const sdk=new Client(process.env.NEXT_PUBLIC_REALTIME_URL!),room=await sdk.joinOrCreate('match',{matchId,token});room.onMessage('snapshot',()=>{});room.onMessage('clock.challenge',()=>{});const snapshot=await get(page,'match/'+matchId);const receipt=new Promise(resolve=>{room.onMessage('receipt',resolve);room.onMessage('error',resolve);});room.send('command',{protocolVersion:1,commandId:randomUUID(),matchId,expectedStateVersion:snapshot.stateVersion,type:'match.forfeit'});await Promise.race([receipt,new Promise(resolve=>setTimeout(resolve,3000))]);await room.leave();}catch{}}
  await browser.close();

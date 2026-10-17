@@ -164,3 +164,7 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   vertaalde presentatie toe. De volledige oorspronkelijke score-, input- en
   animatiescripttekst blijft byte-identiek. Een echte serviceworker/netwerk-offline
   browsertest controleert EN/NL, worp, reset en 320 px zonder netwerkafhankelijkheid.
+- De taalwisselfixture wacht, net als de bestaande timingfixtures, na de
+  bevestiging van de tegenstander op voorgrondfocus en een nieuwe echte
+  indicatorframe. De actieve worp wordt éénmaal met native invoer gestopt;
+  afwijzingsgrenzen en alle state-/verbindingsasserties blijven gelijk.
