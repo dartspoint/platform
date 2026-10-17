@@ -43,7 +43,7 @@
   "lobby.filter_kamers": "Filter rooms",
   "lobby.prive": "Private",
   "lobby.gesloten": "Closed",
-  "lobby.label": "{name} {value1}",
+  "lobby.label": "{favourite, select, true {Remove {name} from favourites} other {Save {name} as a favourite}}",
   "lobby.uit_favorieten_verwijderen": "remove from favourites",
   "lobby.als_favoriet_bewaren": "save as a favourite",
   "lobby.wedstrijd": "match",

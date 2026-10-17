@@ -18,7 +18,7 @@
   "game.leg": "leg",
   "game.legs": "legs",
   "game.wedstrijd": "Match",
-  "game._2": "#{publicGameId}",
+  "game.publicMatchNumber": "#{publicGameId}",
   "game.speler": "Player",
   "game.sets": "Sets",
   "game.legs_2": "Legs",

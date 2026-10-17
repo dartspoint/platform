@@ -13,7 +13,7 @@
   "practice.oefenpijlen": "Practice darts",
   "practice.hoogste_beurt": "Highest visit",
   "practice.hoogste_finish": "Highest checkout",
-  "practice.oefenbord": "Practice board{value0}",
+  "practice.oefenbord": "Practice board{hasTarget, select, true {, target {target}} other {}}",
   "practice.doel": ", target {target}",
   "practice.terug": "Back",
   "practice.kamer": "Room",

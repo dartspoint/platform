@@ -13,9 +13,10 @@ export function LocaleProvider({initialLocale, publicPage, catalogs = {}, childr
   const setLocale = useCallback((next: Locale) => {
     if (!isLocale(next)) return;
     document.cookie = `dp-locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+    document.documentElement.lang=next;
     updateLocale(next);
   }, []);
-  const syncAccount = useCallback((next: unknown) => {if (!publicPage && isLocale(next)) updateLocale(next);}, [publicPage]);
+  const syncAccount = useCallback((next: unknown) => {if (!publicPage && isLocale(next)) {document.documentElement.lang=next;updateLocale(next);}}, [publicPage]);
   useEffect(() => {document.documentElement.lang = locale;document.cookie=`dp-ui-locale=${locale}; Path=/; SameSite=Lax${location.protocol==='https:'?'; Secure':''}`;}, [locale]);
   const value = useMemo(() => ({locale, setLocale, syncAccount, publicPage, catalogs}), [locale, setLocale, syncAccount, publicPage, catalogs]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

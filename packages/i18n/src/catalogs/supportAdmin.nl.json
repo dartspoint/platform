@@ -71,7 +71,7 @@
   "supportAdmin.beschikbare_velden": "Beschikbare velden:",
   "supportAdmin.label": "'{{voornaam}}'",
   "supportAdmin.en": "en",
-  "supportAdmin._2": "'{{ticketnummer}}'",
+  "supportAdmin.ticketNumberPlaceholder": "'{{ticketnummer}}'",
   "supportAdmin.geen_automatische_besluiten_over_een_ban_of_privacyverzoek": ". Geen automatische besluiten over een ban of privacyverzoek.",
   "supportAdmin.actief_sjabloon": "Actief sjabloon",
   "supportAdmin.voorbeeld": "Voorbeeld",

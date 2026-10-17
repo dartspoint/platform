@@ -1,13 +1,14 @@
 import {providerFetch} from '../../packages/data/src/fetch';
 import {createServerClient} from '@supabase/ssr';
 import {NextResponse,type NextRequest} from 'next/server';
-import {domainLocale, publicPaths, stripLocale} from '../../packages/i18n/src/locale';
+import {domainLocale, isLocale, publicPaths, stripLocale} from '../../packages/i18n/src/locale';
 import {trustedOrigins} from '../../packages/i18n/src/domains';
 export async function proxy(request:NextRequest){
  const host = request.headers.get('host') ?? request.nextUrl.host;
  if(!trustedOrigins().some(origin => new URL(origin).host === host)) return new NextResponse('Unknown host',{status:421});
  const original=request.nextUrl.pathname, path=stripLocale(original), prefixed=original!==path;
- const locale=prefixed?original.split('/')[1]:domainLocale(host);
+ const guest=request.cookies.get('dp-locale')?.value;
+ const locale=publicPaths.includes(path)?(prefixed?original.split('/')[1]:domainLocale(host)):isLocale(guest)?guest:prefixed?original.split('/')[1]:domainLocale(host);
  const requestHeaders=new Headers(request.headers);
  requestHeaders.set('x-dp-path',original); requestHeaders.set('x-dp-locale',locale);
  // Only public content and entry flows have translated URL aliases. Gameplay

@@ -43,7 +43,7 @@
   "lobby.filter_kamers": "Filter kamers",
   "lobby.prive": "Privé",
   "lobby.gesloten": "Gesloten",
-  "lobby.label": "{name} {value1}",
+  "lobby.label": "{favourite, select, true {{name} uit favorieten verwijderen} other {{name} als favoriet bewaren}}",
   "lobby.uit_favorieten_verwijderen": "uit favorieten verwijderen",
   "lobby.als_favoriet_bewaren": "als favoriet bewaren",
   "lobby.wedstrijd": "wedstrijd",

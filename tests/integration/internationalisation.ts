@@ -2,7 +2,7 @@ import {Pool} from 'pg';
 import {postgresOptions} from '../../packages/data/src/postgres';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {writeFile} from 'node:fs/promises';
+import {mkdir,writeFile} from 'node:fs/promises';
 import {db,redis} from '../../packages/data/src/db';
 import {authAdmin,actorById} from '../../packages/data/src/auth';
 import {onboard,preferences,joinRoom,chatHistory,sendMessage} from '../../packages/data/src/community';
@@ -12,6 +12,7 @@ import {getLegalPublicBundle,recordLegalAcceptance} from '../../packages/data/sr
 import {renderSystemEvent} from '../../packages/i18n/src/system-events';
 assert.equal(process.env.APP_ENV,'development');
 const control=new Pool(postgresOptions(process.env.MIGRATION_DATABASE_URL!));
+await mkdir('artifacts/i18n',{recursive:true});
 const fixtures:string[]=[],rooms:string[]=[];
 try{
  const suffix=randomUUID().slice(0,8);

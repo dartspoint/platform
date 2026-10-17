@@ -38,7 +38,7 @@ werkelijk verbonden domeinen. Een gesimuleerde `.app`-host bewijst geen DNS/TLS.
 | 16 | Onbevoegde mutatie | Vreemde-accountpayload, ongeldige locale en onbevoegde kamerwijziging lokaal geweigerd |
 | 17 | Actuele documenten NL/EN | Volledige gepubliceerde 2.0-bron gekoppeld via hash; openbare EN-weergave lokaal geslaagd; geen juridische goedkeuring |
 | 18 | Akkoord en taalwisseling | Zelfde inhoudsversie, nieuwe taal/revisie-evidence en geen dubbel akkoord lokaal geslaagd |
-| 19 | Handleiding/CMS | Zelfde artikelpad in andere taal; actuele guide 2.0. Geen bestaande losse zoekmodule aangetroffen. CMS-edities controleren bron en volledigheid |
+| 19 | Handleiding/CMS | Lokaal hetzelfde artikelpad in andere taal; actuele guide 2.0. Op staging ontbreekt nog een gepubliceerde handleidingbron. Geen bestaande losse zoekmodule aangetroffen. CMS-edities controleren bron en volledigheid |
 | 20 | Tijdzone/countdown/DST | Formatterunits en reminders bewaren instant; Amsterdam/London DST geslaagd; bestaande countdowncode behouden |
 | 21 | SEO | EN-canonical `.app`, wederzijdse hreflang, HTML-taal en metadata lokaal geslaagd; extern `.app` nog te koppelen |
 | 22 | Mobiel/toegankelijkheid | Publieke mobiele 390px-browsercontrole zonder horizontale overflow of hydrationfouten; toegankelijke selects |
@@ -59,7 +59,7 @@ werkelijk verbonden domeinen. Een gesimuleerde `.app`-host bewijst geen DNS/TLS.
 - Supabase CLI `db advisors --local --type security`: geen problemen gevonden.
 - Beide tweetalige Caddy-voorbeelden gevalideerd met de gepinde Caddy 2.11.7.
 - `npm run test:integration`: volledige bestaande acceptatie wordt uitgevoerd;
-  definitieve uitkomst wordt vóór oplevering hieronder vastgelegd.
+  de actuele exacte-commituitkomst staat in de GitHub Actions-uitrol die hieronder wordt gekoppeld.
 
 Private lokale screenshots, Mailpit/browserresultaten en logs staan in de
 geïgnoreerde map `artifacts/i18n`; secrets en lokale envfiles worden niet gecommit.
@@ -76,7 +76,23 @@ kamer bijvoorbeeld regio `GB-SCT` en voertaal `nl`; controleer na opslaan de vla
 het onafhankelijke taallabel en de lobbyfilters. Een echte match kan openblijven
 bij het wijzigen van alleen de interfacetaal.
 
-Extern resteert: `.app`-DNS/TLS/Caddy activeren, Supabase redirectallowlist en één
+Extern resteert: de meegeleverde handleidingbron en Engelse editie via een bevoegde stagingpubliceerder publiceren; `.app`-DNS/TLS/Caddy activeren, Supabase redirectallowlist en één
 tweetalige OTP-template/onderwerp publiceren, Turnstile-hosts toevoegen en echte
 Google-login per domein controleren. Productiecode/DNS zijn in deze sprint niet
 uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
+
+## Aanvullende bevindingen
+
+- Eerste schone CI-run op `8ced500`: functionele DB-asserties slaagden, daarna
+  ontbrak de resultaatdirectory. De tests maken die directory nu zelf aan; dit
+  verandert geen assertie of testgrens.
+- Alle lokale DB-integratiechecks inclusief restore, retention, recovery, load en
+  mail slaagden. De gerichte EN-OTP/onboarding/matchtaaltest en de bestaande
+  volledige tweespelermatch/reconnect/practiceacceptatie slaagden eveneens.
+- Verlopen Google-flows zijn lokaal voor NL en EN via echte HTTP-redirects
+  gecontroleerd. Echte externe Google-aanmelding blijft een providercheck.
+- Op staging komen de actuele voorwaarden en privacy 2.0 exact overeen met de
+  meegeleverde bronhashes. Daar is geen handleiding gepubliceerd.
+- De gekoppelde Supabase-beheerconnector weigert toegang tot het stagingproject.
+  Providerwijzigingen of publicatie buiten de bestaande apprechten zijn daarom
+  niet als uitgevoerd gemarkeerd.

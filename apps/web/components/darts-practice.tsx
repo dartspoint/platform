@@ -100,7 +100,7 @@ const PracticeBoard = memo(function PracticeBoard({ target, dart, flying, chip, 
   const uid = useId().replace(/:/g, "");
   const g = BOARD_GEOMETRY;
   const position = dart ? dartTipPosition(dart.hit) : null;
-  return <svg className="practice-board" viewBox="0 0 440 440" role="img" aria-label={dpT("practice.oefenbord",{value0:target ? `, doel ${target}` : ""})}>
+  return <svg className="practice-board" viewBox="0 0 440 440" role="img" aria-label={dpT("practice.oefenbord",{hasTarget:String(!!target),target:target??0})}>
     <defs><radialGradient id={`${uid}-rim`}><stop offset="75%" stopColor="#08150e"/><stop offset="94%" stopColor="#1c3025"/><stop offset="100%" stopColor="#102218"/></radialGradient><filter id={`${uid}-shadow`} x="-25%" y="-25%" width="150%" height="160%"><feDropShadow dx="0" dy="13" stdDeviation="11" floodOpacity=".65"/></filter></defs>
     <circle cx="220" cy="220" r="209" fill={`url(#${uid}-rim)`} stroke="#6c8b7550" strokeWidth="2" filter={`url(#${uid}-shadow)`}/>
     <circle cx="220" cy="220" r="177" fill="#07100b" stroke="#99a59840"/>

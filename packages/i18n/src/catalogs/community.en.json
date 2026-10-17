@@ -42,7 +42,7 @@
   "community.geen_privegesprek_geopend": "No private chat open",
   "community.je_gesprekken_beginnen_hier": "Your conversations start here",
   "community.open_een_privegesprek_via_je_vrienden_of_berichten": "Open a private chat through your friends or messages. Closed conversations are kept.",
-  "community.na_je_beurt": "{deferredCount} {value1} after your turn",
+  "community.na_je_beurt": "{deferredCount, plural, one {# new message will appear after your turn} other {# new messages will appear after your turn}}",
   "community.nieuw_bericht_komt": "new message will appear",
   "community.nieuwe_berichten_komen": "new messages will appear",
   "community.rustige_beurt_nieuwe_berichten_blijven_bewaard": "Quiet turn · new messages are kept",

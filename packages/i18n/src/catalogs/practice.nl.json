@@ -13,7 +13,7 @@
   "practice.oefenpijlen": "Oefenpijlen",
   "practice.hoogste_beurt": "Hoogste beurt",
   "practice.hoogste_finish": "Hoogste finish",
-  "practice.oefenbord": "Oefenbord{value0}",
+  "practice.oefenbord": "Oefenbord{hasTarget, select, true {, doel {target}} other {}}",
   "practice.doel": ", doel {target}",
   "practice.terug": "Terug",
   "practice.kamer": "Kamer",

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {writeFile} from 'node:fs/promises';
+import {mkdir,writeFile} from 'node:fs/promises';
 import {chromium} from '@playwright/test';
 import {Client} from '@colyseus/sdk';
 import {login,get,post,origin,testClientHeaders} from './helpers';
+await mkdir('artifacts/i18n',{recursive:true});
 const browser=await chromium.launch(),context=await browser.newContext({viewport:{width:1366,height:900},locale:'nl-NL'});
 await context.addInitScript('globalThis.__name = (fn) => fn;');
 const page=await context.newPage(),errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
@@ -12,6 +13,10 @@ try{
  const headers=testClientHeaders();await context.route('**/api/platform/auth/**',route=>route.continue({headers:{...route.request().headers(),...headers}}));
  await page.goto(origin+'/en');assert.equal(await page.locator('html').getAttribute('lang'),'en');await page.getByRole('heading',{name:/last leg/i}).waitFor();
  assert.equal(await page.locator('html').evaluate(el=>el.scrollWidth>innerWidth),false);
+ for(const locale of ['nl','en']){
+  const response=await fetch(origin+'/api/auth/google/callback?flow=invalid',{redirect:'manual',headers:{Cookie:'dp-locale='+locale}});
+  assert.equal(response.status,307);assert.equal(new URL(response.headers.get('location')!).pathname,'/'+locale+'/inloggen');
+ }
  await page.goto(origin+'/en/inloggen');
  const email=`qa-i18n-flow-${randomUUID()}@dartspoint.local`;
  await page.getByLabel('Email address',{exact:true}).fill(email);await page.getByRole('button',{name:'Get your sign-in code',exact:true}).click();await page.getByLabel('Your one-time code').waitFor();
@@ -47,6 +52,9 @@ try{
  boot=await get(page,'bootstrap');assert.equal(boot.preferences.locale,'nl');
  await page.screenshot({path:'artifacts/i18n/match-language-switch.png',fullPage:true});assert.deepEqual(errors,[]);
  await writeFile('artifacts/i18n/e2e-result.json',JSON.stringify({ok:true,actualEnglishOtp:true,languageChangeDoesNotResend:true,accountPreference:true,realTwoPlayerMatch:true,statePreserved:true,boardNodePreserved:true,socketsPreserved:true,draftPreserved:true},null,2));console.log('Real English OTP, bilingual registration and language switch in an active match passed');
+}catch(error){
+ await page.screenshot({path:'artifacts/i18n/match-language-failure.png',fullPage:true}).catch(()=>{});
+ console.error(JSON.stringify({event:'i18n_browser_failure',path:new URL(page.url()).pathname,language:await page.locator('html').getAttribute('lang'),buttons:await page.getByRole('button').allTextContents(),errors}));throw error;
 }finally{
  if(matchId&&token){try{const sdk=new Client(process.env.NEXT_PUBLIC_REALTIME_URL!),room=await sdk.joinOrCreate('match',{matchId,token});room.onMessage('snapshot',()=>{});room.onMessage('clock.challenge',()=>{});const snapshot=await get(page,'match/'+matchId);const receipt=new Promise(resolve=>{room.onMessage('receipt',resolve);room.onMessage('error',resolve);});room.send('command',{protocolVersion:1,commandId:randomUUID(),matchId,expectedStateVersion:snapshot.stateVersion,type:'match.forfeit'});await Promise.race([receipt,new Promise(resolve=>setTimeout(resolve,3000))]);await room.leave();}catch{}}
  await browser.close();

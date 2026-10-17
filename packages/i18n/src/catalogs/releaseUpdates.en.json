@@ -6,7 +6,7 @@
   "releaseUpdates.gebruik_een_titel_van_3_140_tekens_en": "Use a title of 3–140 characters and up to 3,000 characters of explanation.",
   "releaseUpdates.nieuw_in_dartspoint": "NEW IN DARTSPOINT",
   "releaseUpdates.voorbeeld": "PREVIEW",
-  "releaseUpdates.toevoegingen": "{length} {value1} additions",
+  "releaseUpdates.toevoegingen": "{length, plural, one {# {published, select, true {published addition} other {addition shown}}} other {# {published, select, true {published additions} other {additions shown}}}}",
   "releaseUpdates.gepubliceerde": "published",
   "releaseUpdates.getoonde": "shown",
   "releaseUpdates.toevoegingen_laden": "Loading additions…",

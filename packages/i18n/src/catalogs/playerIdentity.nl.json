@@ -1,8 +1,8 @@
 {
   "playerIdentity.label": "{name} · {value1}",
-  "playerIdentity._2": "{name}, {value1}",
+  "playerIdentity.accessibleNameAndRole": "{name}, {value1}",
   "playerIdentity.rating": "{name}, rating {displayed}, {value2}",
-  "playerIdentity._3": "[{formatted}]",
+  "playerIdentity.formattedRating": "[{formatted}]",
   "playerIdentity.tik_voor_uitleg": "{description} · tik voor uitleg",
   "playerIdentity.rating_toon_uitleg_over_dartspoints": "{name}, rating {displayed}, {value2}. Toon uitleg over DartsPoints",
   "playerIdentity.plaatsing": "Plaatsing:",

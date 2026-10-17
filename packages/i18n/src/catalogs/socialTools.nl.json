@@ -31,7 +31,7 @@
   "socialTools.wachtrij_voor_de_volgende_wedstrijd": "Wachtrij voor de volgende wedstrijd",
   "socialTools.de_volgende_is_voor_jou": "De volgende is voor jou.",
   "socialTools.het_bord_is_vrij_klaar_voor_een_potje": "Het bord is vrij. Klaar voor een potje?",
-  "socialTools.op_dit_bord": "{length} {value1} op dit bord",
+  "socialTools.op_dit_bord": "{length, plural, one {# speler wacht op dit bord} other {# spelers wachten op dit bord}}",
   "socialTools.speler_wacht": "speler wacht",
   "socialTools.spelers_wachten": "spelers wachten",
   "socialTools.schuif_aan_zodra_deze_wedstrijd_klaar_is": "Schuif aan zodra deze wedstrijd klaar is.",

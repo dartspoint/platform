@@ -31,7 +31,7 @@
   "socialTools.wachtrij_voor_de_volgende_wedstrijd": "Queue for the next match",
   "socialTools.de_volgende_is_voor_jou": "The next one is yours.",
   "socialTools.het_bord_is_vrij_klaar_voor_een_potje": "The board is free. Ready for a game?",
-  "socialTools.op_dit_bord": "{length} {value1} for this board",
+  "socialTools.op_dit_bord": "{length, plural, one {# player is waiting for this board} other {# players are waiting for this board}}",
   "socialTools.speler_wacht": "player waiting",
   "socialTools.spelers_wachten": "players waiting",
   "socialTools.schuif_aan_zodra_deze_wedstrijd_klaar_is": "Join in when this match finishes.",

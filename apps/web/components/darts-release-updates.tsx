@@ -139,7 +139,7 @@ function ReleaseUpdatesSurface({ title = "Een beetje beter. Elke avond.", descri
 
   return <div className={`${styles.widget}${fullPage ? ` ${styles.full}` : ""}`}>
     <div className={styles.widgetTop}><span className={styles.eyebrow}><Sparkles size={14}/>{dpT("releaseUpdates.nieuw_in_dartspoint")}</span>{preview && <span className={styles.demo}>{dpT("releaseUpdates.voorbeeld")}</span>}</div>
-    <div className={styles.headingRow}><h2 className={styles.heading}>{title}</h2><span className={styles.count} aria-label={dpT("releaseUpdates.toevoegingen",{length:updates.length,value1:fullPage ? "gepubliceerde" : "getoonde"})}>{updates.length.toString().padStart(2, "0")}</span></div>
+    <div className={styles.headingRow}><h2 className={styles.heading}>{title}</h2><span className={styles.count} aria-label={dpT("releaseUpdates.toevoegingen",{length:updates.length,published:String(fullPage)})}>{updates.length.toString().padStart(2, "0")}</span></div>
     <p className={styles.intro}>{description}</p>
     {loading ? <div className={styles.empty} role="status"><Clock3 size={25}/><p>{dpT("releaseUpdates.toevoegingen_laden")}</p></div> : publicError ? <div className={styles.formError} role="alert"><p>{publicError}</p><button className={styles.textButton} type="button" onClick={() => { void publicFeed.reload().catch(() => {}); }}>{dpT("releaseUpdates.opnieuw_laden")}</button></div> : <UpdateList updates={visible} compact={!fullPage} onOpen={id => openDetail(id)}/>}
     <div className={styles.widgetActions}>

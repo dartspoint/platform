@@ -6,7 +6,7 @@
   "releaseUpdates.gebruik_een_titel_van_3_140_tekens_en": "Gebruik een titel van 3–140 tekens en maximaal 3.000 tekens toelichting.",
   "releaseUpdates.nieuw_in_dartspoint": "NIEUW IN DARTSPOINT",
   "releaseUpdates.voorbeeld": "VOORBEELD",
-  "releaseUpdates.toevoegingen": "{length} {value1} toevoegingen",
+  "releaseUpdates.toevoegingen": "{length, plural, one {# {published, select, true {gepubliceerde toevoeging} other {getoonde toevoeging}}} other {# {published, select, true {gepubliceerde toevoegingen} other {getoonde toevoegingen}}}}",
   "releaseUpdates.gepubliceerde": "gepubliceerde",
   "releaseUpdates.getoonde": "getoonde",
   "releaseUpdates.toevoegingen_laden": "Toevoegingen laden…",

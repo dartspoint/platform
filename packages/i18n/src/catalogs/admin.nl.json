@@ -69,7 +69,7 @@
   "admin.deelname_instellen": "Deelname instellen",
   "admin.dp_check_in_en_toelating": "DP, check-in en toelating",
   "admin.dit_verdient_aandacht": "Dit verdient aandacht",
-  "admin.melding_open": "{openCases} melding{value1} open",
+  "admin.melding_open": "{openCases, plural, one {# melding open} other {# meldingen open}}",
   "admin.en": "en",
   "admin.een_rustige_community": "Een rustige community",
   "admin.bekijk_de_context_voordat_je_een_maatregel_neemt": "Bekijk de context voordat je een maatregel neemt.",

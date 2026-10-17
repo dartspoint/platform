@@ -69,7 +69,7 @@
   "admin.deelname_instellen": "Configure participation",
   "admin.dp_check_in_en_toelating": "DP, check-in and admission",
   "admin.dit_verdient_aandacht": "Needs attention",
-  "admin.melding_open": "{openCases} open report{value1}",
+  "admin.melding_open": "{openCases, plural, one {# open report} other {# open reports}}",
   "admin.en": "and",
   "admin.een_rustige_community": "A calm community",
   "admin.bekijk_de_context_voordat_je_een_maatregel_neemt": "Review the context before taking a measure.",

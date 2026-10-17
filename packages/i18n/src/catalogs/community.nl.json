@@ -42,7 +42,7 @@
   "community.geen_privegesprek_geopend": "Geen privégesprek geopend",
   "community.je_gesprekken_beginnen_hier": "Je gesprekken beginnen hier",
   "community.open_een_privegesprek_via_je_vrienden_of_berichten": "Open een privégesprek via je vrienden of berichten. Gesloten gesprekken blijven bewaard.",
-  "community.na_je_beurt": "{deferredCount} {value1} na je beurt",
+  "community.na_je_beurt": "{deferredCount, plural, one {# nieuw bericht komt na je beurt} other {# nieuwe berichten komen na je beurt}}",
   "community.nieuw_bericht_komt": "nieuw bericht komt",
   "community.nieuwe_berichten_komen": "nieuwe berichten komen",
   "community.rustige_beurt_nieuwe_berichten_blijven_bewaard": "Rustige beurt · nieuwe berichten blijven bewaard",
