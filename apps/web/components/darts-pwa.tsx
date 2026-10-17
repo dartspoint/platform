@@ -12,7 +12,7 @@ let deferredInstall: InstallPrompt | null = null;
 export function DartsPwa() {
   useEffect(() => {
     if ("serviceWorker" in navigator && window.isSecureContext) {
-      void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+      void navigator.serviceWorker.register("/sw-i18n.js", { scope: "/" }).catch(() => undefined);
     }
     const ready = (event: Event) => { event.preventDefault(); deferredInstall = event as InstallPrompt; window.dispatchEvent(new Event("dartspoint-install-ready")); };
     const installed = () => { deferredInstall = null; window.dispatchEvent(new Event("dartspoint-install-ready")); };

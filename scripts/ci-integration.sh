@@ -142,6 +142,7 @@ if [[ -n "${DARTSPOINT_QA_TOOLS:-}" ]]; then python3 tests/integration/support-c
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/legal.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/internationalisation.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/offline-internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/room-metadata.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/support.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/releases.ts

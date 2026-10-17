@@ -159,3 +159,8 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   te openen of de installatieactie te herhalen.
 - Support- en privacyverzoeklinks vanuit juridische pagina’s behouden de taal
   van het document, ook bij een direct bezoek zonder gastvoorkeurcookie.
+- De losse offline-oefenpagina gebruikt nu ook NL/EN-catalogi. De beschermde
+  `offline.html` en `sw.js` blijven intact; gegenereerde varianten voegen alleen
+  vertaalde presentatie toe. De volledige oorspronkelijke score-, input- en
+  animatiescripttekst blijft byte-identiek. Een echte serviceworker/netwerk-offline
+  browsertest controleert EN/NL, worp, reset en 320 px zonder netwerkafhankelijkheid.

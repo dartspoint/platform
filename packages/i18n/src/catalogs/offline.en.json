@@ -1,0 +1,22 @@
+{
+  "offline.title": "Offline practice · DartsPoint",
+  "offline.mode": "OFFLINE PRACTICE",
+  "offline.heading": "Your next good throw.",
+  "offline.intro": "Stop your direction first, then your height. You can keep practising without a connection.",
+  "offline.board": "Dartboard with your last throw",
+  "offline.lastDart": "LAST DART",
+  "offline.dartsLeft": "DARTS LEFT",
+  "offline.stopDirection": "Stop direction",
+  "offline.stopHeight": "Stop height and throw",
+  "offline.directionInstruction": "Stop your direction with the red button or the space bar.",
+  "offline.heightInstruction": "Stop the height now. Your dart will then fly towards the board.",
+  "offline.finished": "Great checkout! Start a new leg whenever you like.",
+  "offline.bust": "Bust. Back to your score at the start of the turn.",
+  "offline.another": "ONE MORE",
+  "offline.newLeg": "New practice leg",
+  "offline.reset": "Practise again",
+  "offline.retry": "Try connecting again",
+  "offline.note": "This practice mode works entirely offline. Your Elo rating stays the same.",
+  "offline.miss": "MISS",
+  "offline.scored": "{label} · {score, plural, one {# point} other {# points}}. Stop your next direction."
+}

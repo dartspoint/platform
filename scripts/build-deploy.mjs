@@ -2,6 +2,7 @@ import {build} from 'esbuild';
 import {spawnSync} from 'node:child_process';
 import {cp,mkdir,rm,writeFile,readFile,readdir,readlink,stat} from 'node:fs/promises';
 import {resolve,dirname,isAbsolute,relative} from 'node:path';
+const offline=spawnSync(process.execPath,['scripts/generate-offline-i18n.mjs','--check'],{stdio:'inherit'});if(offline.status!==0)process.exit(offline.status??1);
 const command=spawnSync('npm',['run','build','--workspace','@dartspoint/web'],{stdio:'inherit',env:{...process.env,NEXT_TELEMETRY_DISABLED:'1'}});if(command.status!==0)process.exit(command.status??1);
 await rm('dist/deploy',{recursive:true,force:true});await mkdir('dist/deploy',{recursive:true});
 // Preserve Next's relative dependency links so the output is relocatable into /app.

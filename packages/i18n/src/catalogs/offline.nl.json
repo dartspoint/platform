@@ -1,0 +1,22 @@
+{
+  "offline.title": "Offline oefenen · DartsPoint",
+  "offline.mode": "OFFLINE OEFENEN",
+  "offline.heading": "Jouw volgende goede worp.",
+  "offline.intro": "Stop eerst je richting, daarna je hoogte. Je kunt zonder verbinding blijven oefenen.",
+  "offline.board": "Dartbord met je laatste worp",
+  "offline.lastDart": "LAATSTE PIJL",
+  "offline.dartsLeft": "PIJLEN OVER",
+  "offline.stopDirection": "Stop richting",
+  "offline.stopHeight": "Stop hoogte en gooi",
+  "offline.directionInstruction": "Stop je richting met de rode knop of spatiebalk.",
+  "offline.heightInstruction": "Stop nu de hoogte. Je pijl vliegt daarna naar het bord.",
+  "offline.finished": "Mooie finish! Start een nieuwe leg wanneer je wilt.",
+  "offline.bust": "Bust. Terug naar je score aan het begin van de beurt.",
+  "offline.another": "NOG EEN",
+  "offline.newLeg": "Nieuwe oefenleg",
+  "offline.reset": "Opnieuw oefenen",
+  "offline.retry": "Verbinding opnieuw proberen",
+  "offline.note": "Deze oefenstand is volledig offline. Er verandert niets aan je Elo-rating.",
+  "offline.miss": "MIS",
+  "offline.scored": "{label} · {score, plural, one {# punt} other {# punten}}. Stop je volgende richting."
+}

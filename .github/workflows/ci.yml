@@ -84,6 +84,7 @@ jobs:
               'artifacts/i18n/integration-result.json': 'internationalisation-database.json',
               'artifacts/i18n/e2e-result.json': 'internationalisation-browser.json',
               'artifacts/i18n/room-ui-result.json': 'internationalisation-room-metadata.json',
+              'artifacts/i18n/offline-browser-result.json': 'internationalisation-offline.json',
               'artifacts/workspace-chat/results.json': 'workspace-chat-results.json',
               'artifacts/documents-support-browser/results.json': 'documents-support-results.json',
               'artifacts/documents-support-delivery-browser/results.json': 'support-delivery-results.json',
@@ -229,6 +230,7 @@ jobs:
             artifacts/ci-safe/internationalisation-database.json
             artifacts/ci-safe/internationalisation-browser.json
             artifacts/ci-safe/internationalisation-room-metadata.json
+            artifacts/ci-safe/internationalisation-offline.json
             artifacts/ci-safe/workspace-chat-results.json
             artifacts/ci-safe/documents-support-results.json
             artifacts/ci-safe/support-delivery-results.json

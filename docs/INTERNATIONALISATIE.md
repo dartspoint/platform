@@ -69,6 +69,13 @@ broninhoud. Verander geen inhouds-ID's of polloptieposities om te vertalen.
 
 ## Catalogi onderhouden
 
+De offline-oefenweergave gebruikt `offline.nl/en.json`. Na een wijziging:
+`node scripts/generate-offline-i18n.mjs`. De deploybuild controleert de gegenereerde
+`offline-i18n.html` en `sw-i18n.js`. De oorspronkelijke offlinegame en serviceworker
+blijven bytegelijk aan de bron; alleen een afzonderlijke presentatielaag vertaalt
+bekende labels en meldingen. De offlinekeuze volgt de URL, daarna voor app-routes
+de actuele UI-cookie en anders het domein. Publieke URLs behouden hun vaste taal.
+
 `packages/i18n/src/catalogs/<module>.nl.json` en `.en.json` bevatten dezelfde
 semantische sleutels en variabelen. De expliciete importmapping staat in
 `apps/web/lib/i18n/catalog-loaders.ts`; `route-modules.json` selecteert de modules
