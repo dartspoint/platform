@@ -21,7 +21,7 @@ try{
    await page.getByRole('button',{name:locale==='en'?'Stop direction':'Stop richting',exact:true}).click();
    await page.getByRole('button',{name:locale==='en'?'Stop height and throw':'Stop hoogte en gooi',exact:true}).click();
    await expect(page.locator('#hit')).not.toHaveText('—');
-   await expect(page.getByRole('status')).toContainText(locale==='en'?/points|Bust|checkout/:/punten|Bust|finish/);
+   await expect(page.getByRole('status')).toContainText(locale==='en'?/points?|Bust|checkout/:/punt(?:en)?|Bust|finish/);
    await page.getByRole('button',{name:locale==='en'?'Practise again':'Opnieuw oefenen',exact:true}).click();
    await expect(page.getByRole('status')).toHaveText(locale==='en'?'Stop your direction with the red button or the space bar.':'Stop je richting met de rode knop of spatiebalk.');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
