@@ -1,3 +1,26 @@
+{{ if or (eq .RedirectTo "https://dartspoint.nl/en/inloggen") (eq .RedirectTo "https://www.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://dartspoint.app/en/inloggen") (eq .RedirectTo "https://www.dartspoint.app/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.app/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4300/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4302/en/inloggen") (eq .RedirectTo "http://localhost:4300/en/inloggen") (eq .RedirectTo "http://localhost:4302/en/inloggen") }}
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>Your DartsPoint sign-in code</title></head>
+<body style="margin:0;padding:0;width:100%;background-color:#e9ece6;color:#f4eee2;font-family:Manrope,Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<div style="display:none;font-size:1px;line-height:1px;color:#e9ece6;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">Your personal code is valid for 10 minutes. Never share it.</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#e9ece6"><tr><td align="center" style="padding:28px 12px 36px;">
+<!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#11251a" style="max-width:600px;background-color:#11251a;border:1px solid #294134;border-radius:16px;overflow:hidden;">
+<tr><td height="5" bgcolor="#dc514b" style="height:5px;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:30px 28px 26px;border-bottom:1px solid #294134;"><img src="http://127.0.0.1:4300/assets/emails/dartspoint-logo.png" width="234" height="49" alt="DartsPoint" style="display:block;border:0;width:234px;max-width:100%;height:auto;color:#f4eee2;font-size:24px;font-weight:bold;"></td></tr>
+<tr><td style="padding:34px 28px 30px;">
+<p style="margin:0 0 16px;color:#89cba5;font-size:10px;line-height:18px;font-weight:700;letter-spacing:2px;">YOUR WAY INTO DARTSPOINT</p>
+<h1 style="margin:0 0 22px;color:#f4eee2;font-size:32px;line-height:39px;font-weight:700;letter-spacing:-1px;overflow-wrap:anywhere;">Your evening starts here.</h1>
+<p style="margin:0 0 18px;color:#c2d0c7;font-size:16px;line-height:26px;">Enter this code on the screen where you just entered your email address. Then you are ready for your next game.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:27px 0 25px;"><tr><td align="center" bgcolor="#f1e8c0" style="padding:25px 8px 23px;border-radius:12px;border:1px solid #e4dbaa;"><p style="margin:0 0 9px;color:#46654e;font-size:10px;letter-spacing:2px;font-weight:700;">YOUR ONE-TIME SIGN-IN CODE</p><p style="margin:0;color:#14261b;font-family:Consolas,'Courier New',monospace;font-size:40px;line-height:52px;font-weight:700;letter-spacing:7px;white-space:nowrap;">{{ .Token }}</p><p style="margin:8px 0 0;color:#46654e;font-size:12px;">Valid for 10 minutes &nbsp;&#183;&nbsp; use once</p></td></tr></table>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="padding-top:24px;border-top:1px solid #294134;color:#9db3a5;font-size:12px;line-height:20px;">This code is valid for 10 minutes and can be used once. Did not request a code? You can ignore this email. Never share your code: DartsPoint will not ask for it in chat or by email.</td></tr></table>
+</td></tr>
+<tr><td bgcolor="#0c1d14" style="padding:24px 28px;background-color:#0c1d14;border-top:1px solid #294134;"><p style="margin:0 0 7px;color:#ecede1;font-size:13px;font-weight:700;line-height:21px;">Your room. Your match. Your evening.</p><p style="margin:0;color:#95aa9d;font-size:11px;line-height:20px;">DartsPoint &nbsp;&#183;&nbsp; Online darts, together.<br><a href="http://127.0.0.1:4300" style="color:#bad8c5;text-decoration:underline;">127.0.0.1</a><br><a href="http://127.0.0.1:4300/en/algemene-voorwaarden" style="color:#bad8c5;">Terms</a> &nbsp;&#183;&nbsp; <a href="http://127.0.0.1:4300/en/privacy" style="color:#bad8c5;">Privacy</a> &nbsp;&#183;&nbsp; <a href="http://127.0.0.1:4300/support" style="color:#bad8c5;">Support</a><br>Developed by DG Webservices</p></td></tr>
+</table>
+<!--[if mso]></td></tr></table><![endif]-->
+<p style="max-width:520px;margin:19px auto 0;color:#53665a;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:18px;">Secure sign-in without a password. Keep your code to yourself.</p>
+</td></tr></table></body></html>
+{{ else }}
 <!doctype html>
 <html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>Je inlogcode voor DartsPoint</title></head>
 <body style="margin:0;padding:0;width:100%;background-color:#e9ece6;color:#f4eee2;font-family:Manrope,Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
@@ -6,7 +29,7 @@
 <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#11251a" style="max-width:600px;background-color:#11251a;border:1px solid #294134;border-radius:16px;overflow:hidden;">
 <tr><td height="5" bgcolor="#dc514b" style="height:5px;font-size:0;line-height:0;">&nbsp;</td></tr>
-<tr><td style="padding:30px 28px 26px;border-bottom:1px solid #294134;"><img src="https://dartspoint.nl/assets/emails/dartspoint-logo.png" width="234" height="49" alt="DartsPoint" style="display:block;border:0;width:234px;max-width:100%;height:auto;color:#f4eee2;font-size:24px;font-weight:bold;"></td></tr>
+<tr><td style="padding:30px 28px 26px;border-bottom:1px solid #294134;"><img src="http://127.0.0.1:4300/assets/emails/dartspoint-logo.png" width="234" height="49" alt="DartsPoint" style="display:block;border:0;width:234px;max-width:100%;height:auto;color:#f4eee2;font-size:24px;font-weight:bold;"></td></tr>
 <tr><td style="padding:34px 28px 30px;">
 <p style="margin:0 0 16px;color:#89cba5;font-size:10px;line-height:18px;font-weight:700;letter-spacing:2px;">JOUW TOEGANG TOT DARTSPOINT</p>
 <h1 style="margin:0 0 22px;color:#f4eee2;font-size:32px;line-height:39px;font-weight:700;letter-spacing:-1px;overflow-wrap:anywhere;">Je avond begint hier.</h1>
@@ -14,8 +37,9 @@
 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="padding-top:24px;border-top:1px solid #294134;color:#9db3a5;font-size:12px;line-height:20px;">Deze code is 10 minuten geldig en kun je één keer gebruiken. Heb je geen code aangevraagd? Dan kun je deze e-mail negeren. Deel je code nooit: DartsPoint vraagt er niet naar via chat of e-mail.</td></tr></table>
 </td></tr>
-<tr><td bgcolor="#0c1d14" style="padding:24px 28px;background-color:#0c1d14;border-top:1px solid #294134;"><p style="margin:0 0 7px;color:#ecede1;font-size:13px;font-weight:700;line-height:21px;">Jouw kamer. Jouw wedstrijd. Jouw avond.</p><p style="margin:0;color:#95aa9d;font-size:11px;line-height:20px;">DartsPoint &nbsp;&#183;&nbsp; Online darts, samen.<br><a href="https://dartspoint.nl" style="color:#bad8c5;text-decoration:underline;">dartspoint.nl</a></p></td></tr>
+<tr><td bgcolor="#0c1d14" style="padding:24px 28px;background-color:#0c1d14;border-top:1px solid #294134;"><p style="margin:0 0 7px;color:#ecede1;font-size:13px;font-weight:700;line-height:21px;">Jouw kamer. Jouw wedstrijd. Jouw avond.</p><p style="margin:0;color:#95aa9d;font-size:11px;line-height:20px;">DartsPoint &nbsp;&#183;&nbsp; Online darts, samen.<br><a href="http://127.0.0.1:4300" style="color:#bad8c5;text-decoration:underline;">127.0.0.1</a><br><a href="http://127.0.0.1:4300/nl/algemene-voorwaarden" style="color:#bad8c5;">Voorwaarden</a> &nbsp;&#183;&nbsp; <a href="http://127.0.0.1:4300/nl/privacy" style="color:#bad8c5;">Privacy</a> &nbsp;&#183;&nbsp; <a href="http://127.0.0.1:4300/support" style="color:#bad8c5;">Support</a><br>Ontwikkeld door DG Webservices</p></td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
 <p style="max-width:520px;margin:19px auto 0;color:#53665a;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:18px;">Veilig inloggen zonder wachtwoord. Bewaar je inlogcode voor jezelf.</p>
 </td></tr></table></body></html>
+{{ end }}

@@ -1,0 +1,26 @@
+export const nl = {
+  'language.label': 'Taal', 'language.saveFailed': 'Je taalkeuze kon niet worden opgeslagen. Probeer het opnieuw.',
+  'common.save': 'Opslaan', 'common.cancel': 'Annuleren', 'common.close': 'Sluiten',
+  'common.loading': 'DartsPoint wordt geopend…', 'common.unavailable': 'Dit is niet gelukt. Probeer het nog eens.',
+  'rooms.memberJoined': '{displayName} komt de kamer binnen.',
+  'rooms.region': 'Land of regio', 'rooms.language': 'Voertaal', 'rooms.none': 'Geen regio',
+  'rooms.international': 'Internationaal', 'rooms.multilingual': 'Meertalig', 'rooms.noLanguage': 'Geen vaste voertaal',
+  'rooms.allRegions': 'Alle regio’s', 'rooms.allLanguages': 'Alle voertalen', 'rooms.resetFilters': 'Wis je filters',
+  'rooms.metadataHelp': 'Deze labels beschrijven de community van de kamer. Ze veranderen de toegang of spelregels niet.',
+  'rooms.count': '{count, plural, one {# kamer} other {# kamers}}',
+  'legal.translationUnavailable': 'Deze versie is nog niet beschikbaar in de gekozen taal. Neem contact op met support.',
+  'legal.original': 'Bekijk de Nederlandse brontekst',
+};
+export const en: Record<keyof typeof nl, string> = {
+  'language.label': 'Language', 'language.saveFailed': 'Your language preference could not be saved. Please try again.',
+  'common.save': 'Save', 'common.cancel': 'Cancel', 'common.close': 'Close',
+  'common.loading': 'Opening DartsPoint…', 'common.unavailable': 'That did not work. Please try again.',
+  'rooms.memberJoined': '{displayName} joined the room.',
+  'rooms.region': 'Country or region', 'rooms.language': 'Room language', 'rooms.none': 'No region',
+  'rooms.international': 'International', 'rooms.multilingual': 'Multilingual', 'rooms.noLanguage': 'No fixed language',
+  'rooms.allRegions': 'All regions', 'rooms.allLanguages': 'All languages', 'rooms.resetFilters': 'Clear filters',
+  'rooms.metadataHelp': 'These labels describe the room’s community. They do not change access or the rules of play.',
+  'rooms.count': '{count, plural, one {# room} other {# rooms}}',
+  'legal.translationUnavailable': 'This version is not yet available in your chosen language. Please contact support.',
+  'legal.original': 'View the Dutch source text',
+};

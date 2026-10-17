@@ -1,0 +1,22 @@
+{
+  "playerIdentity.label": "{name} · {value1}",
+  "playerIdentity._2": "{name}, {value1}",
+  "playerIdentity.rating": "{name}, rating {displayed}, {value2}",
+  "playerIdentity._3": "[{formatted}]",
+  "playerIdentity.tik_voor_uitleg": "{description} · tik voor uitleg",
+  "playerIdentity.rating_toon_uitleg_over_dartspoints": "{name}, rating {displayed}, {value2}. Toon uitleg over DartsPoints",
+  "playerIdentity.plaatsing": "Plaatsing:",
+  "playerIdentity.geplaatst": "Geplaatst ·",
+  "playerIdentity.ranked_wedstrijden_je_rating_verandert_na_een_volledige": "ranked wedstrijden. Je rating verandert na een volledige ranked wedstrijd op basis van winst of verlies en de rating van je tegenstander.",
+  "playerIdentity.wit": "Wit",
+  "playerIdentity.plaatsingsfase": "Plaatsingsfase",
+  "playerIdentity.rood": "Rood",
+  "playerIdentity.lager_dan_1450": "Lager dan 1450",
+  "playerIdentity.geel": "Geel",
+  "playerIdentity.groen": "Groen",
+  "playerIdentity.vanaf_1550": "Vanaf 1550",
+  "playerIdentity.dp_dartspoints_rankingpunten_start_1500_k_32_rolkleuren": "DP — DartsPoints: rankingpunten. Start 1500 · K = 32. Rolkleuren horen bij de naam. Ratingwijzigingen zijn gekoppeld aan je account.",
+  "playerIdentity.copy_eigenaar": "Eigenaar",
+  "playerIdentity.copy_platformbeheerder": "Platformbeheerder",
+  "playerIdentity.copy_speler": "Speler"
+}

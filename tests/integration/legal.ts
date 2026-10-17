@@ -21,7 +21,7 @@ try{
  await admin.query("create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select null::uuid$$;create role anon;create role authenticated;create role service_role;");
  // Test only this module and the existing baseline. Parallel sprint migrations
  // can still be in progress and are validated by the combined suite separately.
- for(const file of await readdir('supabase/migrations'))if(file<'20261015000000'||file.endsWith('_legal_documents_google_registration.sql'))await cp('supabase/migrations/'+file,join(directory,file));
+ for(const file of await readdir('supabase/migrations'))if(file<'20261015000000'||file.endsWith('_legal_documents_google_registration.sql')||file.endsWith('_legal_translation_evidence.sql')||file.endsWith('_legal_translation_source_matching.sql'))await cp('supabase/migrations/'+file,join(directory,file));
  process.env.MIGRATION_DATABASE_URL=url;process.argv.push('--expand-only');await migrate(directory);
  process.env.DATABASE_URL=url;process.env.DATABASE_ROLE='dartspoint_app';
  const owner=actor(randomUUID(),'owner'),editor=actor(randomUUID(),'admin'),player=actor(randomUUID(),'player');

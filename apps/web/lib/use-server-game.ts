@@ -1,4 +1,9 @@
 "use client";
+import {useI18n} from '@/lib/i18n/provider';
+import {renderGameMessage} from '../../../packages/i18n/src/game-messages';
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+
+import {errorText} from "../../../packages/i18n/src/errors";
 import {startTransition,useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ServerClock,TIMING_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../../packages/game-core/src/timing';
 import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} from './drawn-meter';
@@ -16,6 +21,8 @@ import type {TurnTimeoutWarning} from '../../../packages/game-core/src/turn-time
 type Snapshot={commandId?:string;timing?:Record<string,unknown>;matchId:string;roomId?:string;canRematch?:boolean;publicGameId?:number;state:GameState&{timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;timeoutStrikes?:[number,number];timeoutWarning?:TurnTimeoutWarning|null;phaseToken:string;phaseStartedAt:number;lockedX:number|null;lockedY?:number|null;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};stateVersion:number;lifecycle:string;mode:string;seat:number|null;gameNumber:number;serverAt:number;remainingReconnectMs?:number};
 const empty=initialGameState(0,'',0);
 export function useServerGame(initialOpponentName='',explicitMatchId?:string,readOnly=false){
+ const {locale:uiLocale}=useI18n();
+
  const platform=usePlatform(),preferences=useDartsPreferences();
  const dismissed=useRef(new Set<string>());
  const own=platform.matches.find(m=>!dismissed.current.has(m.id)&&m.players?.some((p:any)=>p.id===platform.actor?.id));
@@ -86,7 +93,7 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
     room.onMessage('snapshot',(value:Snapshot)=>{if(currentSocket())apply(value);});
     room.onMessage('receipt',(value:Snapshot)=>{if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;timingTrace({event:'receipt',commandId:value.commandId,matchId:value.matchId,timing:value.timing,lockedX:value.state.lockedX,lockedY:value.state.lockedY,hit:value.state.pendingDart?.hit});apply(value);pending.current=null;wake();setSending(false);setConnectionMessage('');});
     room.onMessage('error',(value:any)=>{
-     if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;const failed=pending.current;timingTrace({event:'rejected',commandId:failed.commandId,code:value.code});setSending(false);pending.current=null;wake();setConnectionMessage(value.message);
+     if(!currentSocket()||!pending.current||value.commandId!==pending.current.commandId)return;const failed=pending.current;timingTrace({event:'rejected',commandId:failed.commandId,code:value.code});setSending(false);pending.current=null;wake();setConnectionMessage(errorText(value.code,undefined,value.message));
      void api<Snapshot>('match/'+actualId).then(fresh=>{
       if(cancelled)return;if(['invalid_render_sample','timing_connection_mismatch'].includes(value.code))clock.current.recoverPhase(fresh.state.phaseToken);apply(fresh);
       // Readiness expresses a durable intention. Refresh and retry this alone
@@ -134,7 +141,7 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  const myTurn=!readOnly&&snapshot?.seat!==null&&snapshot?.seat===raw.turn;
  const warning=snapshot?.state.timeoutWarning;
  const state={...raw,scores:pair(raw.scores),legs:pair(raw.legs),sets:pair(raw.sets),totalLegs:pair(raw.totalLegs),opened:pair(raw.opened),dartCount:pair(raw.dartCount),pointsScored:pair(raw.pointsScored),visitScores:pair(raw.visitScores),visitBusts:pair(raw.visitBusts),highestVisit:pair(raw.highestVisit),highestCheckout:pair(raw.highestCheckout),timeoutStrikes:pair(snapshot?.state.timeoutStrikes??[0,0]),timeoutWarning:warning?{...warning,player:(swap?1-warning.player:warning.player) as 0|1}:null,turn,winner,phase:raw.phase==='won'||raw.phase==='flight'?raw.phase:myTurn?raw.phase:'opponent' as const,events:raw.events.map(e=>({...e,player:(swap?1-e.player:e.player) as 0|1})),history:[]};
- const rematch=useCallback(async()=>{if(readOnly||!actualId)throw new Error('Open eerst je eigen wedstrijdoverzicht.');return mutate<{id:string}>('match/rematch',{matchId:actualId});},[readOnly,actualId]);
+ const rematch=useCallback(async()=>{if(readOnly||!actualId)throw new Error(runtimeFeedback("feedback.open_eerst_je_eigen_wedstrijdoverzicht"));return mutate<{id:string}>('match/rematch',{matchId:actualId});},[readOnly,actualId]);
  const startNewMatch=useCallback(async(name:string,setup?:MatchSetup)=>{if(readOnly)return;const p=getPlatform();const room=p.rooms.find(r=>r.name===sessionStorage.getItem('dartspoint-room-v1'))??p.rooms[0];await mutate('invite',{targetId:playerId(name),roomId:room.id,rules:setup?.rules??empty.rules,ranked:setup?.ranked===true});setConnectionMessage('De uitnodiging is verstuurd.');},[readOnly]);
  const reset=useCallback(()=>command('match.forfeit'),[command]);
  const reconnect=useCallback(()=>{void api<Snapshot>('match/'+actualId).then(apply);setReconnected(true);},[actualId,apply]);
@@ -148,5 +155,5 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  },[readOnly,clearMatchSelection]);
  const noOp=useCallback(()=>{},[]);
  const mode:MatchMode=snapshot?.mode==='ranked'?'ranked-demo':'casual';
- return {...state,clearMatchSelection,closeCompletedMatch,canRematch:snapshot?.canRematch!==false&&snapshot?.lifecycle==='completed',id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage,ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
+ return {...state,lastResult:renderGameMessage(state.lastResult,uiLocale,names),bustReason:state.bustReason?renderGameMessage(state.bustReason,uiLocale):null,clearMatchSelection,closeCompletedMatch,canRematch:snapshot?.canRematch!==false&&snapshot?.lifecycle==='completed',id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:renderGameMessage(snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',uiLocale),offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage:renderGameMessage(connectionMessage,uiLocale),ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
 }

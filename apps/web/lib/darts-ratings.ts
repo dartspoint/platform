@@ -1,4 +1,6 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+
 import {usePlatform,getPlatform} from "./platform-client";
 import {playerByName} from "./darts-data";
 export type RatingProfile = {
@@ -15,4 +17,4 @@ export type RatedMatchResult = { beforeA: number; afterA: number; beforeB: numbe
 export function getRatingProfile(name:string):RatingProfile{const p=getPlatform().players.find(p=>p.name===name)??playerByName(name);const n=p.distinctOpponents??0;return {name,rating:p.rating,rankedPlayed:p.rankedPlayed??0,opponents:Array.from({length:n},(_,i)=>String(i)),provisional:(p.rankedPlayed??0)<10||n<5};}
 export function useRatingProfile(name:string){usePlatform();return getRatingProfile(name);}
 export function useRatingProfiles(names:readonly string[]){usePlatform();return names.map(getRatingProfile);}
-export function completeRatedMatch(_input:RatedMatchInput):RatedMatchResult{throw new Error("Alleen de server kan een ratingresultaat vastleggen.");}
+export function completeRatedMatch(_input:RatedMatchInput):RatedMatchResult{throw new Error(runtimeFeedback("feedback.alleen_de_server_kan_een_ratingresultaat_vastleggen"));}

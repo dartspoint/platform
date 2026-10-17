@@ -1,0 +1,20 @@
+{
+  "workspace.spelers_vrienden_en_gesprekken": "Players, friends and conversations",
+  "workspace.spelers_in": "Players in ",
+  "workspace.kies_een_kamer": "Choose a room",
+  "workspace.kamergebruikers": "Room members",
+  "workspace.spelers": "{count} / {capacity} players",
+  "workspace.kamer_actief": "Room active",
+  "workspace.de_actuele_spelers_verschijnen_hier_zodra_je_een": "Current players appear here when you enter a room.",
+  "workspace.kameroverzicht": "Room overview",
+  "workspace.spelersprofiel": "Player profile",
+  "workspace.statistieken_en_contact": "Statistics and contact.",
+  "workspace.toernooien": "Tournaments",
+  "workspace.gepubliceerde_toernooien_en_inschrijvingen": "Published tournaments and registration.",
+  "workspace.je_kunt_deze_wedstrijd_nu_niet_bekijken_kies": "You cannot watch this match right now. Choose another match.",
+  "workspace.meekijken_lukt_nu_niet_probeer_het_opnieuw": "Unable to spectate right now. Please try again.",
+  "workspace.dartspoint_lobby": "DartsPoint lobby",
+  "workspace.oefenruimte": "Practice area",
+  "workspace.terug_naar_de_kamer": "Back to the room",
+  "workspace.profiel": "Profile"
+}

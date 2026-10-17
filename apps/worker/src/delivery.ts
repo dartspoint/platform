@@ -15,7 +15,7 @@ async function send(event:any){
   await db().query('insert into notifications(user_id,kind,payload,source_event) values($1,$2,$3,$4) on conflict(source_event) do nothing',[event.user_id,event.kind,JSON.stringify(event.payload),event.id]);
  }
  let template:DartsEmailInput|undefined;
- const profile=event.user_id?(await db().query('select username from profiles where id=$1',[event.user_id])).rows[0]:null;
+ const profile=event.user_id?(await db().query("select p.username,pref.data->>'locale' locale from profiles p left join preferences pref on pref.user_id=p.id where p.id=$1",[event.user_id])).rows[0]:null;
  if(event.kind==='welcome')template={type:'welcome',username:profile.username};
  if(event.kind==='friend-request')template={type:'friend-request',username:profile.username,fromUsername:event.payload.name};
  if(event.kind==='moderation')template={type:'moderation',username:profile.username,...event.payload};
@@ -27,7 +27,7 @@ async function send(event:any){
  if(!local&&delivery?.first_attempt_at&&Date.now()-new Date(delivery.first_attempt_at).getTime()>23*3600000){await db().query("update private.email_deliveries set state='review-required',updated_at=now() where event_id=$1",[event.id]);throw new Error('provider_reconciliation_required');}
  await db().query("insert into private.email_deliveries(event_id,state,first_attempt_at) values($1,'pending',now()) on conflict(event_id) do update set first_attempt_at=coalesce(email_deliveries.first_attempt_at,now())",[event.id]);
  const {data,error}=await authAdmin().auth.admin.getUserById(event.user_id);if(error||!data.user?.email_confirmed_at||!data.user.email)throw new Error('recipient_unavailable');
- const message=renderDartsEmail(template,{origin:process.env.NEXT_PUBLIC_APP_URL,localDevelopment:local});
+ const message=renderDartsEmail(template,{origin:process.env.NEXT_PUBLIC_APP_URL,localDevelopment:local,locale:profile?.locale==='en'?'en':'nl'});
  let providerId:string;
  if(local){
   const from=(process.env.MAIL_FROM??'DartsPoint <noreply@dartspoint.local>').match(/<([^>]+)>/)?.[1]??process.env.MAIL_FROM!;

@@ -1,0 +1,82 @@
+# NL/EN, gedeelde community en kamervlaggen — 17 oktober 2026
+
+DartsPoint heeft een gedeelde NL/EN-taalcontext, modulecatalogi, taalbediening in
+publieke navigatie en profiel, Engelse mails en gekoppelde actuele Engelse
+voorwaarden/privacy/handleiding. Kamers hebben een onafhankelijke optionele regio
+en voertaal, lokale SVG-vlaggen, beheerpreview en combineerbare filters.
+
+De bestaande community, eigen-accountautorisatie, spelregels, bord, timing,
+scoring, serverautoriteit en desktop/mobile-indeling blijven leidend. Nieuwe
+voorkeurloze accounts volgen de gekozen flow; oude accounts krijgen geen onjuiste
+NL-backfill. Eén room-event rendert per ontvanger. Vrije spelerstekst blijft letterlijk.
+
+Onderhoud, inventaris, woordenlijst, routes, bronhashes, publicatie, providerstappen
+en rollback: [INTERNATIONALISATIE.md](INTERNATIONALISATIE.md).
+
+## Verificatie en resterende externe controles
+
+Deze tabel maakt onderscheid tussen lokale bewijzen, gesimuleerde hostchecks en
+werkelijk verbonden domeinen. Een gesimuleerde `.app`-host bewijst geen DNS/TLS.
+
+| # | Acceptatie | Resultaat / bewijs |
+| --- | --- | --- |
+| 1 | Gast op `.nl` | Lokale NL-SSR/browser geslaagd; domeinprecedentie unitcheck |
+| 2 | Gast op `.app` met NL-browser | EN-SSR/browser en echte flow lokaal geslaagd; `.app`-DNS/TLS extern nog te koppelen |
+| 3 | Account met expliciet EN op `.nl` | Eigen accountvoorkeur + in-place context lokaal geslaagd |
+| 4 | Bestaand account zonder voorkeur | Resolver en nullable migratie; geen massabackfill |
+| 5 | Taalwissel tijdens actieve match | Twee echte browsers: zelfde match-ID/stateVersion/scores/beurt, bordnode en websocketcount; chatdraft behouden |
+| 6 | Registratie en onboarding | Echte EN-OTP naar Mailpit, onboarding bewaart `en` |
+| 7 | OTP en mailtaal | Echte lokale EN-body en onderwerp; NL/EN wisselen verstuurt geen tweede mail; externe provider-template nog uitvoeren/controleren |
+| 8 | Google-login op beide hosts | Veilige origin/flowcookie behouden; echte externe Google-/`.app`-provideracceptatie niet aangetoond |
+| 9 | Twee ontvangers, één systeemevent | DB-projectie en beide renderers lokaal geslaagd |
+| 10 | Vrije chat/nickname | Exacte inhoud en veilige tekstparameters lokaal geslaagd |
+| 11 | Legacy/onbekend event | Veilige fallback, geen crash of vrije-tekstclassificatie; bestaande deduplicatie behouden |
+| 12 | Kamerregio instellen/wijzigen/verwijderen | Geautoriseerde DB-mutaties en projectie lokaal geslaagd |
+| 13 | Geen regio/internationaal | Afzonderlijke waarden en labels, unit + DB geslaagd |
+| 14 | Voertaal los van regio | Contracts en DB-mutaties geslaagd |
+| 15 | Kamerfilters | Gecombineerde velden/reset geïmplementeerd; mobiele bediening gecontroleerd |
+| 16 | Onbevoegde mutatie | Vreemde-accountpayload, ongeldige locale en onbevoegde kamerwijziging lokaal geweigerd |
+| 17 | Actuele documenten NL/EN | Volledige gepubliceerde 2.0-bron gekoppeld via hash; openbare EN-weergave lokaal geslaagd; geen juridische goedkeuring |
+| 18 | Akkoord en taalwisseling | Zelfde inhoudsversie, nieuwe taal/revisie-evidence en geen dubbel akkoord lokaal geslaagd |
+| 19 | Handleiding/CMS | Zelfde artikelpad in andere taal; actuele guide 2.0. Geen bestaande losse zoekmodule aangetroffen. CMS-edities controleren bron en volledigheid |
+| 20 | Tijdzone/countdown/DST | Formatterunits en reminders bewaren instant; Amsterdam/London DST geslaagd; bestaande countdowncode behouden |
+| 21 | SEO | EN-canonical `.app`, wederzijdse hreflang, HTML-taal en metadata lokaal geslaagd; extern `.app` nog te koppelen |
+| 22 | Mobiel/toegankelijkheid | Publieke mobiele 390px-browsercontrole zonder horizontale overflow of hydrationfouten; toegankelijke selects |
+| 23 | Catalogi/templates | ICU-compileerbaarheid, gelijke sleutels/placeholders en HTML-escaping geslaagd |
+| 24 | Gameplayperformance | Volledige bestaande regressiesuite: zie definitieve runstatus hieronder; geen grenswaarden verlaagd |
+| 25 | Migraties/oude clients | Vier expandmigraties lokaal toegepast; oude omitted metadata behouden; legacy locale blijft null |
+| 26 | Cache/origin/accountscheiding | Expliciete origins, dynamische publieke SSR, persoonlijke private/no-store, unit/browserchecks; echte CDN-multihostcheck extern na koppeling |
+
+## Uitgevoerde opdrachten
+
+- `npm run build:deploy`: standalone web-, realtime- en workerbundles gebouwd.
+- `npm run verify:ci`: typechecks, 98 unitchecks en 49 bestaande opschecks geslaagd.
+- `tests/integration/internationalisation.ts`: echte lokale DB/Auth-integratie.
+- `tests/e2e/internationalisation.ts`: echte browsers, OTP/Mailpit, onboarding en
+  taalwissel tijdens een actieve wedstrijd.
+- `tests/unit/content-translations.test.ts`: bronwijziging, JSONB-keyvolgorde,
+  onvolledige editie en pollidentiteit.
+- Supabase CLI `db advisors --local --type security`: geen problemen gevonden.
+- Beide tweetalige Caddy-voorbeelden gevalideerd met de gepinde Caddy 2.11.7.
+- `npm run test:integration`: volledige bestaande acceptatie wordt uitgevoerd;
+  definitieve uitkomst wordt vóór oplevering hieronder vastgelegd.
+
+Private lokale screenshots, Mailpit/browserresultaten en logs staan in de
+geïgnoreerde map `artifacts/i18n`; secrets en lokale envfiles worden niet gecommit.
+
+## Staging
+
+De uitrol loopt via de bestaande `main` → `staging`-workflow met hosted verificatie,
+imagepublicatie en de bestaande beperkte self-hosted stagingrunner. De concrete
+release-SHA en workflowuitkomst worden na de uitrol hieronder geregistreerd.
+
+Test via Tailscale op `https://staging.dartspoint.nl/en` en `/nl`, wijzig daarna in
+het profiel de taal binnen dezelfde kamer. Kies als bevoegde beheerder bij een
+kamer bijvoorbeeld regio `GB-SCT` en voertaal `nl`; controleer na opslaan de vlag,
+het onafhankelijke taallabel en de lobbyfilters. Een echte match kan openblijven
+bij het wijzigen van alleen de interfacetaal.
+
+Extern resteert: `.app`-DNS/TLS/Caddy activeren, Supabase redirectallowlist en één
+tweetalige OTP-template/onderwerp publiceren, Turnstile-hosts toevoegen en echte
+Google-login per domein controleren. Productiecode/DNS zijn in deze sprint niet
+uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.

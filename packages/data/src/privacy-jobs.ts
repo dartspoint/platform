@@ -1,3 +1,4 @@
+import {notificationLocale} from './notification-locale';
 import {db,transaction,outbox} from './db';
 import {authAdmin} from './auth';
 import {requireThat} from '../../contracts/src/index';
@@ -5,7 +6,7 @@ import {applyDatabaseErasure} from './privacy-erasure';
 import {supportEvent} from './support';
 type Progress={stage?:'database_erased'|'provider_erased';result?:Record<string,unknown>};
 const approvedSql=`select * from private.privacy_requests r where r.id=$1 and r.confirmed_at is not null and r.decision_at is not null and (r.decision_by is not null or r.verification_method='retention_policy' and exists(select 1 from private.retention_account_actions a where a.request_id=r.id and a.user_id=r.user_id and a.state='confirmed'))`;
-function retainedExplanation(result:unknown){const exceptions=(result as {retainedExceptions?:{category:string;purpose:string;legalBasis:string;expiresAt:string}[]})?.retainedExceptions??[];return exceptions.length?'\n\nTijdelijk bewaarde gegevens:\n'+exceptions.map(e=>`${e.category}: ${e.purpose}. Grondslag: ${e.legalBasis}. Uiterlijk tot ${new Date(e.expiresAt).toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam'})}.`).join('\n'):'\n\nEr zijn geen afzonderlijke bewaarexcepties vastgelegd.';}
+function retainedExplanation(result:unknown,locale:'nl'|'en'='nl'){const exceptions=(result as {retainedExceptions?:{category:string;purpose:string;legalBasis:string;expiresAt:string}[]})?.retainedExceptions??[];if(locale==='en')return exceptions.length?'\n\nTemporarily retained data:\n'+exceptions.map(e=>`${e.category}: ${e.purpose}. Legal basis: ${e.legalBasis}. No later than ${new Date(e.expiresAt).toLocaleDateString('en-GB',{timeZone:'Europe/Amsterdam'})}.`).join('\n'):'\n\nNo separate retention exceptions have been recorded.';return exceptions.length?'\n\nTijdelijk bewaarde gegevens:\n'+exceptions.map(e=>`${e.category}: ${e.purpose}. Grondslag: ${e.legalBasis}. Uiterlijk tot ${new Date(e.expiresAt).toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam'})}.`).join('\n'):'\n\nEr zijn geen afzonderlijke bewaarexcepties vastgelegd.';}
 async function finish(job:any,result:any,ledgerId?:string){return transaction(async c=>{
  const r=(await c.query('select * from private.privacy_requests where id=$1 for update',[job.request_id])).rows[0];
  const fresh=(await c.query('select state from private.privacy_jobs where id=$1 for update',[job.id])).rows[0];if(fresh?.state==='completed')return;
@@ -15,9 +16,10 @@ async function finish(job:any,result:any,ledgerId?:string){return transaction(as
  if(r.verification_method==='retention_policy')await c.query('select private.complete_retention_account($1)',[r.id]);
  await supportEvent(c,r.ticket_id,null,'privacy_completed',result);
  if(r.contact_email){const key='privacy-complete:'+r.id;await outbox(c,key,'privacy-mail',null,{requestId:r.id,mailKind:'completion'});
-  const until=result.expiresAt?new Date(result.expiresAt).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam'}):null;
-  const body=job.kind==='export'?`Je gegevenskopie staat klaar${until?' tot '+until:' in je afgeschermde privacyticket'}. Log opnieuw in of bevestig je mailbox via een nieuwe eenmalige link om de kopie te downloaden.`:`Je verwijderverzoek is uitgevoerd voor de afgesproken categorieën. ${r.kind==='delete_account'?'Je account en de gekoppelde inlogmogelijkheden zijn verwijderd. ':''}Beperkte wedstrijdresultaten kunnen maximaal 24 maanden na de wedstrijd blijven bestaan. Back-ups hebben een uitloop van maximaal 30 dagen; verwijderingen worden bij herstel opnieuw toegepast.${retainedExplanation(result)}`;
-  await c.query("insert into private.privacy_mail(event_id,request_id,kind,recipient,body) select id,$2,'completion',$3,$4 from private.outbox_events where dedupe_key=$1 on conflict do nothing",[key,r.id,r.contact_email,body]);
+  const locale=await notificationLocale(c,r.user_id,r.locale),en=locale==='en';
+  const until=result.expiresAt?new Date(result.expiresAt).toLocaleString(en?'en-GB':'nl-NL',{timeZone:'Europe/Amsterdam'}):null;
+  const body=en?(job.kind==='export'?`Your data copy is ready${until?' until '+until+' (Europe/Amsterdam)':' in your restricted privacy ticket'}. Sign in again or confirm your mailbox using a new one-time link to download it.`:`Your deletion request has been completed for the agreed categories. ${r.kind==='delete_account'?'Your account and linked sign-in methods have been deleted. ':''}Limited match results may be kept for up to 24 months after the match. Backups may retain data for up to 30 additional days; deletions are reapplied after restoration.${retainedExplanation(result,'en')}`):job.kind==='export'?`Je gegevenskopie staat klaar${until?' tot '+until:' in je afgeschermde privacyticket'}. Log opnieuw in of bevestig je mailbox via een nieuwe eenmalige link om de kopie te downloaden.`:`Je verwijderverzoek is uitgevoerd voor de afgesproken categorieën. ${r.kind==='delete_account'?'Je account en de gekoppelde inlogmogelijkheden zijn verwijderd. ':''}Beperkte wedstrijdresultaten kunnen maximaal 24 maanden na de wedstrijd blijven bestaan. Back-ups hebben een uitloop van maximaal 30 dagen; verwijderingen worden bij herstel opnieuw toegepast.${retainedExplanation(result)}`;
+  await c.query("insert into private.privacy_mail(event_id,request_id,kind,recipient,body,locale) select id,$2,'completion',$3,$4,$5 from private.outbox_events where dedupe_key=$1 on conflict do nothing",[key,r.id,r.contact_email,body,locale]);
  }
 });}
 async function createExport(approved:any){return transaction(async c=>{

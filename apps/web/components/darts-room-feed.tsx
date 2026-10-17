@@ -1,4 +1,12 @@
 "use client";
+import {localiseLobbyLayout} from "../../../packages/i18n/src/lobby-content";
+import {browserLocale} from '../../../packages/i18n/src/errors';
+import {formatLocales} from '../../../packages/i18n/src/locale';
+
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+import {localiseStaticCopy} from "../../../packages/i18n/src/static-copy";
+import {useI18n} from '@/lib/i18n/provider';
+
 
 // Clubhouse presentation adapted from the 2026-10-14 UI/UX handoff; data is server-owned.
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -14,9 +22,12 @@ import { usePracticeProgress } from "@/components/darts-practice";
 import "./darts-room-feed.css";
 
 const filters = ["Ontdekken", "Toernooien", "Community", "Nieuws"] as const;
+const filtersStaticSource = filters;
 type FeedFilter = typeof filters[number];
 const widgetFilters: Record<LobbyWidget["type"], FeedFilter> = { announcement: "Nieuws", tournament: "Toernooien", releases: "Nieuws", players: "Community", challenge: "Community", moment: "Community", news: "Nieuws", poll: "Community", divisions: "Community" };
+const widgetFiltersStaticSource = widgetFilters;
 const articleLabels: Record<LobbyArticle["category"], string> = { news: "NIEUWS", update: "NIEUW OP DARTSPOINT", guide: "VOOR NIEUWE SPELERS" };
+const articleLabelsStaticSource = articleLabels;
 const articleIcons = { news: Users, update: Sparkles, guide: Target };
 type Reaction = LobbyFeedPayload["reactions"][string];
 
@@ -26,7 +37,7 @@ function eventStatus(event: Tournament) {
   return registrationIsOpen(event) ? "INSCHRIJVING OPEN" : "INSCHRIJVING GESLOTEN";
 }
 function eventDate(event: Tournament) {
-  return event.settings.startsAt ? new Date(event.settings.startsAt).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }) : "Starttijd volgt";
+  return event.settings.startsAt ? new Date(event.settings.startsAt).toLocaleString(formatLocales[browserLocale()], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }) : "Starttijd volgt";
 }
 function participantCount(event: Tournament) {
   return event.participants.filter(player => ["confirmed", "checkedin"].includes(player.status)).length;
@@ -40,27 +51,31 @@ function FeedLink({ href, fallback, preview, className, children, onPreview }: {
   return <a className={className} href={destination} onClick={preview ? event => { event.preventDefault(); onPreview(); } : undefined}>{children}</a>;
 }
 function MomentWidget({ widget, preview, reaction, busy, onProfile, onApplause }: { widget: LobbyWidget; preview: boolean; reaction?: Reaction["applause"]; busy: boolean; onProfile: (name: string) => void; onApplause: (active: boolean) => void }) {
+ const {t:dpT,locale}=useI18n("roomFeed");
+
   const platform = usePlatform();
   const player = platform.players.find(value => value.name === widget.settings.playerName);
   return <article className={widgetClass(widget, "dpf-card dpf-moment")} data-widget-id={widget.id}>
-    <div className="dpf-card-top"><span className="dpf-label"><Sparkles size={14}/>UIT DE COMMUNITY</span></div>
-    {widget.settings.score && <div className="dpf-big-score" aria-label={`${widget.settings.score} ${widget.settings.scoreLabel ?? ""}`}>{widget.settings.score}<span>{widget.settings.scoreLabel}</span></div>}
+    <div className="dpf-card-top"><span className="dpf-label"><Sparkles size={14}/>{dpT("roomFeed.uit_de_community")}</span></div>
+    {widget.settings.score && <div className="dpf-big-score" aria-label={dpT("roomFeed.label",{score:widget.settings.score,value1:widget.settings.scoreLabel ?? ""})}>{widget.settings.score}<span>{widget.settings.scoreLabel}</span></div>}
     <h3>{widget.title}</h3><p>{widget.settings.playerName && <>{player ? <button type="button" className="dpf-inline-profile" onClick={() => onProfile(player.id)}><PlayerName name={player.name}/></button> : <span>{widget.settings.playerName}</span>}{" "}</>}{widget.description}</p>
-    <div className="dpf-moment-footer"><span>Van het DartsPoint-team</span><button type="button" disabled={preview || busy || !reaction} onClick={() => reaction && onApplause(!reaction.active)} className={reaction?.active ? "is-liked" : ""} aria-pressed={reaction?.active ?? false}><Heart size={15} fill={reaction?.active ? "currentColor" : "none"}/>{reaction?.active ? "Applaus gegeven" : "Geef applaus"}{reaction && <b>{reaction.count}</b>}</button></div>
-    {!reaction && <small className="dpf-inline-empty">Applaus geven is op dit moment niet beschikbaar.</small>}
+    <div className="dpf-moment-footer"><span>{dpT("roomFeed.van_het_dartspoint_team")}</span><button type="button" disabled={preview || busy || !reaction} onClick={() => reaction && onApplause(!reaction.active)} className={reaction?.active ? "is-liked" : ""} aria-pressed={reaction?.active ?? false}><Heart size={15} fill={reaction?.active ? "currentColor" : "none"}/>{reaction?.active ? dpT("roomFeed.applaus_gegeven") : dpT("roomFeed.geef_applaus")}{reaction && <b>{reaction.count}</b>}</button></div>
+    {!reaction && <small className="dpf-inline-empty">{dpT("roomFeed.applaus_geven_is_op_dit_moment_niet_beschikbaar")}</small>}
   </article>;
 }
 function PollWidget({ widget, preview, reaction, busy, onVote }: { widget: LobbyWidget; preview: boolean; reaction?: Reaction["poll"]; busy: boolean; onVote: (optionIndex: number | null, version: string) => void }) {
+ const {t:dpT,locale}=useI18n("roomFeed");
+
   const options = widget.settings.pollOptions ?? [];
   const vote = reaction?.optionIndex ?? null;
   const total = reaction?.counts.reduce((sum, value) => sum + value, 0);
   return <article className={widgetClass(widget, "dpf-card dpf-poll")} data-widget-id={widget.id}>
-    <span className="dpf-label"><BarChart3 size={15}/>DE KAMER BESLIST</span><h3>{widget.title}</h3><p>{widget.description}</p>
-    {options.length < 2 ? <p className="dpf-inline-empty">Er is op dit moment geen vraag om op te stemmen.</p> : <div className="dpf-poll-options">{options.map((option, index) => {
+    <span className="dpf-label"><BarChart3 size={15}/>{dpT("roomFeed.de_kamer_beslist")}</span><h3>{widget.title}</h3><p>{widget.description}</p>
+    {options.length < 2 ? <p className="dpf-inline-empty">{dpT("roomFeed.er_is_op_dit_moment_geen_vraag_om")}</p> : <div className="dpf-poll-options">{options.map((option, index) => {
       const percentage = total ? Math.round((reaction!.counts[index] ?? 0) / total * 100) : 0;
       return <button type="button" key={`${index}:${option}`} disabled={preview || busy || !reaction} onClick={() => reaction && onVote(index, reaction.version)} aria-pressed={vote === index} className={vote === index ? "is-selected" : ""}>{vote !== null && <i style={{ width: `${percentage}%` }}/>}<span>{vote === index ? <Check size={13}/> : <span className="dpf-radio"/>}{option}</span>{vote !== null && <b>{percentage}%</b>}</button>;
     })}</div>}
-    <div className="dpf-poll-foot" aria-live="polite"><span>{reaction ? `${total} ${total === 1 ? "stem" : "stemmen"}${vote !== null ? " · jouw stem is opgeslagen" : ""}` : "Je kunt op dit moment niet stemmen."}</span>{vote !== null && <button type="button" disabled={preview || busy} onClick={() => reaction && onVote(null, reaction.version)}>Intrekken</button>}</div>
+    <div className="dpf-poll-foot" aria-live="polite"><span>{reaction ? dpT("roomFeed._2",{total:total,value1:total === 1 ? "stem" : "stemmen",value2:vote !== null ? " · jouw stem is opgeslagen" : ""}) : dpT("roomFeed.je_kunt_op_dit_moment_niet_stemmen")}</span>{vote !== null && <button type="button" disabled={preview || busy} onClick={() => reaction && onVote(null, reaction.version)}>{dpT("roomFeed.intrekken")}</button>}</div>
   </article>;
 }
 
@@ -69,6 +84,18 @@ export type RoomLobbyFeedProps = {
   layoutOverride?: LobbyLayout; previewPayload?: LobbyFeedPayload; preview?: boolean; managementHref?: string; onChooseRoom?: () => void;
 };
 export function RoomLobbyFeed({ roomId, roomName, roomCount, onPlayers, onTournaments, onProfile, layoutOverride, previewPayload, preview = false, managementHref, onChooseRoom }: RoomLobbyFeedProps) {
+ const dpFeedback=useI18n("feedback").t;
+
+ const {t:dpT,locale}=useI18n("roomFeed");
+
+ const articleLabels=localiseStaticCopy(articleLabelsStaticSource,dpT,dpStaticCopyKeys);
+
+ const widgetFilters=localiseStaticCopy(widgetFiltersStaticSource,dpT,dpStaticCopyKeys);
+
+ const filters=localiseStaticCopy(filtersStaticSource,dpT,dpStaticCopyKeys);
+
+
+
   const platform = usePlatform();
   const [filter, setFilter] = useState<FeedFilter>("Ontdekken");
   const [article, setArticle] = useState<string | null>(null);
@@ -98,7 +125,7 @@ export function RoomLobbyFeed({ roomId, roomName, roomCount, onPlayers, onTourna
         const value = await api<LobbyFeedPayload>("lobby/feed?roomId=" + encodeURIComponent(selectedRoom));
         if (!disposed && version === requestVersion.current && value.roomId === selectedRoom) { setFeed(value); setError(""); }
       } catch (cause) {
-        if (!disposed && version === requestVersion.current) { setError(cause instanceof Error ? cause.message : "Het clubhuis laden lukt even niet. Probeer het nog eens."); if (cause instanceof ApiError && [401,403].includes(cause.status)) setFeed(null); }
+        if (!disposed && version === requestVersion.current) { setError(cause instanceof Error ? cause.message : dpFeedback("feedback.het_clubhuis_laden_lukt_even_niet_probeer_het")); if (cause instanceof ApiError && [401,403].includes(cause.status)) setFeed(null); }
       } finally { if (!disposed && version === requestVersion.current) setLoading(false); }
     }
     setLoading(true); void refresh();
@@ -116,12 +143,13 @@ export function RoomLobbyFeed({ roomId, roomName, roomCount, onPlayers, onTourna
       const payload = kind === "vote" ? { roomId, widgetId, optionIndex: value, pollVersion } : { roomId, widgetId, active: value };
       const next = await api<LobbyFeedPayload>("lobby/" + kind, payload);
       if (currentIdentity.current === actionIdentity && version === requestVersion.current && next.roomId === roomId) setFeed(next);
-    } catch (cause) { if (currentIdentity.current === actionIdentity && version === requestVersion.current) setError(cause instanceof Error ? cause.message : "Je reactie is niet opgeslagen. Probeer het nog eens."); }
+    } catch (cause) { if (currentIdentity.current === actionIdentity && version === requestVersion.current) setError(cause instanceof Error ? cause.message : dpFeedback("feedback.je_reactie_is_niet_opgeslagen_probeer_het_nog")); }
     finally { if (currentIdentity.current === actionIdentity && version === requestVersion.current) { actionPending.current = false; setBusy(null); } }
   }
   const candidate = preview ? previewPayload : feed;
   const projection = candidate?.roomId === roomId ? candidate : undefined;
-  const layout = preview ? layoutOverride ?? projection?.layout : projection?.layout;
+  const sourceLayout = preview ? layoutOverride ?? projection?.layout : projection?.layout;
+  const layout=sourceLayout?localiseLobbyLayout(sourceLayout,locale):undefined;
   const upcoming = (platform.tournaments as Tournament[]).filter(event => event.published && ["registration", "checkin", "live"].includes(event.status));
   const settings = platform.settings;
   const { progress, challenge } = usePracticeProgress();
@@ -143,47 +171,56 @@ export function RoomLobbyFeed({ roomId, roomName, roomCount, onPlayers, onTourna
   function showPreviewNotice() { setPreviewNotice("Deze knop opent de bijbehorende pagina in de gepubliceerde lobby."); }
   function previewAction(action: () => void) { if (preview) showPreviewNotice(); else action(); }
   const linkProps = { preview, onPreview: showPreviewNotice };
-  if (!layout) return <div className="dp-room-feed"><div className="dpf-empty" role={error ? "alert" : "status"}><Users size={27}/><h3>{error ? "Het clubhuis laden lukt even niet." : loading ? "Het clubhuis wordt geladen…" : "Kies een kamer."}</h3>{error && <><p>{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>Opnieuw laden<ArrowRight size={14}/></button></>}{onChooseRoom && <button type="button" onClick={onChooseRoom}>Andere kamer<ArrowRight size={14}/></button>}</div></div>;
+  if (!layout) return <div className="dp-room-feed"><div className="dpf-empty" role={error ? "alert" : "status"}><Users size={27}/><h3>{error ? dpT("roomFeed.het_clubhuis_laden_lukt_even_niet") : loading ? dpT("roomFeed.het_clubhuis_wordt_geladen") : dpT("roomFeed.kies_een_kamer")}</h3>{error && <><p>{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>{dpT("roomFeed.opnieuw_laden")}<ArrowRight size={14}/></button></>}{onChooseRoom && <button type="button" onClick={onChooseRoom}>{dpT("roomFeed.andere_kamer")}<ArrowRight size={14}/></button>}</div></div>;
   return <div className={`dp-room-feed${preview ? " dp-room-feed-preview" : ""}`}>
-    <header className="dpf-heading"><div><span className="dpf-eyebrow">{layout.eyebrow}</span><h1>{layout.headline.endsWith(".") ? <>{layout.headline.slice(0, -1)}<span>.</span></> : layout.headline}</h1><p><span className="dpf-dot"/>{roomName}<span className="dpf-heading-separator">/</span>{roomCount} {roomCount === 1 ? "speler" : "spelers"} in de kamer</p></div><div className="dpf-heading-actions"><span className="dpf-demo">{preview ? "VOORBEELD" : "CLUBHUIS"}</span>{!preview && safeLobbyHref(managementHref) && <a className="dpf-manage" href={safeLobbyHref(managementHref)}>Inrichten<ArrowUpRight size={12}/></a>}</div></header>
+    <header className="dpf-heading"><div><span className="dpf-eyebrow">{layout.eyebrow}</span><h1>{layout.headline.endsWith(".") ? <>{layout.headline.slice(0, -1)}<span>.</span></> : layout.headline}</h1><p><span className="dpf-dot"/>{roomName}<span className="dpf-heading-separator">/</span>{roomCount} {roomCount === 1 ? dpT("roomFeed.speler") : dpT("roomFeed.spelers")} {dpT("roomFeed.in_de_kamer")}</p></div><div className="dpf-heading-actions"><span className="dpf-demo">{preview ? dpT("roomFeed.voorbeeld") : dpT("roomFeed.clubhuis")}</span>{!preview && safeLobbyHref(managementHref) && <a className="dpf-manage" href={safeLobbyHref(managementHref)}>{dpT("roomFeed.inrichten")}<ArrowUpRight size={12}/></a>}</div></header>
 
-    {settings?.platform?.maintenance && <div className="dpf-maintenance"><Bell size={16}/><p><strong>Onderhoudsbericht</strong>{settings.platform.maintenanceMessage}</p></div>}
-    {error && <div className="dpf-error" role="alert"><p>{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>Opnieuw laden</button></div>}
+    {settings?.platform?.maintenance && <div className="dpf-maintenance"><Bell size={16}/><p><strong>{dpT("roomFeed.onderhoudsbericht")}</strong>{settings.platform.maintenanceMessage}</p></div>}
+    {error && <div className="dpf-error" role="alert"><p>{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>{dpT("roomFeed.opnieuw_laden")}</button></div>}
     {previewNotice && <div className="dpf-preview-notice" role="status">{previewNotice}</div>}
 
-    <section className="dpf-content" aria-label="Clubhuis">
-      <div className="dpf-filterbar" role="group" aria-label="Filter clubhuis"><div>{filters.map(value => <button type="button" key={value} aria-pressed={filter === value} className={filter === value ? "is-active" : ""} onClick={() => setFilter(value)}>{value}</button>)}</div><Sparkles size={16} aria-hidden="true"/></div>
+    <section className="dpf-content" aria-label={dpT("roomFeed.clubhuis_2")}>
+      <div className="dpf-filterbar" role="group" aria-label={dpT("roomFeed.filter_clubhuis")}><div>{filters.map(value => <button type="button" key={value} aria-pressed={filter === value} className={filter === value ? "is-active" : ""} onClick={() => setFilter(value)}>{value}</button>)}</div><Sparkles size={16} aria-hidden="true"/></div>
       <div className="dpf-grid">
         {widgets.map(widget => {
           switch (widget.type) {
-            case "announcement": return <div key={widget.id} className={widgetClass(widget, "dpf-announcement")} data-widget-id={widget.id}><Megaphone size={16}/><p><strong>{widget.title || "Van het team"}</strong>{announcementText(widget)}</p>{!preview && <button type="button" onClick={() => setDismissedAnnouncements(previous => ({ ...previous, [widget.id]: announcementText(widget) }))} aria-label="Aankondiging verbergen"><X size={15}/></button>}</div>;
+            case "announcement": return <div key={widget.id} className={widgetClass(widget, "dpf-announcement")} data-widget-id={widget.id}><Megaphone size={16}/><p><strong>{widget.title || dpT("roomFeed.van_het_team")}</strong>{announcementText(widget)}</p>{!preview && <button type="button" onClick={() => setDismissedAnnouncements(previous => ({ ...previous, [widget.id]: announcementText(widget) }))} aria-label={dpT("roomFeed.aankondiging_verbergen")}><X size={15}/></button>}</div>;
             case "tournament": {
               const featured = widget.settings.tournamentId ? upcoming.find(event => event.id === widget.settings.tournamentId) : upcoming.find(event => registrationIsOpen(event)) ?? upcoming[0];
               return <article className={widgetClass(widget, "dpf-hero")} key={widget.id} data-widget-id={widget.id}>
-                <DartsHeroBackground enabled={Boolean(featured) && widget.settings.tournamentImageMode !== "none"} hero={widget.settings.tournamentImageMode === "custom" ? widget.settings.heroImage : featured?.hero} fallback={<div className="dpf-hero-art" aria-hidden="true"><div className="dpf-orbit dpf-orbit-one"/><div className="dpf-orbit dpf-orbit-two"/><span className="dpf-art-star">✦</span><Trophy strokeWidth={1}/><span className="dpf-art-label">THE NIGHT<br/>IS YOURS.</span></div>}/>
-                <div className="dpf-hero-copy"><span className="dpf-label"><Trophy size={13}/>UITGELICHT TOERNOOI</span><h2>{featured ? widget.title || featured.name : "De volgende cup begint hier."}<span>Schuif aan.</span></h2><p>{featured ? widget.description || featured.description : "Er staat nu geen toernooi klaar. Zin in een potje? Zoek een tegenstander in de kamer."}</p>
-                  {featured && <div className="dpf-event-meta"><span><Users size={13}/>{participantCount(featured)}/{featured.settings.maxPlayers} spelers</span><span><CalendarDays size={13}/>{eventDate(featured)}</span></div>}
-                  {featured ? <FeedLink {...linkProps} className="dpf-primary" href={`/toernooi/${encodeURIComponent(featured.id)}`}>{widget.settings.ctaLabel || "Bekijk het toernooi"}<ArrowUpRight size={16}/></FeedLink> : <button type="button" className="dpf-primary" onClick={() => previewAction(onTournaments)}>Bekijk de kalender<ArrowUpRight size={16}/></button>}
-                </div><div className="dpf-hero-bottom"><span><i/>{featured ? eventStatus(featured) : "NIEUWE EVENTS VOLGEN"}</span><span>{featured ? `${featured.settings.startScore} · ${featured.settings.doubleOut ? "double-out" : "single-out"} · best of ${featured.settings.bestOf}` : "Samen spelen. Samen beter."}</span></div>
+                <DartsHeroBackground enabled={Boolean(featured) && widget.settings.tournamentImageMode !== "none"} hero={widget.settings.tournamentImageMode === "custom" ? widget.settings.heroImage : featured?.hero} fallback={<div className="dpf-hero-art" aria-hidden="true"><div className="dpf-orbit dpf-orbit-one"/><div className="dpf-orbit dpf-orbit-two"/><span className="dpf-art-star">✦</span><Trophy strokeWidth={1}/><span className="dpf-art-label">{dpT("roomFeed.the_night")}<br/>{dpT("roomFeed.is_yours")}</span></div>}/>
+                <div className="dpf-hero-copy"><span className="dpf-label"><Trophy size={13}/>{dpT("roomFeed.uitgelicht_toernooi")}</span><h2>{featured ? widget.title || featured.name : dpT("roomFeed.de_volgende_cup_begint_hier")}<span>{dpT("roomFeed.schuif_aan")}</span></h2><p>{featured ? widget.description || featured.description : dpT("roomFeed.er_staat_nu_geen_toernooi_klaar_zin_in")}</p>
+                  {featured && <div className="dpf-event-meta"><span><Users size={13}/>{participantCount(featured)}/{featured.settings.maxPlayers} {dpT("roomFeed.spelers")}</span><span><CalendarDays size={13}/>{eventDate(featured)}</span></div>}
+                  {featured ? <FeedLink {...linkProps} className="dpf-primary" href={`/toernooi/${encodeURIComponent(featured.id)}`}>{widget.settings.ctaLabel || dpT("roomFeed.bekijk_het_toernooi")}<ArrowUpRight size={16}/></FeedLink> : <button type="button" className="dpf-primary" onClick={() => previewAction(onTournaments)}>{dpT("roomFeed.bekijk_de_kalender")}<ArrowUpRight size={16}/></button>}
+                </div><div className="dpf-hero-bottom"><span><i/>{featured ? eventStatus(featured) : dpT("roomFeed.nieuwe_events_volgen")}</span><span>{featured ? dpT("roomFeed.best_of",{startScore:featured.settings.startScore,value1:featured.settings.doubleOut ? "double-out" : "single-out",bestOf:featured.settings.bestOf}) : dpT("roomFeed.samen_spelen_samen_beter")}</span></div>
               </article>;
             }
             case "releases": return <article key={`${widget.id}:${platform.actor?.id ?? ""}:${roomId ?? ""}`} className={widgetClass(widget, "dpf-card dpf-releases")} data-widget-id={widget.id}><ReleaseUpdatesWidget updates={projection?.releases ?? []} title={widget.title} description={widget.description} limit={widget.settings.releaseLimit ?? 3} allowIdeas={widget.settings.allowIdeas !== false} preview={preview}/></article>;
-            case "players": return <div className={widgetClass(widget, "dpf-play-invitation")} key={widget.id} data-widget-id={widget.id}><span className="dpf-play-icon"><Target size={23}/></span><div><strong>{widget.title}</strong><p>{widget.description}</p></div><button type="button" onClick={() => previewAction(onPlayers)}>{widget.settings.ctaLabel || "Zoek een speler"}<ArrowRight size={15}/></button></div>;
-            case "challenge": return <article className={widgetClass(widget, "dpf-card dpf-challenge")} key={widget.id} data-widget-id={widget.id}><div className="dpf-card-top"><span className="dpf-label"><Flame size={15}/>WEEKCHALLENGE</span><span className="dpf-small-count">{completed}/{challenge.targets.length}</span></div><h3>{widget.title}</h3><p>{widget.description}</p><div className="dpf-targets">{challenge.targets.map(target => <span key={target} className={hit.includes(target) ? "is-hit" : ""}>{hit.includes(target) ? <Check size={13}/> : null}{target}</span>)}</div><div className="dpf-progress" role="progressbar" aria-label="Geraakte dubbels deze week" aria-valuemin={0} aria-valuemax={challenge.targets.length} aria-valuenow={completed}><span style={{ width: `${challenge.targets.length ? completed / challenge.targets.length * 100 : 0}%` }}/></div><FeedLink {...linkProps} className="dpf-text-link" href={widget.settings.ctaHref} fallback="/oefenen?uitdaging=1">{widget.settings.ctaLabel || (completed === challenge.targets.length ? "Nog even oefenen" : "Pak je pijlen")}<ArrowUpRight size={15}/></FeedLink></article>;
+            case "players": return <div className={widgetClass(widget, "dpf-play-invitation")} key={widget.id} data-widget-id={widget.id}><span className="dpf-play-icon"><Target size={23}/></span><div><strong>{widget.title}</strong><p>{widget.description}</p></div><button type="button" onClick={() => previewAction(onPlayers)}>{widget.settings.ctaLabel || dpT("roomFeed.zoek_een_speler")}<ArrowRight size={15}/></button></div>;
+            case "challenge": return <article className={widgetClass(widget, "dpf-card dpf-challenge")} key={widget.id} data-widget-id={widget.id}><div className="dpf-card-top"><span className="dpf-label"><Flame size={15}/>{dpT("roomFeed.weekchallenge")}</span><span className="dpf-small-count">{completed}/{challenge.targets.length}</span></div><h3>{widget.title}</h3><p>{widget.description}</p><div className="dpf-targets">{challenge.targets.map(target => <span key={target} className={hit.includes(target) ? "is-hit" : ""}>{hit.includes(target) ? <Check size={13}/> : null}{target}</span>)}</div><div className="dpf-progress" role="progressbar" aria-label={dpT("roomFeed.geraakte_dubbels_deze_week")} aria-valuemin={0} aria-valuemax={challenge.targets.length} aria-valuenow={completed}><span style={{ width: `${challenge.targets.length ? completed / challenge.targets.length * 100 : 0}%` }}/></div><FeedLink {...linkProps} className="dpf-text-link" href={widget.settings.ctaHref} fallback="/oefenen?uitdaging=1">{widget.settings.ctaLabel || (completed === challenge.targets.length ? dpT("roomFeed.nog_even_oefenen") : dpT("roomFeed.pak_je_pijlen"))}<ArrowUpRight size={15}/></FeedLink></article>;
             case "moment": return <MomentWidget key={`${widget.id}:${preview}`} widget={widget} preview={preview} reaction={projection?.reactions[widget.id]?.applause} busy={busy !== null} onApplause={active => { void react(widget.id, "applause", active); }} onProfile={name => previewAction(() => onProfile(name))}/>;
             case "news": {
               const articles = widget.settings.articleIds?.length ? widget.settings.articleIds.map(id => publishedArticles.find(story => story.id === id)).filter((item): item is LobbyArticle => Boolean(item)) : publishedArticles;
-              return <article className={widgetClass(widget, "dpf-card dpf-news")} key={widget.id} data-widget-id={widget.id}><div className="dpf-section-heading"><span className="dpf-label"><Newspaper size={15}/>{widget.title || "VAN HET PRIKBORD"}</span><span>{widget.description}</span></div><div className="dpf-news-list">{articles.length ? articles.map((story, index) => { const Icon = articleIcons[story.category]; return <button type="button" key={story.id} onClick={() => setArticle(story.id)}><span className={`dpf-news-icon dpf-news-icon-${index % 3}`}><Icon size={21}/></span><span><small>{articleLabels[story.category]}</small><strong>{story.title}</strong><span>{story.summary}</span></span><ChevronRight size={18}/></button>; }) : <p className="dpf-inline-empty">Er is nog geen nieuws. Kom gerust later nog eens kijken.</p>}</div></article>;
+              return <article className={widgetClass(widget, "dpf-card dpf-news")} key={widget.id} data-widget-id={widget.id}><div className="dpf-section-heading"><span className="dpf-label"><Newspaper size={15}/>{widget.title || dpT("roomFeed.van_het_prikbord")}</span><span>{widget.description}</span></div><div className="dpf-news-list">{articles.length ? articles.map((story, index) => { const Icon = articleIcons[story.category]; return <button type="button" key={story.id} onClick={() => setArticle(story.id)}><span className={`dpf-news-icon dpf-news-icon-${index % 3}`}><Icon size={21}/></span><span><small>{articleLabels[story.category]}</small><strong>{story.title}</strong><span>{story.summary}</span></span><ChevronRight size={18}/></button>; }) : <p className="dpf-inline-empty">{dpT("roomFeed.er_is_nog_geen_nieuws_kom_gerust_later")}</p>}</div></article>;
             }
             case "poll": return <PollWidget key={`${widget.id}:${JSON.stringify(widget.settings.pollOptions)}:${preview}`} widget={widget} preview={preview} reaction={projection?.reactions[widget.id]?.poll} busy={busy !== null} onVote={(index, version) => { void react(widget.id, "vote", index, version); }}/>;
-            case "divisions": return <article className={widgetClass(widget, "dpf-card dpf-division")} key={widget.id} data-widget-id={widget.id}><span className="dpf-label"><Trophy size={15}/>EEN BEETJE VERDER</span><div className="dpf-division-art" aria-hidden="true"><span>{ownDivision?.division.level ?? <Trophy size={33}/>}</span><i/><i/></div><h3>{widget.title}</h3><p>{widget.description}</p><p className="dpf-division-current">{ownDivision ? `${ownDivision.division.name} · ${ownDivision.season.name}` : seasons.length ? `${seasons.length} ${seasons.length === 1 ? "actief seizoen" : "actieve seizoenen"}` : "De divisiecompetitie is nog niet gestart."}</p><FeedLink {...linkProps} className="dpf-text-link" href={widget.settings.ctaHref} fallback="/divisies">{widget.settings.ctaLabel || "Bekijk de divisies"}<ArrowUpRight size={15}/></FeedLink></article>;
+            case "divisions": return <article className={widgetClass(widget, "dpf-card dpf-division")} key={widget.id} data-widget-id={widget.id}><span className="dpf-label"><Trophy size={15}/>{dpT("roomFeed.een_beetje_verder")}</span><div className="dpf-division-art" aria-hidden="true"><span>{ownDivision?.division.level ?? <Trophy size={33}/>}</span><i/><i/></div><h3>{widget.title}</h3><p>{widget.description}</p><p className="dpf-division-current">{ownDivision ? dpT("roomFeed._3",{name:ownDivision.division.name,nameValue:ownDivision.season.name}) : seasons.length ? dpT("roomFeed._4",{length:seasons.length,value1:seasons.length === 1 ? "actief seizoen" : "actieve seizoenen"}) : dpT("roomFeed.de_divisiecompetitie_is_nog_niet_gestart")}</p><FeedLink {...linkProps} className="dpf-text-link" href={widget.settings.ctaHref} fallback="/divisies">{widget.settings.ctaLabel || dpT("roomFeed.bekijk_de_divisies")}<ArrowUpRight size={15}/></FeedLink></article>;
           }
         })}
-        {!widgets.length && <div className="dpf-empty dpf-wide"><Newspaper size={27}/><h3>{filter === "Ontdekken" ? "Even rustig op het prikbord." : `Nog niets bij ${filter.toLowerCase()}.`}</h3><p>{filter === "Ontdekken" ? "Er staan nog geen berichten of activiteiten in deze kamer." : "Er staan nog geen berichten in deze categorie. Bekijk ook de andere onderwerpen."}</p>{filter !== "Ontdekken" && <button type="button" onClick={() => setFilter("Ontdekken")}>Bekijk alles<ArrowRight size={14}/></button>}</div>}
+        {!widgets.length && <div className="dpf-empty dpf-wide"><Newspaper size={27}/><h3>{filter === "Ontdekken" ? dpT("roomFeed.even_rustig_op_het_prikbord") : dpT("roomFeed.nog_niets_bij",{value0:filter.toLowerCase()})}</h3><p>{filter === "Ontdekken" ? dpT("roomFeed.er_staan_nog_geen_berichten_of_activiteiten_in") : dpT("roomFeed.er_staan_nog_geen_berichten_in_deze_categorie")}</p>{filter !== "Ontdekken" && <button type="button" onClick={() => setFilter("Ontdekken")}>{dpT("roomFeed.bekijk_alles")}<ArrowRight size={14}/></button>}</div>}
       </div>
-      <footer className="dpf-footer"><img src="/brand/icon.svg" alt=""/><span>Blijf nog even hangen.</span>{onChooseRoom && <button type="button" onClick={() => previewAction(onChooseRoom)}>Andere kamer<ArrowUpRight size={12}/></button>}{preview && <small>Voorbeeld van de geselecteerde kamer</small>}</footer>
+      <footer className="dpf-footer"><img src="/brand/icon.svg" alt=""/><span>{dpT("roomFeed.blijf_nog_even_hangen")}</span>{onChooseRoom && <button type="button" onClick={() => previewAction(onChooseRoom)}>{dpT("roomFeed.andere_kamer")}<ArrowUpRight size={12}/></button>}{preview && <small>{dpT("roomFeed.voorbeeld_van_de_geselecteerde_kamer")}</small>}</footer>
     </section>
 
-    <Dialog open={!!selectedStory} onOpenChange={open => !open && setArticle(null)}><DialogContent className="dp-dialog dpf-article"><DialogHeader><span className="dpf-label">{selectedStory && articleLabels[selectedStory.category]}</span><DialogTitle>{selectedStory?.title}</DialogTitle><DialogDescription>{selectedStory?.summary}</DialogDescription></DialogHeader><div className="dpf-article-body">{selectedStory?.body.split(/\n+/).filter(paragraph => paragraph.trim()).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>{selectedStory?.ctaLabel && safeLobbyHref(selectedStory.ctaHref) ? <FeedLink {...linkProps} className="dpf-primary" href={selectedStory.ctaHref}>{selectedStory.ctaLabel}<ArrowRight size={16}/></FeedLink> : <button type="button" className="dpf-primary" onClick={() => setArticle(null)}>Terug naar het clubhuis<ArrowRight size={16}/></button>}{preview && previewNotice && <div className="dpf-preview-notice" role="status">{previewNotice}</div>}</DialogContent></Dialog>
+    <Dialog open={!!selectedStory} onOpenChange={open => !open && setArticle(null)}><DialogContent className="dp-dialog dpf-article"><DialogHeader><span className="dpf-label">{selectedStory && articleLabels[selectedStory.category]}</span><DialogTitle>{selectedStory?.title}</DialogTitle><DialogDescription>{selectedStory?.summary}</DialogDescription></DialogHeader><div className="dpf-article-body">{selectedStory?.body.split(/\n+/).filter(paragraph => paragraph.trim()).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>{selectedStory?.ctaLabel && safeLobbyHref(selectedStory.ctaHref) ? <FeedLink {...linkProps} className="dpf-primary" href={selectedStory.ctaHref}>{selectedStory.ctaLabel}<ArrowRight size={16}/></FeedLink> : <button type="button" className="dpf-primary" onClick={() => setArticle(null)}>{dpT("roomFeed.terug_naar_het_clubhuis")}<ArrowRight size={16}/></button>}{preview && previewNotice && <div className="dpf-preview-notice" role="status">{previewNotice}</div>}</DialogContent></Dialog>
   </div>;
 }
+
+const dpStaticCopyKeys={
+  "Ontdekken": "roomFeed.copy_ontdekken",
+  "Toernooien": "roomFeed.copy_toernooien",
+  "Nieuws": "roomFeed.copy_nieuws",
+  "NIEUWS": "roomFeed.copy_nieuws_2",
+  "NIEUW OP DARTSPOINT": "roomFeed.copy_nieuw_op_dartspoint",
+  "VOOR NIEUWE SPELERS": "roomFeed.copy_voor_nieuwe_spelers"
+};

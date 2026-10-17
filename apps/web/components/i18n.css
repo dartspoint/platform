@@ -1,0 +1,10 @@
+.dp-language-picker {display:inline-flex;align-items:center;gap:.5rem;max-width:100%;}
+.dp-language-picker select {font:inherit;color:inherit;background:#10271c;border:1px solid #365343;border-radius:8px;padding:.45rem .6rem;max-width:100%;min-height:36px;}
+.dp-language-picker [role=alert] {font-size:.8rem;color:#ffaba4;}
+.dp-room-metadata {display:inline-flex;align-items:center;gap:.35rem;vertical-align:middle;max-width:100%;}
+.dp-room-metadata img {flex-shrink:0;border-radius:2px;object-fit:cover;}
+.dp-room-language {font-size:10px;line-height:1.3;white-space:normal;border:1px solid #365343;border-radius:5px;padding:2px 5px;}
+.dp-room-filters {display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;}
+.dp-room-filters select,.dp-room-filters button {max-width:100%;font:inherit;color:inherit;background:#10271c;border:1px solid #365343;border-radius:6px;padding:6px;}
+.dp-room-editor {min-width:0;border:1px solid #365343;border-radius:8px;padding:12px;display:grid;gap:10px;}
+.dp-room-editor p {font-size:12px;color:#9fbcaa;}.dp-room-preview {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}

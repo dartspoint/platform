@@ -1,3 +1,4 @@
+import {isTrustedOrigin} from '../../../packages/i18n/src/domains';
 import {createServer} from 'node:http';
 import {monitorEventLoopDelay} from 'node:perf_hooks';
 import {timingSafeEqual,randomUUID,createHash} from 'node:crypto';
@@ -102,8 +103,8 @@ class DartsMatch extends Room {
 }
 const http=createServer();
 // Colyseus handles HTTP matchmaking before Express; configure its supported CORS hook.
-matchMaker.controller.getCorsHeaders=()=>({'Access-Control-Allow-Origin':process.env.NEXT_PUBLIC_APP_URL??'',Vary:'Origin'});
-const server=new Server({greet:false,gracefullyShutdown:false,transport:new WebSocketTransport({server:http,verifyClient:({origin},done)=>done(!origin||origin===process.env.NEXT_PUBLIC_APP_URL)}),express:app=>{
+matchMaker.controller.getCorsHeaders=headers=>({'Access-Control-Allow-Origin':isTrustedOrigin(headers.get('origin'))?headers.get('origin')!:'',Vary:'Origin'});
+const server=new Server({greet:false,gracefullyShutdown:false,transport:new WebSocketTransport({server:http,verifyClient:({origin},done)=>done(!origin||isTrustedOrigin(origin))}),express:app=>{
  app.get('/healthz',(_req,res)=>res.json({ok:true,release:process.env.RELEASE_SHA??'local-development'}));
  app.get('/readyz',async(_req,res)=>{try{res.json(await readiness());}catch{res.status(503).json({ok:false});}});
  app.use('/internal',async(req,res,next)=>{

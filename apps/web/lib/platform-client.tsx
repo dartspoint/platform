@@ -1,4 +1,7 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+import {errorText,browserLocale} from "../../../packages/i18n/src/errors";
+import {useI18n} from './i18n/provider';
 import {useEffect,useState,useSyncExternalStore,type ReactNode} from 'react';
 import {Client} from '@colyseus/sdk';
 import {browserAuth} from './supabase-client';
@@ -17,7 +20,7 @@ export class ApiError extends Error{constructor(message:string,public code:strin
 export async function api<T=any>(path:string,input?:unknown):Promise<T>{
  if(path==='chat/send')lastChatActivity=Date.now();
  const response=await fetch('/api/platform/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input)});
- const data=await response.json();if(!response.ok)throw new ApiError(typeof data.error==='string'&&data.error.trim()&&data.error!==data.code?data.error:'Dit is niet gelukt. Probeer het nog eens.',data.code,response.status,data.retryAfter);return data as T;
+ const data=await response.json();if(!response.ok)throw new ApiError(errorText(data.code,browserLocale(),data.error),data.code,response.status,data.retryAfter);return data as T;
 }
 const olderRecords=new Map<string,any>();let historyActor:string|undefined;
 export async function loadOlderRecords(){const actor=snapshot.actor.id;if(actor!==historyActor){olderRecords.clear();historyActor=actor;}const last=snapshot.records.at(-1);const records=await api<any[]>("history"+(last?"?before="+encodeURIComponent(last.ended_at)+"&id="+last.id:""));if(actor!==snapshot.actor?.id)return;for(const record of records)olderRecords.set(record.id,record);snapshot={...snapshot,records:[...snapshot.records,...records.filter(r=>!snapshot.records.some(p=>p.id===r.id))]};listeners.forEach(fn=>fn());return records.length;}
@@ -27,9 +30,13 @@ let deferredRefresh:ReturnType<typeof setTimeout>|undefined,deferredAt=0,lastCha
 /** Coalesce inbox/read metadata refreshes; content arrives through its personal
  * projection. Keep a one-second bound even during continuous room activity. */
 export function schedulePlatformRefresh(){const now=Date.now();deferredAt||=now;clearTimeout(deferredRefresh);deferredRefresh=setTimeout(()=>{deferredAt=0;deferredRefresh=undefined;void refreshPlatform().catch(()=>{});},Math.min(500,Math.max(0,1000-(now-deferredAt))));}
-export async function mutate<T=any>(path:string,input:unknown):Promise<T>{try{const data=await api<T>(path,input);await refreshPlatform();return data;}catch(e){toast.error(e instanceof Error?e.message:'Dit is niet gelukt. Probeer het nog eens.');throw e;}}
+export async function mutate<T=any>(path:string,input:unknown):Promise<T>{try{const data=await api<T>(path,input);await refreshPlatform();return data;}catch(e){toast.error(e instanceof Error?e.message:runtimeFeedback("feedback.dit_is_niet_gelukt_probeer_het_nog_eens"));throw e;}}
 export function PlatformProvider({initial,children,accessFailure="login"}:{initial:PlatformSnapshot;children:ReactNode;accessFailure?:"login"|"support"}){
+ const {syncAccount,t}=useI18n();
  const [ready,setReady]=useState(false);
+ const platformLocale=usePlatform().preferences?.locale;
+ useEffect(()=>{syncAccount(initial.preferences?.locale);},[initial.preferences?.locale,syncAccount]);
+ useEffect(()=>{syncAccount(platformLocale);},[platformLocale,syncAccount]);
  useEffect(()=>{
   let disposed=false,room:any,retry:ReturnType<typeof setTimeout>,renew:ReturnType<typeof setInterval>;
   async function connect(){try{
@@ -67,5 +74,5 @@ export function PlatformProvider({initial,children,accessFailure="login"}:{initi
   const pulse=setInterval(()=>{void heartbeat();},20000);
   return ()=>{disposed=true;for(const name of ['pointerdown','keydown','wheel'])window.removeEventListener(name,activity,true);clearTimeout(activityPulse);clearInterval(poll);clearInterval(pulse);clearTimeout(deferredRefresh);deferredAt=0;snapshot=EMPTY_PLATFORM;};
  },[initial,accessFailure]);
- return ready?<>{children}{accessFailure!=="support"&&<><IncomingInvites/><RequiredRename/></>}</>:<main className="dp-entry-loading" role="status" style={{minHeight:'100dvh',display:'grid',placeItems:'center',color:'#9fbcaa'}}>DartsPoint wordt geopend…</main>;
+ return ready?<>{children}{accessFailure!=="support"&&<><IncomingInvites/><RequiredRename/></>}</>:<main className="dp-entry-loading" role="status" style={{minHeight:'100dvh',display:'grid',placeItems:'center',color:'#9fbcaa'}}>{t('common.loading')}</main>;
 }

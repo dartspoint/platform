@@ -1,4 +1,5 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
 
 import { useEffect, useState } from "react";
 import { api, ApiError, mutate, usePlatform } from "./platform-client";
@@ -19,7 +20,7 @@ export function useLobbyContent() {
     let disposed = false;
     setLoading(true); setError("");
     if (platform.actor?.role !== "owner") { setState(null); setLoading(false); return; }
-    void api<LobbyContentState>("lobby/admin").then(value => { if (!disposed) setState(value); }).catch(cause => { if (!disposed) setError(cause instanceof Error ? cause.message : "Lobbybeheer kan niet worden geladen."); }).finally(() => { if (!disposed) setLoading(false); });
+    void api<LobbyContentState>("lobby/admin").then(value => { if (!disposed) setState(value); }).catch(cause => { if (!disposed) setError(cause instanceof Error ? cause.message : runtimeFeedback("feedback.lobbybeheer_kan_niet_worden_geladen")); }).finally(() => { if (!disposed) setLoading(false); });
     return () => { disposed = true; };
   }, [platform.actor?.id, platform.actor?.role, refresh]);
   return { state, setState, error, loading, reload: () => setRefresh(value => value + 1) };

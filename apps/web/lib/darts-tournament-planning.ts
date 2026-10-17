@@ -1,3 +1,4 @@
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
 import { eligibilityReasons, progressTournament, type Tournament, type TournamentMatch } from "./darts-tournament-model";
 
 /** Read-only blockers, shared by manual assignment, auto planner and participant entry. */
@@ -48,16 +49,16 @@ export function planTournamentBoards(value: Tournament, now = Date.now()): Tourn
 }
 export function assignTournamentBoardPure(value: Tournament, matchId: string, boardId: number | null, now = Date.now()): Tournament {
   const tournament = progressTournament(value); const match = tournament.matches.find(m => m.id === matchId);
-  if (!match || match.status !== "ready") throw new Error("Alleen een startklare wedstrijd kan worden ingedeeld.");
+  if (!match || match.status !== "ready") throw new Error(runtimeFeedback("feedback.alleen_een_startklare_wedstrijd_kan_worden_ingedeeld"));
   if (boardId === null) { match.boardId = null; match.assignedAt = null; return tournament; }
-  if (!Number.isInteger(boardId) || boardId < 1 || boardId > tournament.settings.boardCount) throw new Error("Kies een geldig bord.");
+  if (!Number.isInteger(boardId) || boardId < 1 || boardId > tournament.settings.boardCount) throw new Error(runtimeFeedback("feedback.kies_een_geldig_bord"));
   const reasons = getMatchPlanningReasons(tournament, match, now); if (reasons.length) throw new Error(reasons.join(" · "));
   if (tournament.matches.some(m => m.id !== matchId && m.boardId === boardId && ["ready", "playing"].includes(m.status))) throw new Error("Dit bord is al bezet.");
   match.boardId = boardId; match.assignedAt = now; return tournament;
 }
 export function startTournamentMatchPure(value: Tournament, matchId: string, now = Date.now()): Tournament {
   const tournament = progressTournament(value); const match = tournament.matches.find(m => m.id === matchId);
-  if (!match || match.status !== "ready" || match.boardId === null) throw new Error("De wedstrijd moet eerst aan een bord zijn toegewezen.");
+  if (!match || match.status !== "ready" || match.boardId === null) throw new Error(runtimeFeedback("feedback.de_wedstrijd_moet_eerst_aan_een_bord_zijn"));
   const reasons = getMatchPlanningReasons(tournament, match, now); if (reasons.length) throw new Error(reasons.join(" · "));
   match.status = "playing"; match.startedAt = now; return tournament;
 }

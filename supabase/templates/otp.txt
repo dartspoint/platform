@@ -1,0 +1,37 @@
+{{ if or (eq .RedirectTo "https://dartspoint.nl/en/inloggen") (eq .RedirectTo "https://www.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://dartspoint.app/en/inloggen") (eq .RedirectTo "https://www.dartspoint.app/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.app/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4300/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4302/en/inloggen") (eq .RedirectTo "http://localhost:4300/en/inloggen") (eq .RedirectTo "http://localhost:4302/en/inloggen") }}
+Your DartsPoint sign-in code
+
+Terms: http://127.0.0.1:4300/en/algemene-voorwaarden
+Privacy: http://127.0.0.1:4300/en/privacy
+Support: http://127.0.0.1:4300/support
+Developed by DG Webservices
+
+Enter this code on the screen where you just entered your email address. Then you are ready for your next game.
+
+SIGN-IN CODE: {{ .Token }}
+Valid for 10 minutes · use once
+
+
+This code is valid for 10 minutes and can be used once. Did not request a code? You can ignore this email. Never share your code: DartsPoint will not ask for it in chat or by email.
+
+Your room. Your match. Your evening.
+DartsPoint · http://127.0.0.1:4300
+{{ else }}
+Je inlogcode voor DartsPoint
+
+Voorwaarden: http://127.0.0.1:4300/nl/algemene-voorwaarden
+Privacy: http://127.0.0.1:4300/nl/privacy
+Support: http://127.0.0.1:4300/support
+Ontwikkeld door DG Webservices
+
+Voer deze code in op het scherm waar je zojuist je e-mailadres hebt ingevuld. Dan ben je klaar voor je volgende potje.
+
+INLOGCODE: {{ .Token }}
+10 minuten geldig · één keer te gebruiken
+
+
+Deze code is 10 minuten geldig en kun je één keer gebruiken. Heb je geen code aangevraagd? Dan kun je deze e-mail negeren. Deel je code nooit: DartsPoint vraagt er niet naar via chat of e-mail.
+
+Jouw kamer. Jouw wedstrijd. Jouw avond.
+DartsPoint · http://127.0.0.1:4300
+{{ end }}

@@ -1,4 +1,6 @@
 "use client";
+import {useI18n} from '@/lib/i18n/provider';
+
 import {useTimingInput} from "@/lib/use-timing-input";
 
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
@@ -128,10 +130,12 @@ function LandedDartChip({ dart, lessMotion }: { dart: BoardDart; lessMotion: boo
 }
 
 export const Dartboard = memo(function Dartboard({ darts, pendingId, onLand, lessMotion, checkoutHit }: { darts: BoardDart[]; pendingId: number | null; onLand: (id: number) => void; lessMotion: boolean; checkoutHit?: DartHit }) {
+ const dpT = useI18n("game").t;
+
   const uid = useId().replace(/:/g, "");
   const { center, bull, outerBull, trebleInner, trebleOuter, doubleInner, doubleOuter } = BOARD_GEOMETRY;
   const latestLandedDart = pendingId === null ? darts.at(-1) : undefined;
-  return <svg className="dp-dartboard" viewBox="0 0 440 440" role="img" aria-label="Professioneel dartbord met de laatste gegooide pijlen">
+  return <svg className="dp-dartboard" viewBox="0 0 440 440" role="img" aria-label={dpT("game.professioneel_dartbord_met_de_laatste_gegooide_pijlen")}>
     <defs>
       <radialGradient id={`${uid}-surround`}><stop offset="0" stopColor="#26312c" /><stop offset=".87" stopColor="#101713" /><stop offset="1" stopColor="#29362f" /></radialGradient>
       <radialGradient id={`${uid}-face`}><stop offset="0" stopColor="#fff" stopOpacity=".07" /><stop offset="1" stopColor="#000" stopOpacity=".13" /></radialGradient>
@@ -168,6 +172,8 @@ export const Dartboard = memo(function Dartboard({ darts, pendingId, onLand, les
 });
 
 function CheckoutHint({ game, reducedMotion }: { game: DartsGame; reducedMotion: boolean }) {
+ const dpT = useI18n("game").t;
+
   const remaining = game.scores[game.turn];
   const player = game.turn === 0 ? game.playerName : game.opponentName;
   const gameFinished = game.phase === "won";
@@ -179,9 +185,9 @@ function CheckoutHint({ game, reducedMotion }: { game: DartsGame; reducedMotion:
       {routes.length > 0 && <motion.div className="dp-checkout-hint" key={`${game.turn}-${remaining}-${game.dartsLeft}`}
         initial={reducedMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
         transition={{ duration: reducedMotion ? 0 : .18, ease: "easeOut" }}>
-        <span className="dp-checkout-label" aria-hidden="true"><i/>Finish</span>
-        <span className="sr-only">Uitgooimogelijkheden voor {player}, {remaining} {remaining === 1 ? "punt" : "punten"} met {game.dartsLeft} {game.dartsLeft === 1 ? "pijl" : "pijlen"}: </span>
-        <div className="dp-checkout-routes" tabIndex={0} aria-label="Uitgooimogelijkheden, horizontaal scrollbaar">
+        <span className="dp-checkout-label" aria-hidden="true"><i/>{dpT("game.finish")}</span>
+        <span className="sr-only">{dpT("game.uitgooimogelijkheden_voor")} {player}, {remaining} {remaining === 1 ? dpT("game.punt") : dpT("game.punten")} {dpT("game.met")} {game.dartsLeft} {game.dartsLeft === 1 ? dpT("game.pijl") : dpT("game.pijlen")}: </span>
+        <div className="dp-checkout-routes" tabIndex={0} aria-label={dpT("game.uitgooimogelijkheden_horizontaal_scrollbaar")}>
           {routes.map((route, index) => <span className="dp-checkout-option" key={route.join("-")}>
             {index > 0 && <span className="dp-checkout-divider" aria-hidden="true">|</span>}
             <span>{route.join(" ")}</span>
@@ -193,24 +199,26 @@ function CheckoutHint({ game, reducedMotion }: { game: DartsGame; reducedMotion:
 }
 
 export function Scoreboard({ game, lessMotion = false, checkoutHints = true }: { game: DartsGame; lessMotion?: boolean; checkoutHints?: boolean }) {
+ const dpT = useI18n("game").t;
+
   const systemReducedMotion = useReducedMotion();
   const reducedMotion = lessMotion || !!systemReducedMotion;
   return <div className="dp-score-area">
     {checkoutHints && game.rules.doubleOut && game.opened[game.turn] ? <CheckoutHint game={game} reducedMotion={reducedMotion}/> : <div className="dp-checkout-slot"/>}
     <div className="dp-match-score">
     <table className="dp-match-score-table">
-      <caption><span title={`${matchRulesLabel(game.rules)} · ${matchFormatLabel(game.rules)}`}>{game.rules.startScore} · {game.rules.doubleIn ? game.rules.doubleOut ? "DIDO" : "DI" : game.rules.doubleOut ? "DO" : "SO"} · <strong>{game.rules.format === "sets" ? `BO${game.rules.bestOfSets} sets / BO${game.rules.bestOf} legs` : `Best of ${game.rules.bestOf} ${game.rules.bestOf === 1 ? "leg" : "legs"}`}</strong></span><span>Wedstrijd {game.publicGameId ? `#${game.publicGameId}` : "—"}</span></caption>
+      <caption><span title={dpT("game.label",{value0:matchRulesLabel(game.rules),value1:matchFormatLabel(game.rules)})}>{game.rules.startScore} · {game.rules.doubleIn ? game.rules.doubleOut ? dpT("game.dido") : dpT("game.di") : game.rules.doubleOut ? dpT("game.do") : dpT("game.so")} · <strong>{game.rules.format === "sets" ? dpT("game.bo_sets_bo_legs",{bestOfSets:game.rules.bestOfSets,bestOf:game.rules.bestOf}) : dpT("game.best_of",{bestOf:game.rules.bestOf,value1:game.rules.bestOf === 1 ? "leg" : "legs"})}</strong></span><span>{dpT("game.wedstrijd")} {game.publicGameId ? dpT("game._2",{publicGameId:game.publicGameId}) : "—"}</span></caption>
       <colgroup><col className="dp-match-score-player-col" /><col className="dp-match-score-small-col" /><col className="dp-match-score-small-col" /><col className="dp-match-score-small-col" /><col className="dp-match-score-points-col" /><col className="dp-match-score-visit-col" /></colgroup>
-      <thead><tr><th scope="col">Speler</th><th scope="col">Sets</th><th scope="col">Legs</th><th scope="col"><abbr title="Resterende darts in de huidige beurt">D</abbr></th><th scope="col"><abbr title="Resterende punten">Ptn</abbr></th><th scope="col">Beurt</th></tr></thead>
+      <thead><tr><th scope="col">{dpT("game.speler")}</th><th scope="col">{dpT("game.sets")}</th><th scope="col">{dpT("game.legs_2")}</th><th scope="col"><abbr title={dpT("game.resterende_darts_in_de_huidige_beurt")}>D</abbr></th><th scope="col"><abbr title={dpT("game.resterende_punten")}>{dpT("game.ptn")}</abbr></th><th scope="col">{dpT("game.beurt")}</th></tr></thead>
       <tbody>{[game.playerName, game.opponentName].map((name, i) => {
         const isActive = game.turn === i && game.phase !== "won";
         const isWinner = game.winner === i;
         const visitScore = game.visitScores[i];
         return <tr key={`${i}-${name}`} className={isActive ? "is-active" : isWinner ? "is-winner" : ""}>
-          <th scope="row"><div className="dp-match-score-person"><span className="dp-match-score-identity"><PlayerName className="dp-match-score-name" name={name} /><RatingValue player={playerByName(name)} className="dp-match-score-rating" brackets/></span>{game.rules.doubleIn && !game.opened[i] && !isWinner && <abbr className="dp-match-entry" title="Raak een dubbel om deze leg te openen">IN</abbr>}{isWinner ? <span className="dp-match-score-winner">WIN</span> : <span className={`dp-match-score-turn ${isActive ? "is-active" : ""}`} role={isActive ? "img" : undefined} aria-label={isActive ? "Aan de beurt" : undefined} aria-hidden={isActive ? undefined : true} />}</div></th>
+          <th scope="row"><div className="dp-match-score-person"><span className="dp-match-score-identity"><PlayerName className="dp-match-score-name" name={name} /><RatingValue player={playerByName(name)} className="dp-match-score-rating" brackets/></span>{game.rules.doubleIn && !game.opened[i] && !isWinner && <abbr className="dp-match-entry" title={dpT("game.raak_een_dubbel_om_deze_leg_te_openen")}>{dpT("game.in")}</abbr>}{isWinner ? <span className="dp-match-score-winner">{dpT("game.win")}</span> : <span className={`dp-match-score-turn ${isActive ? "is-active" : ""}`} role={isActive ? "img" : undefined} aria-label={isActive ? dpT("game.aan_de_beurt") : undefined} aria-hidden={isActive ? undefined : true} />}</div></th>
           <td>{game.sets[i]}</td><td>{game.legs[i]}</td><td className={isActive ? "dp-match-score-darts-active" : ""}>{isActive ? game.dartsLeft : 0}</td>
           <td><span className="dp-match-score-points"><motion.strong key={game.scores[i]} initial={reducedMotion ? false : { y: 3, opacity: .6 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: .16 }}>{game.scores[i]}</motion.strong></span></td>
-          <td><span className={`dp-match-score-visit ${game.visitBusts[i] ? "is-bust" : ""} ${visitScore === null ? "is-empty" : ""}`} aria-label={game.visitBusts[i] ? "Bust: 0 punten in deze beurt" : visitScore === null ? "Nog geen beurt" : `${visitScore} punten in deze beurt`}>{game.visitBusts[i] ? "BUST" : visitScore ?? "—"}</span></td>
+          <td><span className={`dp-match-score-visit ${game.visitBusts[i] ? "is-bust" : ""} ${visitScore === null ? "is-empty" : ""}`} aria-label={game.visitBusts[i] ? dpT("game.bust_0_punten_in_deze_beurt") : visitScore === null ? dpT("game.nog_geen_beurt") : dpT("game.punten_in_deze_beurt",{visitScore:visitScore})}>{game.visitBusts[i] ? dpT("game.bust") : visitScore ?? "—"}</span></td>
         </tr>;
       })}</tbody>
     </table>
@@ -220,6 +228,8 @@ export function Scoreboard({ game, lessMotion = false, checkoutHints = true }: {
 }
 
 export function GamePanel({ game, variant, muted = true, interactionBlocked = false, lessMotion = false, showExperience = true, checkoutHints = true }: { game: DartsGame; variant: string; muted?: boolean; interactionBlocked?: boolean; lessMotion?: boolean; showExperience?: boolean; checkoutHints?: boolean }) {
+ const dpT = useI18n("game").t;
+
   const { setActive, phase, startOrStop } = game;
   const panel = useRef<HTMLDivElement>(null);
   const audioContext = useRef<AudioContext | null>(null);
@@ -315,23 +325,23 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
     <div className="dp-board-stage">
       <div className="dp-board-and-height">
         <div className="dp-aim-header">
-          <div className={`dp-direction-meter ${game.phase === "horizontal" ? "is-running" : ""}`} aria-label="Horizontale timingbalk rechtsboven het dartbord">
+          <div className={`dp-direction-meter ${game.phase === "horizontal" ? "is-running" : ""}`} aria-label={dpT("game.horizontale_timingbalk_rechtsboven_het_dartbord")}>
             <div className={`dp-meter-row ${game.phase === "horizontal" ? "is-running" : ""}`}><span className="dp-meter-icon"><ArrowRight size={13} aria-hidden="true" /></span><div className="dp-meter-track"><span ref={game.xIndicator} className="dp-meter-indicator" style={{ left: "50%" }} /></div></div>
           </div>
         </div>
         <div className="dp-oche-playfield">
           <Dartboard key={game.id} darts={boardDarts} pendingId={game.pendingDart?.id ?? null} onLand={game.landDart} lessMotion={lessMotion} checkoutHit={game.celebration === "checkout" && game.events.at(-1)?.hit.double ? game.events.at(-1)?.hit : undefined} />
-          <div className={`dp-height-meter ${game.phase === "vertical" ? "is-running" : ""}`} aria-label="Verticale timingbalk voor de hoogte van je worp">
+          <div className={`dp-height-meter ${game.phase === "vertical" ? "is-running" : ""}`} aria-label={dpT("game.verticale_timingbalk_voor_de_hoogte_van_je_worp")}>
             <ArrowUp size={12} aria-hidden="true" />
             <div className="dp-meter-track dp-meter-track-vertical"><span ref={game.yIndicator} className="dp-meter-indicator" style={{ top: "50%" }} /></div>
             <ArrowDown size={12} aria-hidden="true" />
           </div>
         </div>
       </div>
-      {!game.isSpectator && <button className={`dp-throw-button ${active ? "is-timing" : ""}`} {...throwInput} disabled={disabled} aria-label={game.phase === "won" ? "Speel opnieuw" : game.phase === "horizontal" ? "Stop horizontale indicator" : game.phase === "vertical" ? "Stop verticale indicator en gooi" : game.phase === "flight" ? "Pijl onderweg" : "Tegenstander aan de beurt"}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? "STOP" : "GOOI"}</span><ArrowUpRight size={15} /></>}</button>}
+      {!game.isSpectator && <button className={`dp-throw-button ${active ? "is-timing" : ""}`} {...throwInput} disabled={disabled} aria-label={game.phase === "won" ? dpT("game.speel_opnieuw") : game.phase === "horizontal" ? dpT("game.stop_horizontale_indicator") : game.phase === "vertical" ? dpT("game.stop_verticale_indicator_en_gooi") : game.phase === "flight" ? dpT("game.pijl_onderweg") : dpT("game.tegenstander_aan_de_beurt")}>{game.phase === "won" ? <RotateCcw size={22} /> : <><span>{game.phase === "horizontal" ? dpT("game.stop") : dpT("game.gooi")}</span><ArrowUpRight size={15} /></>}</button>}
     </div>
     {game.timeoutWarning && game.phase !== "won" && <p className="dp-connection-note dp-timeout-warning" role="status" aria-live="polite" data-timeout-strike={game.timeoutWarning.strike}>
-      {game.timeoutWarning.player === 0 ? game.playerName : game.opponentName}: {game.timeoutWarning.strike === 1 ? "je beurttijd is voorbij. Gooi binnen de nieuwe beurttijd." : "je beurttijd is voor de tweede keer voorbij. Bij een derde keer verlies je de wedstrijd."}
+      {game.timeoutWarning.player === 0 ? game.playerName : game.opponentName}: {game.timeoutWarning.strike === 1 ? dpT("game.je_beurttijd_is_voorbij_gooi_binnen_de_nieuwe") : dpT("game.je_beurttijd_is_voor_de_tweede_keer_voorbij")}
     </p>}
     <Scoreboard game={game} lessMotion={lessMotion} checkoutHints={checkoutHints} />
     {showExperience && <MatchExperience game={game} lessMotion={lessMotion} hidden={interactionBlocked}/>}
@@ -341,8 +351,10 @@ export function GamePanel({ game, variant, muted = true, interactionBlocked = fa
 /** A separate socket observes the approved match without changing the player's
  * own game hook, selected match, timing samples or drafts. */
 export function SpectatorGame({ matchId, variant, lessMotion, children }: { matchId: string; variant: string; lessMotion: boolean; children?: ReactNode }) {
+ const dpT = useI18n("game").t;
+
   const game = useServerGame("", matchId, true);
-  if (!game.ready || game.offlineUntil) return <p className="spectator-note" role="status">{game.connectionMessage || "De livewedstrijd wordt geladen…"}</p>;
+  if (!game.ready || game.offlineUntil) return <p className="spectator-note" role="status">{game.connectionMessage || dpT("game.de_livewedstrijd_wordt_geladen")}</p>;
   return <div className="spectator-live-game" data-spectator-match={matchId} data-public-game-id={game.publicGameId}>
     <GamePanel game={game} variant={variant} lessMotion={lessMotion} muted interactionBlocked showExperience={false}/>
     {children}

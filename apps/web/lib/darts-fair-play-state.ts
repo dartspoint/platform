@@ -1,3 +1,4 @@
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
 import { scoreDart, type DartHit } from "./darts-rules";
 import { advanceMatchScoring, initialMatchScoring, restoreMatchScoring, type GameRules } from "./darts-match-rules";
 import type { FairPlayState } from "./darts-fair-play-client";
@@ -17,7 +18,7 @@ export function validThrowCoordinates(x: unknown, y: unknown): x is number {
 /** Recompute the hit from coordinates; never accept client-supplied points. */
 export function advanceFairPlayState(previous: FairPlayState, coordinates: Pick<DartHit, "x" | "y">): { state: FairPlayState; hit: DartHit } {
   const state = restoreFairPlayState(previous);
-  if (state.status !== "playing") throw new Error("Deze wedstrijd is afgelopen.");
+  if (state.status !== "playing") throw new Error(runtimeFeedback("feedback.deze_wedstrijd_is_afgelopen"));
   if (!validThrowCoordinates(coordinates.x, coordinates.y)) throw new Error("Ongeldige worpcoördinaten.");
   const hit = scoreDart(coordinates.x, coordinates.y);
   const result = advanceMatchScoring(state, hit);

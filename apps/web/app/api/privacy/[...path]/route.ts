@@ -1,3 +1,4 @@
+import {isTrustedOrigin} from '../../../../../../packages/i18n/src/domains';
 import {currentSupportIdentity} from '@/lib/server/support-auth';
 import {privacyExportDownload} from '../../../../../../packages/data/src/privacy';
 import {DomainError} from '../../../../../../packages/contracts/src/index';

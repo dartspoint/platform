@@ -1,4 +1,6 @@
 "use client";
+import {useI18n} from '@/lib/i18n/provider';
+
 
 import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Pause, Play, ShieldCheck, Sparkles, Target, Trophy, X } from "lucide-react";
@@ -23,6 +25,8 @@ function SocialIcon({ network }: { network: "facebook" | "instagram" | "tiktok" 
 }
 
 export function DartsOpening({ serverNow, opensAt }: { serverNow: number; opensAt: number }) {
+ const dpT = useI18n("opening").t;
+
   const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((opensAt - serverNow) / 1000)));
   const [paused, setPaused] = useState(false);
   const privacy = useRef<HTMLDialogElement>(null);
@@ -107,90 +111,90 @@ export function DartsOpening({ serverNow, opensAt }: { serverNow: number; opensA
       <span className={`${styles.crosshair} ${styles.crosshairA}`}/><span className={`${styles.crosshair} ${styles.crosshairB}`}/>
     </div>
     <header className={styles.topline}>
-      <div className={styles.est}><Target strokeWidth={1.3} aria-hidden="true"/><span>HET ONLINE DARTCAFÉ</span></div>
-      <div className={styles.opening}><span className={styles.statusDot} aria-hidden="true"/>VANAVOND GEOPEND</div>
+      <div className={styles.est}><Target strokeWidth={1.3} aria-hidden="true"/><span>{dpT("opening.het_online_dartcafe")}</span></div>
+      <div className={styles.opening}><span className={styles.statusDot} aria-hidden="true"/>{dpT("opening.vanavond_geopend")}</div>
     </header>
 
     <main className={styles.stage}>
-      <span className={styles.sideNote} aria-hidden="true">GOEDE AVONDEN BEGINNEN HIER</span>
-      <span className={`${styles.sideNote} ${styles.sideNoteRight}`} aria-hidden="true">DRIE PIJLEN. EINDELOOS PLEZIER.</span>
+      <span className={styles.sideNote} aria-hidden="true">{dpT("opening.goede_avonden_beginnen_hier")}</span>
+      <span className={`${styles.sideNote} ${styles.sideNoteRight}`} aria-hidden="true">{dpT("opening.drie_pijlen_eindeloos_plezier")}</span>
       <section className={styles.hero} aria-labelledby="opening-title">
-        <p className={styles.kicker}>ZET JE PIJLEN MAAR VAST KLAAR</p>
-        <img className={styles.logo} src="/brand/logo-premium.png" alt="DartsPoint" width={1448} height={1086} fetchPriority="high" decoding="async"/>
-        <h1 id="opening-title">Het oude gevoel.<br/><span>Een nieuw begin.</span></h1>
-        <p className={styles.tagline}>Vanavond gaan de dartbanen open.</p>
-        <div className={styles.countdown} role="group" aria-label="DartsPoint opent op 15 oktober 2026 om 20:00 uur, Nederlandse tijd.">
-          <p className={styles.countdownLabel}>DE EERSTE AVOND BEGINT OVER</p>
+        <p className={styles.kicker}>{dpT("opening.zet_je_pijlen_maar_vast_klaar")}</p>
+        <img className={styles.logo} src="/brand/logo-premium.png" alt={dpT("opening.dartspoint")} width={1448} height={1086} fetchPriority="high" decoding="async"/>
+        <h1 id="opening-title">{dpT("opening.het_oude_gevoel")}<br/><span>{dpT("opening.een_nieuw_begin")}</span></h1>
+        <p className={styles.tagline}>{dpT("opening.vanavond_gaan_de_dartbanen_open")}</p>
+        <div className={styles.countdown} role="group" aria-label={dpT("opening.dartspoint_opent_op_15_oktober_2026_om_20")}>
+          <p className={styles.countdownLabel}>{dpT("opening.de_eerste_avond_begint_over")}</p>
           <div className={styles.digits} aria-hidden="true">
-            <div><strong>{String(hours).padStart(2, "0")}</strong><span>UUR</span></div>
+            <div><strong>{String(hours).padStart(2, "0")}</strong><span>{dpT("opening.uur")}</span></div>
             <b>:</b>
-            <div><strong>{String(minutes).padStart(2, "0")}</strong><span>MINUTEN</span></div>
+            <div><strong>{String(minutes).padStart(2, "0")}</strong><span>{dpT("opening.minuten")}</span></div>
             <b>:</b>
-            <div><strong>{String(seconds).padStart(2, "0")}</strong><span>SECONDEN</span></div>
+            <div><strong>{String(seconds).padStart(2, "0")}</strong><span>{dpT("opening.seconden")}</span></div>
           </div>
-          <time className={styles.openingDate} dateTime="2026-10-15T18:00:00Z">15 oktober 2026 · 20:00 uur <span>(Nederland)</span></time>
+          <time className={styles.openingDate} dateTime="2026-10-15T18:00:00Z">{dpT("opening.15_oktober_2026_20_00_uur")} <span>{dpT("opening.nederland")}</span></time>
         </div>
-        <p className={styles.automatic}>{remaining === 0 ? "De deuren gaan zo open. Een ogenblik…" : "Blijf gerust hangen. Bij de opening ga je automatisch naar DartsPoint."}</p>
-        <noscript><p className={styles.noScript}>Ververs deze pagina vanaf 20:00 uur om DartsPoint te openen.</p></noscript>
+        <p className={styles.automatic}>{remaining === 0 ? dpT("opening.de_deuren_gaan_zo_open_een_ogenblik") : dpT("opening.blijf_gerust_hangen_bij_de_opening_ga_je")}</p>
+        <noscript><p className={styles.noScript}>{dpT("opening.ververs_deze_pagina_vanaf_20_00_uur_om")}</p></noscript>
       </section>
 
-      <article className={`${styles.tile} ${styles.tileOne}`} aria-label="Het DartsPoint-gevoel">
+      <article className={`${styles.tile} ${styles.tileOne}`} aria-label={dpT("opening.het_dartspoint_gevoel")}>
         <div className={styles.tileShell}>
-          <div className={styles.tileMeta}><span>JE KENT HET WEL</span><MessageCircle strokeWidth={1.3} aria-hidden="true"/></div>
-          <h2>“Nog eentje dan?”</h2><p>Voor je het weet, is het weer veel te laat.</p>
+          <div className={styles.tileMeta}><span>{dpT("opening.je_kent_het_wel")}</span><MessageCircle strokeWidth={1.3} aria-hidden="true"/></div>
+          <h2>{dpT("opening.nog_eentje_dan")}</h2><p>{dpT("opening.voor_je_het_weet_is_het_weer_veel")}</p>
           <div className={styles.tileIndex} aria-hidden="true"><span/><span/><span/></div>
         </div>
         <div className={styles.speechDot} aria-hidden="true"><MessageCircle strokeWidth={1.4}/></div>
       </article>
-      <article className={`${styles.tile} ${styles.tileTwo}`} aria-label="DartsPoint Divisies">
+      <article className={`${styles.tile} ${styles.tileTwo}`} aria-label={dpT("opening.dartspoint_divisies")}>
         <div className={styles.sticker} aria-hidden="true"><ShieldCheck strokeWidth={1.1}/></div>
         <div className={styles.tileShell}>
-          <div className={styles.tileMeta}><span>JOUW VOLGENDE NIVEAU</span><Trophy strokeWidth={1.3} aria-hidden="true"/></div>
-          <h2><small>DartsPoint</small>Divisies</h2><p>Jouw competitie. Jouw weg naar de top.</p>
+          <div className={styles.tileMeta}><span>{dpT("opening.jouw_volgende_niveau")}</span><Trophy strokeWidth={1.3} aria-hidden="true"/></div>
+          <h2><small>{dpT("opening.dartspoint")}</small>{dpT("opening.divisies")}</h2><p>{dpT("opening.jouw_competitie_jouw_weg_naar_de_top")}</p>
           <div className={styles.tileIndex} aria-hidden="true"><span/><span/><span/></div>
         </div>
       </article>
-      <article className={`${styles.tile} ${styles.tileThree}`} aria-label="De DartsPoint-community">
+      <article className={`${styles.tile} ${styles.tileThree}`} aria-label={dpT("opening.de_dartspoint_community")}>
         <div className={styles.tileShell}>
-          <div className={styles.tileMeta}><span>MEER DAN EEN POTJE</span><MessageCircle strokeWidth={1.3} aria-hidden="true"/></div>
-          <h2>Jouw vaste stek.<br/>Online.</h2><p>Dezelfde gezelligheid. Nieuwe rivalen.</p>
+          <div className={styles.tileMeta}><span>{dpT("opening.meer_dan_een_potje")}</span><MessageCircle strokeWidth={1.3} aria-hidden="true"/></div>
+          <h2>{dpT("opening.jouw_vaste_stek")}<br/>{dpT("opening.online")}</h2><p>{dpT("opening.dezelfde_gezelligheid_nieuwe_rivalen")}</p>
           <div className={styles.tileIndex} aria-hidden="true"><span/><span/><span/></div>
         </div>
       </article>
-      <article className={`${styles.tile} ${styles.tileFour}`} aria-label="Spelen op DartsPoint">
+      <article className={`${styles.tile} ${styles.tileFour}`} aria-label={dpT("opening.spelen_op_dartspoint")}>
         <div className={styles.tileShell}>
-          <div className={styles.tileMeta}><span>ELKE WORP TELT</span><Sparkles strokeWidth={1.3} aria-hidden="true"/></div>
-          <h2>Tijd voor een 501.</h2><p>Even een potje. Of de hele avond.</p>
+          <div className={styles.tileMeta}><span>{dpT("opening.elke_worp_telt")}</span><Sparkles strokeWidth={1.3} aria-hidden="true"/></div>
+          <h2>{dpT("opening.tijd_voor_een_501")}</h2><p>{dpT("opening.even_een_potje_of_de_hele_avond")}</p>
           <div className={styles.tileIndex} aria-hidden="true"><span/><span/><span/></div>
         </div>
-        <div className={styles.miniScore} aria-hidden="true"><b>180</b><span>DAT<br/>GEVOEL.</span></div>
+        <div className={styles.miniScore} aria-hidden="true"><b>180</b><span>{dpT("opening.dat")}<br/>{dpT("opening.gevoel")}</span></div>
       </article>
     </main>
 
     <footer className={styles.bottomline}>
-      <div className={styles.footerCopy}>Een nieuwe ronde.<span>DEZELFDE LIEFDE VOOR DARTS.</span></div>
-      <nav className={styles.socials} aria-label="DartsPoint op sociale media">
-        <a href="https://www.facebook.com/share/19GY886bNL/" target="_blank" rel="noopener noreferrer" aria-label="Facebook" title="Facebook"><SocialIcon network="facebook"/></a>
-        <a href="https://www.tiktok.com/@dartspoint" target="_blank" rel="noopener noreferrer" aria-label="TikTok" title="TikTok"><SocialIcon network="tiktok"/></a>
-        <a href="https://www.instagram.com/dartspointnl/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" title="Instagram"><SocialIcon network="instagram"/></a>
+      <div className={styles.footerCopy}>{dpT("opening.een_nieuwe_ronde")}<span>{dpT("opening.dezelfde_liefde_voor_darts")}</span></div>
+      <nav className={styles.socials} aria-label={dpT("opening.dartspoint_op_sociale_media")}>
+        <a href="https://www.facebook.com/share/19GY886bNL/" target="_blank" rel="noopener noreferrer" aria-label={dpT("opening.facebook")} title={dpT("opening.facebook")}><SocialIcon network="facebook"/></a>
+        <a href="https://www.tiktok.com/@dartspoint" target="_blank" rel="noopener noreferrer" aria-label={dpT("opening.tiktok")} title={dpT("opening.tiktok")}><SocialIcon network="tiktok"/></a>
+        <a href="https://www.instagram.com/dartspointnl/" target="_blank" rel="noopener noreferrer" aria-label={dpT("opening.instagram")} title={dpT("opening.instagram")}><SocialIcon network="instagram"/></a>
       </nav>
       <div className={styles.footerActions}>
-        <button type="button" className={styles.privacyButton} onClick={() => privacy.current?.showModal()}>Privacy</button>
-        <button type="button" className={styles.motionToggle} onClick={() => setPaused(value => !value)} aria-label={paused ? "Hervat animaties" : "Pauzeer animaties"} title={paused ? "Hervat animaties" : "Pauzeer animaties"} aria-pressed={paused}>
+        <button type="button" className={styles.privacyButton} onClick={() => privacy.current?.showModal()}>{dpT("opening.privacy")}</button>
+        <button type="button" className={styles.motionToggle} onClick={() => setPaused(value => !value)} aria-label={paused ? dpT("opening.hervat_animaties") : dpT("opening.pauzeer_animaties")} title={paused ? dpT("opening.hervat_animaties") : dpT("opening.pauzeer_animaties")} aria-pressed={paused}>
           {paused ? <Play aria-hidden="true"/> : <Pause aria-hidden="true"/>}
         </button>
       </div>
     </footer>
-    <nav aria-label="Informatie en contact" style={{display:'flex',flexWrap:'wrap',justifyContent:'center',gap:'10px 20px',padding:'10px 20px 24px',fontSize:12}}>
-      <a href="/algemene-voorwaarden">Voorwaarden</a><a href="/privacy">Privacyverklaring</a><a href="/handleiding">Handleiding</a><a href="/support">Support</a><a href="/contact">Contact · Ontwikkeld door DG Webservices</a>
+    <nav aria-label={dpT("opening.informatie_en_contact")} style={{display:'flex',flexWrap:'wrap',justifyContent:'center',gap:'10px 20px',padding:'10px 20px 24px',fontSize:12}}>
+      <a href="/algemene-voorwaarden">{dpT("opening.voorwaarden")}</a><a href="/privacy">{dpT("opening.privacyverklaring")}</a><a href="/handleiding">{dpT("opening.handleiding")}</a><a href="/support">{dpT("opening.support")}</a><a href="/contact">{dpT("opening.contact_ontwikkeld_door_dg_webservices")}</a>
     </nav>
 
     <dialog ref={privacy} className={styles.privacyDialog} aria-labelledby="opening-privacy-title" onClick={event => { if (event.target === event.currentTarget) privacy.current?.close(); }}>
-      <button className={styles.dialogClose} type="button" aria-label="Sluiten" onClick={() => privacy.current?.close()}><X aria-hidden="true"/></button>
-      <h2 id="opening-privacy-title">Even aftellen.</h2>
-      <p>Deze openingspagina bevat geen aanmeldformulier en vraagt niet om je e-mailadres. De teller controleert bij DartsPoint wanneer de dartbanen open zijn.</p>
-      <p>Via de sociale knoppen bezoek je de pagina van DartsPoint op het gekozen platform. Daar geldt het privacybeleid van dat platform.</p>
-      <button className={styles.dialogAction} type="button" onClick={() => privacy.current?.close()}>Terug naar het aftellen</button>
+      <button className={styles.dialogClose} type="button" aria-label={dpT("opening.sluiten")} onClick={() => privacy.current?.close()}><X aria-hidden="true"/></button>
+      <h2 id="opening-privacy-title">{dpT("opening.even_aftellen")}</h2>
+      <p>{dpT("opening.deze_openingspagina_bevat_geen_aanmeldformulier_en_vraagt_niet")}</p>
+      <p>{dpT("opening.via_de_sociale_knoppen_bezoek_je_de_pagina")}</p>
+      <button className={styles.dialogAction} type="button" onClick={() => privacy.current?.close()}>{dpT("opening.terug_naar_het_aftellen")}</button>
     </dialog>
   </div>;
 }

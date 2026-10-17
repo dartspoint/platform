@@ -1,4 +1,7 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+import {useI18n} from '@/lib/i18n/provider';
+
 
 import {useEffect,useRef,useState} from 'react';
 
@@ -32,6 +35,10 @@ function loadTurnstile():Promise<TurnstileApi>{
 }
 
 export function Turnstile({onToken,action='login'}:{onToken:(token:string)=>void;action?:'login'|'support'}){
+ const dpFeedback=useI18n("feedback").t;
+
+ const {t:dpT,locale}=useI18n("turnstile");
+
  const ref=useRef<HTMLDivElement>(null),callback=useRef(onToken);callback.current=onToken;
  const [error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  const key=process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
@@ -50,24 +57,24 @@ export function Turnstile({onToken,action='login'}:{onToken:(token:string)=>void
   void loadTurnstile().then(loaded=>{
    if(cancelled)return;api=loaded;
    id=api.render(element,{
-    sitekey:key,theme:'dark',language:'nl',action,size:compact?'compact':'flexible',
+    sitekey:key,theme:'dark',language:locale,action,size:compact?'compact':'flexible',
     callback:(token:string)=>{if(!cancelled){setError('');callback.current(token);}},
-    'expired-callback':()=>fail('De controle is verlopen. Probeer het nog eens.'),
-    'timeout-callback':()=>fail('De controle duurde te lang. Probeer het nog eens.'),
-    'error-callback':()=>fail('De controle lukte niet. Probeer het nog eens.'),
+    'expired-callback':()=>fail(dpFeedback("feedback.de_controle_is_verlopen_probeer_het_nog_eens")),
+    'timeout-callback':()=>fail(dpFeedback("feedback.de_controle_duurde_te_lang_probeer_het_nog")),
+    'error-callback':()=>fail(dpFeedback("feedback.de_controle_lukte_niet_probeer_het_nog_eens")),
    });
-  }).catch(()=>fail('De veiligheidscontrole kon niet laden. Controleer je verbinding en probeer het opnieuw.'));
+  }).catch(()=>fail(dpFeedback("feedback.de_veiligheidscontrole_kon_niet_laden_controleer_je_verbinding")));
   return ()=>{
    cancelled=true;observer.disconnect();callback.current('');
    if(id!==undefined)api?.remove(id);
   };
- },[key,attempt,action]);
+ },[key,attempt,action,locale]);
  if(!key)return null;
  return <div>
   <div ref={ref}/>
   {error&&<div style={{marginTop:12,fontSize:13}}>
    <p role="alert">{error}</p>
-   <button type="button" className="dp-auth-inline" onClick={()=>{callback.current('');setAttempt(value=>value+1);}}>Opnieuw proberen</button>
+   <button type="button" className="dp-auth-inline" onClick={()=>{callback.current('');setAttempt(value=>value+1);}}>{dpT("turnstile.opnieuw_proberen")}</button>
   </div>}
  </div>;
 }

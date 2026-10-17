@@ -1,0 +1,37 @@
+# Import both environments into the single existing native Caddy service.
+# Split DNS/hosts resolves these two names to the VPS Tailscale IP for testers.
+staging.dartspoint.nl, staging.dartspoint.app {
+    # DartsPoint signed receiving webhook 2026-10-15; only this exact POST is public.
+    @outside {
+        not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48 127.0.0.1 ::1
+        not path /api/support/inbound
+    }
+    @support_wrong_method {
+        path /api/support/inbound
+        not method POST
+    }
+    respond @support_wrong_method 405
+    respond @outside 403
+    encode zstd gzip
+    @internal path /internal /internal/*
+    respond @internal 404
+    header X-Robots-Tag "noindex, nofollow, noarchive"
+    header X-Content-Type-Options nosniff
+    reverse_proxy 127.0.0.1:3001
+}
+realtime.staging.dartspoint.nl {
+    @outside not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48 127.0.0.1 ::1
+    respond @outside 403
+    @wrong_origin {
+        header Origin *
+        expression `{header.Origin} != "https://staging.dartspoint.nl" && {header.Origin} != "https://staging.dartspoint.app"`
+    }
+    respond @wrong_origin 403
+    @internal path /internal /internal/*
+    respond @internal 404
+    header X-Robots-Tag "noindex, nofollow, noarchive"
+    reverse_proxy 127.0.0.1:2568 {
+        stream_close_delay 5m
+    }
+}
+# The same source restriction covers HTTP matchmaking and all WebSocket paths.

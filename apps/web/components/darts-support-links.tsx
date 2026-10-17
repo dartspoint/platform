@@ -1,4 +1,6 @@
 "use client";
+import {useI18n} from '@/lib/i18n/provider';
+
 import {useEffect,useState} from 'react';
 import {CircleHelp,MessageCircle,ShieldCheck,UserRound} from 'lucide-react';
 import {supportApi,type SupportIdentity} from '@/lib/support-client';
@@ -10,6 +12,8 @@ export function useSupportIdentity(enabled=true){
 }
 
 export function SupportQuickLinks({className='',newTab=false,account=true}:{className?:string;newTab?:boolean;account?:boolean}){
+ const dpT = useI18n("supportLinks").t;
+
  const identity=useSupportIdentity();const target=newTab?'_blank':undefined,rel=newTab?'noopener noreferrer':undefined;
- return <><a className={className} href="/support" target={target} rel={rel}><CircleHelp size={17}/>Hulp en support{newTab?' ↗':''}</a><a className={className} href="/mijn-tickets" target={target} rel={rel}><MessageCircle size={17}/>Mijn tickets{newTab?' ↗':''}</a>{account&&<a className={className} href="/account/privacy" target={target} rel={rel}><UserRound size={17}/>Account en privacy{newTab?' ↗':''}</a>}{!!identity?.roles.length&&<a className={className} href="/team/support" target={target} rel={rel}><ShieldCheck size={17}/>Team Support{newTab?' ↗':''}</a>}</>;
+ return <><a className={className} href="/support" target={target} rel={rel}><CircleHelp size={17}/>{dpT("supportLinks.hulp_en_support")}{newTab?' ↗':''}</a><a className={className} href="/mijn-tickets" target={target} rel={rel}><MessageCircle size={17}/>{dpT("supportLinks.mijn_tickets")}{newTab?' ↗':''}</a>{account&&<a className={className} href="/account/privacy" target={target} rel={rel}><UserRound size={17}/>{dpT("supportLinks.account_en_privacy")}{newTab?' ↗':''}</a>}{!!identity?.roles.length&&<a className={className} href="/team/support" target={target} rel={rel}><ShieldCheck size={17}/>{dpT("supportLinks.team_support")}{newTab?' ↗':''}</a>}</>;
 }

@@ -1,4 +1,8 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+import {useI18n} from '@/lib/i18n/provider';
+
+import {RoomBadge,RoomMetadataFilters,matchesRoomMetadata,EMPTY_ROOM_FILTER} from "./room-metadata";
 import {SupportQuickLinks} from "./darts-support-links";
 import {ChatBadge} from "./chat-badge";
 import {DesktopCommunity,RoomCommunity} from "./darts-workspace";
@@ -38,22 +42,26 @@ type Section = "play" | "rooms" | "rankings" | "tournaments" | "friends";
 
 type SpectatorAdmission={matchId:string;publicGameId:number;roomId:string;channelId:string};
 function SpectatorView({ matchId, variant, lessMotion, onInvite, onProfile, onMessage, onSpectate, onPlayNext }: { matchId?:string; variant:DesignId; lessMotion:boolean; onInvite:(id:string)=>void; onProfile:(id:string)=>void; onMessage:(id:string)=>void; onSpectate:(id:string)=>void; onPlayNext:()=>void }) {
+ const dpFeedback=useI18n("feedback").t;
+
+ const dpT = useI18n("app").t;
+
   const platform=usePlatform();
   const [admission,setAdmission]=useState<SpectatorAdmission|null>(null),[message,setMessage]=useState(''),[tab,setTab]=useState('match');
   useEffect(()=>{
     let cancelled=false;setAdmission(null);setMessage('');setTab('match');
-    if(!matchId){setMessage('Deze speler speelt op dit moment geen wedstrijd.');return;}
+    if(!matchId){setMessage(dpT("app.deze_speler_speelt_op_dit_moment_geen_wedstrijd"));return;}
     void mutate<SpectatorAdmission>('match/spectate',{matchId}).then(value=>{
       if(cancelled)return;
-      if(value.matchId!==matchId){setMessage('Meekijken lukt nu niet. Probeer het opnieuw.');return;}
+      if(value.matchId!==matchId){setMessage(dpT("app.meekijken_lukt_nu_niet_probeer_het_opnieuw"));return;}
       setAdmission(value);
-    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:'Je kunt bij deze wedstrijd niet meekijken.');});
+    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:dpFeedback("feedback.je_kunt_bij_deze_wedstrijd_niet_meekijken"));});
     return()=>{cancelled=true;};
   },[matchId]);
   const roomName=platform.rooms.find(room=>room.id===admission?.roomId)?.name??'';
   return <div className="spectator-view">
-    <div className="spectator-status"><span className="live-pill"><i/> LIVE</span><span><Eye size={14}/>Meekijken{admission?` · #${admission.publicGameId}`:''}</span></div>
-    {message?<p className="spectator-note" role="status">{message}</p>:!admission?<p className="spectator-note" role="status">Even geduld, je kijkt zo mee…</p>:<SpectatorGame matchId={admission.matchId} variant={variant} lessMotion={lessMotion}>
+    <div className="spectator-status"><span className="live-pill"><i/> {dpT("app.live")}</span><span><Eye size={14}/>{dpT("app.meekijken")}{admission?dpT("app.label",{publicGameId:admission.publicGameId}):''}</span></div>
+    {message?<p className="spectator-note" role="status">{message}</p>:!admission?<p className="spectator-note" role="status">{dpT("app.even_geduld_je_kijkt_zo_mee")}</p>:<SpectatorGame matchId={admission.matchId} variant={variant} lessMotion={lessMotion}>
       <ChatPanel gameId={admission.matchId} roomId={admission.roomId} roomName={roomName} activeTab={tab} onTabChange={setTab} embedded compact readEnabled quiet={false} onInvite={onInvite} onProfile={onProfile} onMessage={onMessage} onSpectate={onSpectate}/>
       <MatchQueue matchId={admission.matchId} onPlayNext={onPlayNext}/>
     </SpectatorGame>}
@@ -61,6 +69,10 @@ function SpectatorView({ matchId, variant, lessMotion, onInvite, onProfile, onMe
 }
 
 export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
+ const dpFeedback=useI18n("feedback").t;
+
+ const dpT = useI18n("app").t;
+
   const platform=usePlatform();
   const [panel, setPanel] = useState<SocialPanel | null>(null);
   const [desktop, setDesktop] = useState(false);
@@ -188,7 +200,7 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
     const active=platform.matches.some(m=>m.players?.some((p:any)=>p.id===platform.actor.id));
     if(!active){game.clearMatchSelection();setPanel(null);}else setPanel('chat');
     try{sessionStorage.setItem('dartspoint-room-v1',selected.name);}catch{}
-    setToast(`Welkom in ${selected.name}.`);
+    setToast(dpT("app.welkom_in",{name:selected.name}));
   }
   async function leaveGame(destination: "lobby" | "logout") {
     if (destination === "logout") await endDemoSession();
@@ -207,11 +219,11 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
     } catch {}
     await game.startNewMatch(invite, setup); setOpponent(playerByName(invite).name); setInvite(null); setPanel(null);
     setChatTab("match");
-    setToast("De uitnodiging aan " + playerByName(invite).name + " is verstuurd.");
+    setToast(dpFeedback("feedback.de_uitnodiging_aan") + playerByName(invite).name + dpFeedback("feedback.is_verstuurd"));
   }
   async function openPrivateChat(name: string) {
     if (playerId(name) === platform.actor?.id) return;
-    if (isBlocked(name)) { setToast("Je hebt deze speler geblokkeerd. Deblokkeer via het profiel om contact te maken."); return; }
+    if (isBlocked(name)) { setToast(dpT("app.je_hebt_deze_speler_geblokkeerd_deblokkeer_via_het")); return; }
     const channelId=await openPrivateChatTab(name);if(!channelId)return;
     setChatTab(`private:${channelId}`); setProfile(null); setPanel("chat");
     if (desktop) requestAnimationFrame(() => desktopChatRef.current?.querySelector<HTMLInputElement>(".chat-compose input")?.focus({ preventScroll: true }));
@@ -222,8 +234,8 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
   }
 
   function invitePlayer(name: string) {
-    if (playerId(name) === platform.actor?.id) { setToast("Kies een andere speler om een wedstrijd te starten."); return; }
-    if (isBlocked(name)) { setToast("Deze speler is geblokkeerd. Deblokkeer via het profiel om een uitnodiging te sturen."); return; }
+    if (playerId(name) === platform.actor?.id) { setToast(dpT("app.kies_een_andere_speler_om_een_wedstrijd_te")); return; }
+    if (isBlocked(name)) { setToast(dpT("app.deze_speler_is_geblokkeerd_deblokkeer_via_het_profiel")); return; }
     const busy=invitationReason(name);if(busy){setToast(busy);return;}setInvite(playerId(name)??name);
   }
 
@@ -241,36 +253,36 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
   return <MotionConfig reducedMotion={lessMotion ? "always" : "user"}>
     <div data-room-context={roomContext} className={`darts-app dp-fullscreen design-${variant} ${overlayPanel && !desktop ? "has-social-panel" : ""} ${desktop ? "is-desktop-workspace" : ""} ${!hasGame ? "dp-room-mode" : ""} ${lessMotion ? "reduce-motion" : ""}`}>
       <header className="dp-game-header">
-        <a className="dp-header-lobby" href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }} aria-label="Terug naar de lobby"><ArrowLeft size={18}/><span>Lobby</span></a>
-        <a className="dp-header-logo" href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }} aria-label="DartsPoint · naar de lobby"><Brand/></a>
-        <button className="dp-header-room" onClick={() => navigate("rooms")} aria-label={`Bekijk kamers · ${room}, ${roomCount} van ${roomCapacity} spelers`} aria-expanded={desktop ? roomView === "rooms" : panel === "room"}>
+        <a className="dp-header-lobby" href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }} aria-label={dpT("app.terug_naar_de_lobby")}><ArrowLeft size={18}/><span>{dpT("app.lobby")}</span></a>
+        <a className="dp-header-logo" href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }} aria-label={dpT("app.dartspoint_naar_de_lobby")}><Brand/></a>
+        <button className="dp-header-room" onClick={() => navigate("rooms")} aria-label={dpT("app.bekijk_kamers_van_spelers",{room:room,roomCount:roomCount,roomCapacity:roomCapacity})} aria-expanded={desktop ? roomView === "rooms" : panel === "room"}>
           <span className="dp-header-online" aria-hidden="true"/><span>{room}</span><small>{roomCount}/{roomCapacity}</small><ChevronDown size={14}/>
         </button>
-        <div className="dp-desktop-nav" aria-label="Meer in DartsPoint">
-          <button onClick={() => togglePanel("ladder")} className={panel === "ladder" ? "active" : ""}><Trophy size={17}/><span>Ladder</span></button>
-          <button onClick={() => togglePanel("tournaments")} className={panel === "tournaments" ? "active" : ""}><Target size={17}/><span>Events</span></button>
-          <button onClick={() => togglePanel("profile")} className={panel === "profile" ? "active" : ""} aria-label="Spelersmenu openen"><Settings2 size={17}/></button>
+        <div className="dp-desktop-nav" aria-label={dpT("app.meer_in_dartspoint")}>
+          <button onClick={() => togglePanel("ladder")} className={panel === "ladder" ? "active" : ""}><Trophy size={17}/><span>{dpT("app.ladder")}</span></button>
+          <button onClick={() => togglePanel("tournaments")} className={panel === "tournaments" ? "active" : ""}><Target size={17}/><span>{dpT("app.events")}</span></button>
+          <button onClick={() => togglePanel("profile")} className={panel === "profile" ? "active" : ""} aria-label={dpT("app.spelersmenu_openen")}><Settings2 size={17}/></button>
         </div>
-        <div className="dp-header-actions"><a className="dp-header-notifications dp-header-help" href="/support" target="_blank" rel="noopener noreferrer" aria-label="Hulp en tickets openen in een nieuw tabblad"><CircleHelp size={19}/></a>
-          <button className="dp-header-notifications" onClick={() => setNotifications(true)} aria-label="Meldingen bekijken"><Bell size={19}/>{platform.notifications.some(notification=>!notification.read_at)&&<i aria-hidden="true"/>}</button>
-          <button className="dp-header-profile" onClick={() => openProfile(selfName())} aria-label="Mijn profiel bekijken">
+        <div className="dp-header-actions"><a className="dp-header-notifications dp-header-help" href="/support" target="_blank" rel="noopener noreferrer" aria-label={dpT("app.hulp_en_tickets_openen_in_een_nieuw_tabblad")}><CircleHelp size={19}/></a>
+          <button className="dp-header-notifications" onClick={() => setNotifications(true)} aria-label={dpT("app.meldingen_bekijken")}><Bell size={19}/>{platform.notifications.some(notification=>!notification.read_at)&&<i aria-hidden="true"/>}</button>
+          <button className="dp-header-profile" onClick={() => openProfile(selfName())} aria-label={dpT("app.mijn_profiel_bekijken")}>
             <span className="dp-header-avatar" aria-hidden="true">{selfName().slice(0,1).toUpperCase()}<span/></span>
             <span className="dp-header-profile-details"><PlayerName name={selfName()}/><small><RatingValue player={playerByName(selfName())} interactive={false}/></small></span>
           </button>
         </div>
       </header>
       <div className="dp-workspace">
-        <main ref={stageRef} tabIndex={-1} className="dp-fullscreen-stage" id="main-content" aria-label="Dartwedstrijd">
+        <main ref={stageRef} tabIndex={-1} className="dp-fullscreen-stage" id="main-content" aria-label={dpT("app.dartwedstrijd")}>
           {hasGame?<GamePanel game={game} variant={variant} muted={muted} interactionBlocked={interactionBlocked} lessMotion={lessMotion}/>:room?<div className="dp-room-home"><RoomCommunity roomId={roomId} onChooseRoom={()=>navigate("rooms")} onPlayers={()=>{if(desktop)document.querySelector<HTMLInputElement>(".dp-desktop-players .players-toolbar input")?.focus();else {setRoomView("players");setPanel("room");}}} onTournaments={()=>togglePanel("tournaments")} onProfile={openProfile}/></div>:<div className="dp-room-selection"><RoomList currentRoom="" onSelect={chooseRoom}/></div>}
         </main>
         {desktop && <DesktopCommunity {...chatProps} chatRef={desktopChatRef}/>}
       </div>
-      <nav className="dp-play-nav" aria-label="Spelnavigatie">
-        <button ref={playButton} className={!panel ? "active" : ""} onClick={() => hasGame?setPanel(null):window.location.assign("/oefenen")} aria-label={hasGame?"Toon de wedstrijd":"Oefenen in deze kamer"} aria-pressed={!panel}><Target size={21}/><span>{hasGame?"Spelen":"Oefenen"}</span></button>
-        <button className={panel === "room" ? "active" : ""} onClick={() => togglePanel("room")} aria-expanded={panel === "room"} aria-controls={panel === "room" ? "dp-social-panel" : undefined}><Users size={21}/><span>Kamer</span></button>
-        <button className={panel === "chat" ? "active" : ""} onClick={() => togglePanel("chat")} aria-expanded={panel === "chat"} aria-controls={panel === "chat" ? "dp-social-panel" : undefined}><MessageCircle size={21}/><span>Chat</span><ChatBadge count={chatUnread}/></button>
-        <button className={panel === "ladder" ? "active" : ""} onClick={() => togglePanel("ladder")} aria-expanded={panel === "ladder"}><Trophy size={21}/><span>Ladder</span></button>
-        <button className={panel === "profile" ? "active" : ""} onClick={() => togglePanel("profile")} aria-expanded={panel === "profile"}><Settings2 size={21}/><span>Meer</span></button>
+      <nav className="dp-play-nav" aria-label={dpT("app.spelnavigatie")}>
+        <button ref={playButton} className={!panel ? "active" : ""} onClick={() => hasGame?setPanel(null):window.location.assign("/oefenen")} aria-label={hasGame?dpT("app.toon_de_wedstrijd"):dpT("app.oefenen_in_deze_kamer")} aria-pressed={!panel}><Target size={21}/><span>{hasGame?dpT("app.spelen"):dpT("app.oefenen")}</span></button>
+        <button className={panel === "room" ? "active" : ""} onClick={() => togglePanel("room")} aria-expanded={panel === "room"} aria-controls={panel === "room" ? "dp-social-panel" : undefined}><Users size={21}/><span>{dpT("app.kamer")}</span></button>
+        <button className={panel === "chat" ? "active" : ""} onClick={() => togglePanel("chat")} aria-expanded={panel === "chat"} aria-controls={panel === "chat" ? "dp-social-panel" : undefined}><MessageCircle size={21}/><span>{dpT("app.chat")}</span><ChatBadge count={chatUnread}/></button>
+        <button className={panel === "ladder" ? "active" : ""} onClick={() => togglePanel("ladder")} aria-expanded={panel === "ladder"}><Trophy size={21}/><span>{dpT("app.ladder")}</span></button>
+        <button className={panel === "profile" ? "active" : ""} onClick={() => togglePanel("profile")} aria-expanded={panel === "profile"}><Settings2 size={21}/><span>{dpT("app.meer")}</span></button>
       </nav>
 
       <Sheet open={overlayPanel} onOpenChange={open => !open && setPanel(null)} modal={false}>
@@ -280,42 +292,42 @@ export function DartsApp({ variant = "club" }: { variant?: DesignId }) {
           onCloseAutoFocus={event => { event.preventDefault(); (desktop ? stageRef.current : playButton.current)?.focus({ preventScroll: true }); }}>
           <span className="dp-sheet-handle" aria-hidden="true"/>
           <SheetHeader className={panel === "chat" ? "sr-only" : "dp-social-heading"}>
-            {panel === "room" && <button className="dp-room-back" onClick={() => setRoomView(current => current === "players" ? "rooms" : "players")} aria-label={roomView === "players" ? "Bekijk alle kamers" : `Terug naar ${room}`}><ArrowLeft size={20}/></button>}
-            <div><SheetTitle>{panelTitle}</SheetTitle><SheetDescription>{panel === "room" ? roomView === "players" ? `${roomCount} / ${roomCapacity} spelers` : "Kies jouw kamer · maximaal 50 spelers" : panel === "chat" ? "Spelchat, kamerchat en privégesprekken" : "Jouw wedstrijd blijft op de achtergrond actief"}</SheetDescription></div>
+            {panel === "room" && <button className="dp-room-back" onClick={() => setRoomView(current => current === "players" ? "rooms" : "players")} aria-label={roomView === "players" ? dpT("app.bekijk_alle_kamers") : dpT("app.terug_naar",{room:room})}><ArrowLeft size={20}/></button>}
+            <div><SheetTitle>{panelTitle}</SheetTitle><SheetDescription>{panel === "room" ? roomView === "players" ? dpT("app.spelers",{roomCount:roomCount,roomCapacity:roomCapacity}) : dpT("app.kies_jouw_kamer_maximaal_50_spelers") : panel === "chat" ? dpT("app.spelchat_kamerchat_en_privegesprekken") : dpT("app.jouw_wedstrijd_blijft_op_de_achtergrond_actief")}</SheetDescription></div>
           </SheetHeader>
-          <button ref={closePanelButton} className="dp-social-close" onClick={() => setPanel(null)} aria-label="Paneel sluiten"><X size={20}/></button>
+          <button ref={closePanelButton} className="dp-social-close" onClick={() => setPanel(null)} aria-label={dpT("app.paneel_sluiten")}><X size={20}/></button>
           <div className={`dp-social-body ${panel === "chat" ? "dp-social-body-chat" : ""}`}>
             {panel === "room" && (roomView === "players" ? <PlayersTable {...playerProps}/> : <RoomList currentRoom={room} onSelect={chooseRoom}/>)}
             {!desktop && panel === "chat" && <ChatPanel {...chatProps}/>}
-            {panel === "ladder" && <><a className="dp-panel-link" href="/divisies"><Trophy size={17}/>Divisieladder & speelrondes<ArrowUpRight size={16}/></a><RankingPanel onProfile={openProfile}/><button className="dp-panel-link" onClick={() => setPanel("tournaments")}><Trophy size={17}/>Bekijk de toernooien<ArrowUpRight size={16}/></button></>}
+            {panel === "ladder" && <><a className="dp-panel-link" href="/divisies"><Trophy size={17}/>{dpT("app.divisieladder_speelrondes")}<ArrowUpRight size={16}/></a><RankingPanel onProfile={openProfile}/><button className="dp-panel-link" onClick={() => setPanel("tournaments")}><Trophy size={17}/>{dpT("app.bekijk_de_toernooien")}<ArrowUpRight size={16}/></button></>}
             {!desktop && panel === "friends" && <><FriendsPanel {...friendProps}/><LiveMatches onSpectate={setSpectate}/></>}
             {panel === "tournaments" && <PublishedTournaments/>}
             {panel === "profile" && <>
               <div className="dp-profile-menu"><SupportQuickLinks newTab/>
-                <button onClick={() => openProfile(selfName())}><UserRound size={18}/>Mijn profiel</button>
-                <button onClick={() => setPanel("friends")}><Users size={18}/>Vrienden</button>
-                <button onClick={() => setSettingsOpen(true)}><Settings2 size={18}/>Instellingen</button>
-                <a href="/oefenen?les=1"><CircleHelp size={18}/>Speluitleg in vijf pijlen</a>
-                <a href="/oefenen"><Target size={18}/>Oefenen</a>
-                <a href="/clubhuis"><Trophy size={18}/>Mijn wedstrijden en prestaties</a>
-                {canManageRoom(currentRoom?.id??"")&&<button onClick={() => setModerationOpen(true)}><ShieldCheck size={18}/>Kamerbeheer</button>}
-                {isOwner && <a href="/beheer"><ShieldCheck size={18}/>Platformbeheer</a>}
-                <button onClick={() => setNotifications(true)}><Bell size={18}/>Meldingen</button>
-                <button onClick={() => setPanel("tournaments")}><Trophy size={18}/>Toernooien</button>
-                <a href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }}><ArrowLeft size={18}/>Terug naar de lobby</a>
-                <button onClick={() => requestLeave("logout")}><LogOut size={18}/>Uitloggen</button>
+                <button onClick={() => openProfile(selfName())}><UserRound size={18}/>{dpT("app.mijn_profiel")}</button>
+                <button onClick={() => setPanel("friends")}><Users size={18}/>{dpT("app.vrienden")}</button>
+                <button onClick={() => setSettingsOpen(true)}><Settings2 size={18}/>{dpT("app.instellingen")}</button>
+                <a href="/oefenen?les=1"><CircleHelp size={18}/>{dpT("app.speluitleg_in_vijf_pijlen")}</a>
+                <a href="/oefenen"><Target size={18}/>{dpT("app.oefenen")}</a>
+                <a href="/clubhuis"><Trophy size={18}/>{dpT("app.mijn_wedstrijden_en_prestaties")}</a>
+                {canManageRoom(currentRoom?.id??"")&&<button onClick={() => setModerationOpen(true)}><ShieldCheck size={18}/>{dpT("app.kamerbeheer")}</button>}
+                {isOwner && <a href="/beheer"><ShieldCheck size={18}/>{dpT("app.platformbeheer")}</a>}
+                <button onClick={() => setNotifications(true)}><Bell size={18}/>{dpT("app.meldingen")}</button>
+                <button onClick={() => setPanel("tournaments")}><Trophy size={18}/>{dpT("app.toernooien")}</button>
+                <a href="/lobby" onClick={event => { event.preventDefault(); requestLeave("lobby"); }}><ArrowLeft size={18}/>{dpT("app.terug_naar_de_lobby")}</a>
+                <button onClick={() => requestLeave("logout")}><LogOut size={18}/>{dpT("app.uitloggen")}</button>
               </div>
             </>}
           </div>
         </SheetContent>
       </Sheet>
-      <AnimatePresence>{toast && <motion.div className="app-toast dp-play-toast" role="status" initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}><Check size={17}/><span>{toast}</span><button onClick={() => setToast("")} aria-label="Sluiten"><X size={14}/></button></motion.div>}</AnimatePresence>
+      <AnimatePresence>{toast && <motion.div className="app-toast dp-play-toast" role="status" initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}><Check size={17}/><span>{toast}</span><button onClick={() => setToast("")} aria-label={dpT("app.sluiten")}><X size={14}/></button></motion.div>}</AnimatePresence>
     <MatchInviteDialog opponent={invite} onClose={() => setInvite(null)} onStart={acceptInvite} initialRanked={currentRoom?.category === "ranked"}/>
-    <Dialog open={!!profile} onOpenChange={open => !open && setProfile(null)}><DialogContent className={`${commonDialog} profile-dialog`}><DialogHeader className="sr-only"><DialogTitle>Profiel van {profileLabel}</DialogTitle><DialogDescription>Spelersprofiel, statistieken en prestaties.</DialogDescription></DialogHeader>{profile && <ProfileView name={profile} roomName={room} gameId={game.id}/>}{profileLabel === selfName() && isOwner && <a href="/beheer" className="dp-panel-link"><ShieldCheck size={16}/>Platformbeheer<ArrowUpRight size={15}/></a>}{profile && profileLabel !== selfName() && <Button className="profile-message-button" variant="outline" disabled={isBlocked(profile)} onClick={() => openPrivateChat(profile)}><MessageCircle size={16}/>Privébericht</Button>}<Button className="dialog-primary profile-invite-button" disabled={!!profile && profileLabel!==selfName()&&(isBlocked(profile)||!!invitationReason(profile))} onClick={() => { if (profileLabel === selfName()) { setProfile(null); navigate("rankings"); } else { invitePlayer(profile!); setProfile(null); } }}>{profileLabel === selfName() ? "Bekijk de ranglijst" : invitationReason(profile??'')||"Nodig uit voor een potje"}<ArrowUpRight size={16}/></Button></DialogContent></Dialog>
-    <Dialog open={!!spectate} onOpenChange={open => !open && setSpectate(null)}><DialogContent className={`${commonDialog} spectator-dialog`}><DialogHeader><DialogTitle>Langs de oche</DialogTitle><DialogDescription>Volg de wedstrijd en praat mee. Je eigen partij blijft open.</DialogDescription></DialogHeader>{spectate && <SpectatorView key={spectatorMatchId??spectate} matchId={spectatorMatchId} variant={variant} lessMotion={lessMotion} onInvite={id=>{setSpectate(null);invitePlayer(id);}} onProfile={id=>{setSpectate(null);openProfile(id);}} onMessage={id=>{setSpectate(null);void openPrivateChat(id);}} onSpectate={setSpectate} onPlayNext={()=>{invitePlayer(spectate===selfName()?opponent:spectate);setSpectate(null);}}/>}<Button className="dialog-primary" onClick={() => setSpectate(null)}>Terug naar jouw wedstrijd <ArrowRight size={15}/></Button></DialogContent></Dialog>
-    <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>Jouw speelritme</DialogTitle><DialogDescription>Bediening, geluid en sociale voorkeuren.</DialogDescription></DialogHeader><DartsPreferencesPanel/><Button className="dialog-primary" onClick={() => setSettingsOpen(false)}>Helemaal goed <Check size={16}/></Button></DialogContent></Dialog>
-    <Dialog open={moderationOpen&&canManageRoom(currentRoom?.id??"")} onOpenChange={setModerationOpen}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>Kamerbeheer</DialogTitle><DialogDescription>Houd {room} een fijne plek voor iedereen.</DialogDescription></DialogHeader><ModeratorPanel room={room}/></DialogContent></Dialog>
-    <Dialog open={notifications} onOpenChange={setNotifications}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>Even bijpraten</DialogTitle><DialogDescription>Wat er speelt in de club.</DialogDescription></DialogHeader><DartsNotifications/></DialogContent></Dialog>
+    <Dialog open={!!profile} onOpenChange={open => !open && setProfile(null)}><DialogContent className={`${commonDialog} profile-dialog`}><DialogHeader className="sr-only"><DialogTitle>{dpT("app.profiel_van")} {profileLabel}</DialogTitle><DialogDescription>{dpT("app.spelersprofiel_statistieken_en_prestaties")}</DialogDescription></DialogHeader>{profile && <ProfileView name={profile} roomName={room} gameId={game.id}/>}{profileLabel === selfName() && isOwner && <a href="/beheer" className="dp-panel-link"><ShieldCheck size={16}/>{dpT("app.platformbeheer")}<ArrowUpRight size={15}/></a>}{profile && profileLabel !== selfName() && <Button className="profile-message-button" variant="outline" disabled={isBlocked(profile)} onClick={() => openPrivateChat(profile)}><MessageCircle size={16}/>{dpT("app.privebericht")}</Button>}<Button className="dialog-primary profile-invite-button" disabled={!!profile && profileLabel!==selfName()&&(isBlocked(profile)||!!invitationReason(profile))} onClick={() => { if (profileLabel === selfName()) { setProfile(null); navigate("rankings"); } else { invitePlayer(profile!); setProfile(null); } }}>{profileLabel === selfName() ? dpT("app.bekijk_de_ranglijst") : invitationReason(profile??'')||dpT("app.nodig_uit_voor_een_potje")}<ArrowUpRight size={16}/></Button></DialogContent></Dialog>
+    <Dialog open={!!spectate} onOpenChange={open => !open && setSpectate(null)}><DialogContent className={`${commonDialog} spectator-dialog`}><DialogHeader><DialogTitle>{dpT("app.langs_de_oche")}</DialogTitle><DialogDescription>{dpT("app.volg_de_wedstrijd_en_praat_mee_je_eigen")}</DialogDescription></DialogHeader>{spectate && <SpectatorView key={spectatorMatchId??spectate} matchId={spectatorMatchId} variant={variant} lessMotion={lessMotion} onInvite={id=>{setSpectate(null);invitePlayer(id);}} onProfile={id=>{setSpectate(null);openProfile(id);}} onMessage={id=>{setSpectate(null);void openPrivateChat(id);}} onSpectate={setSpectate} onPlayNext={()=>{invitePlayer(spectate===selfName()?opponent:spectate);setSpectate(null);}}/>}<Button className="dialog-primary" onClick={() => setSpectate(null)}>{dpT("app.terug_naar_jouw_wedstrijd")} <ArrowRight size={15}/></Button></DialogContent></Dialog>
+    <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>{dpT("app.jouw_speelritme")}</DialogTitle><DialogDescription>{dpT("app.bediening_geluid_en_sociale_voorkeuren")}</DialogDescription></DialogHeader><DartsPreferencesPanel/><Button className="dialog-primary" onClick={() => setSettingsOpen(false)}>{dpT("app.helemaal_goed")} <Check size={16}/></Button></DialogContent></Dialog>
+    <Dialog open={moderationOpen&&canManageRoom(currentRoom?.id??"")} onOpenChange={setModerationOpen}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>{dpT("app.kamerbeheer")}</DialogTitle><DialogDescription>{dpT("app.houd")} {room} {dpT("app.een_fijne_plek_voor_iedereen")}</DialogDescription></DialogHeader><ModeratorPanel room={room}/></DialogContent></Dialog>
+    <Dialog open={notifications} onOpenChange={setNotifications}><DialogContent className={commonDialog}><DialogHeader><DialogTitle>{dpT("app.even_bijpraten")}</DialogTitle><DialogDescription>{dpT("app.wat_er_speelt_in_de_club")}</DialogDescription></DialogHeader><DartsNotifications/></DialogContent></Dialog>
     </div>
   </MotionConfig>;
 }

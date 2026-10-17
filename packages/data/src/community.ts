@@ -95,7 +95,7 @@ export async function expireRoomMemberships(){return transaction(async c=>{
  // outcomes; room inactivity never fabricates a dart or directly forfeits.
  return expired.length;
 });}
-const preferencesSchema=z.object({favoriteRooms:z.array(z.string().max(100)).max(50),sound:z.boolean(),lessMotion:z.boolean(),leftHanded:z.boolean(),haptics:z.boolean(),quietTurn:z.boolean(),privateMessages:z.enum(['everyone','friends','nobody']),availability:z.enum(['available','playing','watching'])}).partial().strict();
+const preferencesSchema=z.object({locale:z.enum(['nl','en']).nullable(),favoriteRooms:z.array(z.string().max(100)).max(50),sound:z.boolean(),lessMotion:z.boolean(),leftHanded:z.boolean(),haptics:z.boolean(),quietTurn:z.boolean(),privateMessages:z.enum(['everyone','friends','nobody']),availability:z.enum(['available','playing','watching'])}).partial().strict();
 export async function preferences(actor:Actor,input:unknown){const patch=preferencesSchema.parse(input);await db().query('insert into preferences(user_id,data) values($1,$2) on conflict(user_id) do update set data=preferences.data || excluded.data,updated_at=now()',[actor.id,JSON.stringify(patch)]);return {ok:true};}
 export async function social(actor:Actor,input:unknown){
  const {action,targetId}=z.object({action:z.enum(['request','accept','reject','cancel','remove','block','unblock','mute','unmute']),targetId:uuid}).strict().parse(input);
@@ -163,7 +163,7 @@ export async function channelAccess(c:PoolClient,actor:Actor,channelId:string,wr
  return ch;
 }
 const systemName=`case when joined.rename_required then 'Speler-'||left(replace(joined.id::text,'-',''),12) else coalesce(joined.username,m.actor_name) end`;
-const chatMessageSelect=`select m.id,m.channel_id,m.seq,coalesce(m.change_cursor,m.seq) cursor,m.redacted_at is not null redacted,case when m.redacted_at is not null then null when m.kind='room.member_joined' then (${systemName})||' komt de kamer binnen.' else m.body end body,m.client_message_id,m.sender_id,m.kind,m.event_id,m.actor_id,${systemName} actor_name,m.room_id,
+const chatMessageSelect=`select m.id,m.channel_id,m.seq,coalesce(m.change_cursor,m.seq) cursor,m.redacted_at is not null redacted,case when m.redacted_at is not null then null when m.kind='room.member_joined' then (${systemName})||' komt de kamer binnen.' else m.body end body,m.client_message_id,m.sender_id,m.kind,case when m.kind='room.member_joined' and m.redacted_at is null then jsonb_build_object('schemaVersion',1,'type',m.kind,'params',jsonb_build_object('displayName',${systemName})) else null end system_event,m.event_id,m.actor_id,${systemName} actor_name,m.room_id,
  case when m.kind='room.member_joined' then ${systemName} when p.rename_required then 'Speler-'||left(replace(p.id::text,'-',''),12) else p.username end username,m.created_at
  from chat_messages m left join profiles p on p.id=m.sender_id left join profiles joined on joined.id=m.actor_id`;
 /** All reads happen in the snapshot acquired after the separate user lock. */

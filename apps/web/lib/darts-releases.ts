@@ -1,4 +1,6 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+
 
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {api,ApiError,getPlatform,mutate,usePlatform} from './platform-client';
@@ -27,12 +29,12 @@ function useReleaseCollection<T>(path:string,empty:T,enabled:boolean,admin=false
   const mounted=useRef(false),sequence=useRef(0);
   const reload=useCallback(async():Promise<T>=>{
     if(!key)return empty;
-    if(identity()!==key)throw new Error('Je sessie is gewijzigd. Open dit overzicht opnieuw.');
+    if(identity()!==key)throw new Error(runtimeFeedback("feedback.je_sessie_is_gewijzigd_open_dit_overzicht_opnieuw"));
     const ticket=++sequence.current;
     setState(previous=>({key,data:previous.key===key?previous.data:empty,loaded:previous.key===key&&previous.loaded,loading:previous.key!==key||!previous.loaded,error:''}));
     try{
       const data=await api<T>(path);
-      if(identity()!==key||active.current!==key)throw new Error('Je sessie is gewijzigd. Open dit overzicht opnieuw.');
+      if(identity()!==key||active.current!==key)throw new Error(runtimeFeedback("feedback.je_sessie_is_gewijzigd_open_dit_overzicht_opnieuw"));
       if(mounted.current&&ticket===sequence.current){
         if(admin)cachedBoard={key,data:data as ReleaseBoardState};
         setState({key,data,loaded:true,loading:false,error:''});
@@ -72,10 +74,10 @@ export function usePublicReleaseUpdates(enabled=true){
 
 async function change<T>(path:string,input:unknown,admin=false):Promise<T>{
   const key=identity();
-  if(!key)throw new Error('Log in om je idee te bewaren.');
-  if(admin&&!canManage())throw new Error('Releasebeheer is voor platformbeheerders.');
+  if(!key)throw new Error(runtimeFeedback("feedback.log_in_om_je_idee_te_bewaren"));
+  if(admin&&!canManage())throw new Error(runtimeFeedback("feedback.releasebeheer_is_voor_platformbeheerders"));
   const value=await mutate<T>(path,input);
-  if(identity()!==key)throw new Error('Je sessie is gewijzigd. Open dit overzicht opnieuw.');
+  if(identity()!==key)throw new Error(runtimeFeedback("feedback.je_sessie_is_gewijzigd_open_dit_overzicht_opnieuw"));
   if(admin&&cachedBoard?.key===key){
     const item=value as ReleaseItem;
     const exists=cachedBoard.data.items.some(old=>old.id===item.id);

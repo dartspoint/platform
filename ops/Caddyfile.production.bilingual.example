@@ -1,0 +1,27 @@
+# PREPARED ONLY: activate after DNS/TLS and provider verification.
+# Import these SITE BLOCKS into the existing host Caddy configuration.
+# Do not replace an existing Caddyfile or run a second Caddy on 80/443.
+dartspoint.nl, dartspoint.app {
+    encode zstd gzip
+    @internal path /internal /internal/*
+    respond @internal 404
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+    reverse_proxy 127.0.0.1:3000
+}
+realtime.dartspoint.nl {
+    @wrong_origin {
+        header Origin *
+        expression `{header.Origin} != "https://dartspoint.nl" && {header.Origin} != "https://dartspoint.app"`
+    }
+    respond @wrong_origin 403
+    @internal path /internal /internal/*
+    respond @internal 404
+    reverse_proxy 127.0.0.1:2567 {
+        stream_close_delay 5m
+    }
+}
+

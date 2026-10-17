@@ -161,7 +161,7 @@ site_url = "http://127.0.0.1:4300"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["http://localhost:4300"]
+additional_redirect_urls = ["http://localhost:4300", "http://127.0.0.1:4300/en/inloggen", "http://127.0.0.1:4300/nl/inloggen", "http://localhost:4300/en/inloggen", "http://localhost:4300/nl/inloggen", "http://127.0.0.1:4302/en/inloggen", "http://127.0.0.1:4302/nl/inloggen", "http://localhost:4302/en/inloggen", "http://localhost:4302/nl/inloggen", "http://127.0.0.1:4300/api/auth/google/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -415,9 +415,9 @@ enabled = true
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
 [auth.email.template.magic_link]
-subject = "Je DartsPoint-inlogcode"
+subject = '{{ if or (eq .RedirectTo "https://dartspoint.nl/en/inloggen") (eq .RedirectTo "https://www.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://dartspoint.app/en/inloggen") (eq .RedirectTo "https://www.dartspoint.app/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.app/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4300/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4302/en/inloggen") (eq .RedirectTo "http://localhost:4300/en/inloggen") (eq .RedirectTo "http://localhost:4302/en/inloggen") }}Your DartsPoint sign-in code{{ else }}Je DartsPoint-inlogcode{{ end }}'
 content_path = "./supabase/templates/otp.html"
 
 [auth.email.template.confirmation]
-subject = "Je DartsPoint-inlogcode"
+subject = '{{ if or (eq .RedirectTo "https://dartspoint.nl/en/inloggen") (eq .RedirectTo "https://www.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://dartspoint.app/en/inloggen") (eq .RedirectTo "https://www.dartspoint.app/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.nl/en/inloggen") (eq .RedirectTo "https://staging.dartspoint.app/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4300/en/inloggen") (eq .RedirectTo "http://127.0.0.1:4302/en/inloggen") (eq .RedirectTo "http://localhost:4300/en/inloggen") (eq .RedirectTo "http://localhost:4302/en/inloggen") }}Your DartsPoint sign-in code{{ else }}Je DartsPoint-inlogcode{{ end }}'
 content_path = "./supabase/templates/otp.html"

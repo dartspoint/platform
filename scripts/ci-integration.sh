@@ -140,6 +140,8 @@ python3 tests/ops/test_privacy_backups.py
 python3 tests/ops/test_restic_privacy.py
 if [[ -n "${DARTSPOINT_QA_TOOLS:-}" ]]; then python3 tests/integration/support-caddy.py "$DARTSPOINT_QA_TOOLS/caddy"; fi
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/legal.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/internationalisation.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/support.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/releases.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/privacy-erasure.ts

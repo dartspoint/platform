@@ -1,4 +1,11 @@
 "use client";
+import {browserLocale} from '../../../../packages/i18n/src/errors';
+import {formatLocales} from '../../../../packages/i18n/src/locale';
+
+import {runtimeFeedback} from "../../../../packages/i18n/src/feedback";
+import {localiseStaticCopy} from "../../../../packages/i18n/src/static-copy";
+import {useI18n} from '@/lib/i18n/provider';
+
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { ArrowRight, Check, CheckCheck, CircleAlert, Clock3, Eye, EyeOff, GripVertical, History, LayoutGrid, Lightbulb, MessageSquare, Plus, Search, Send, Sparkles, Users, X } from "lucide-react";
@@ -36,26 +43,39 @@ const freshDraft = (): Draft => ({ title: "", description: "", category: "other"
 const draftFrom = (item: ReleaseItem): Draft => ({ title: item.title, description: item.description, category: item.category, priority: item.priority, status: item.status, version: item.version, releaseTitle: item.releaseTitle, releaseSummary: item.releaseSummary, notes: item.notes });
 const signature = (value: Draft) => JSON.stringify(value);
 const sourceLabel = (item: ReleaseItem) => item.source === "player" ? "Speleridee" : "Teamidee";
-const dateLabel = (value: number) => new Date(value).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const sourceLabelStaticSource = sourceLabel;
+const dateLabel = (value: number) => new Date(value).toLocaleString(formatLocales[browserLocale()], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Dat lukte niet. Probeer het nog eens.";
 const copyItem = (item: ReleaseItem): ReleaseItem => JSON.parse(JSON.stringify(item));
 
 function ReleasePreview({ title, summary, version, category }: { title: string; summary: string; version: string; category: Category }) {
+ const dpT = useI18n("releases").t;
+
   return <div className={styles.publicPreview}>
-    <span className={styles.previewLabel}><Sparkles size={14} aria-hidden="true"/>NIEUW OP DARTSPOINT</span>
-    <h3 className={styles.previewTitle}>{title || "De titel van je update"}</h3>
-    <p className={styles.previewSummary}>{summary || "Een korte uitleg voor spelers: wat is er nieuw en wat hebben zij eraan?"}</p>
+    <span className={styles.previewLabel}><Sparkles size={14} aria-hidden="true"/>{dpT("releases.nieuw_op_dartspoint")}</span>
+    <h3 className={styles.previewTitle}>{title || dpT("releases.de_titel_van_je_update")}</h3>
+    <p className={styles.previewSummary}>{summary || dpT("releases.een_korte_uitleg_voor_spelers_wat_is_er")}</p>
     <div className={styles.previewFooter}><span>{RELEASE_CATEGORIES[category]}</span>{version && <span>{version}</span>}</div>
   </div>;
 }
 
 type Props = { onConfigureWidget?: () => void; onRegisterNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void };
 export function AdminReleases(props: Props) {
+ const dpT = useI18n("releases").t;
+
   const platform = usePlatform();
-  if (!["owner", "admin"].includes(platform.actor?.role)) return <section className={styles.empty}><strong>Releasebeheer is voor Platformbeheer.</strong><p>Je huidige rol heeft geen toegang tot ideeën en interne notities.</p></section>;
+  if (!["owner", "admin"].includes(platform.actor?.role)) return <section className={styles.empty}><strong>{dpT("releases.releasebeheer_is_voor_platformbeheer")}</strong><p>{dpT("releases.je_huidige_rol_heeft_geen_toegang_tot_ideeen")}</p></section>;
   return <ReleaseBoard {...props}/>;
 }
 function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
+ const dpFeedback=useI18n("feedback").t;
+
+ const dpT = useI18n("releases").t;
+
+ const sourceLabel=localiseStaticCopy(sourceLabelStaticSource,dpT,dpStaticCopyKeys);
+
+
+
   const board = useReleaseBoard();
   const formId = useId();
   const [query, setQuery] = useState("");
@@ -185,13 +205,13 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
       if (!editor.item) {
         const input = { title: editor.draft.title, description: editor.draft.description, category: editor.draft.category, priority: editor.draft.priority };
         const item = await createReleaseItem(input, requestId(["create", input]));
-        setNotice({ text: `Idee #${item.number} toegevoegd aan Ideeën.` });
+        setNotice({ text: dpFeedback("feedback.idee_value0_toegevoegd_aan_ideeen",{value0:item.number}) });
         setMobileStatus("ideas"); closeEditor();
       } else {
         const item = await saveReleaseItem(editor.item.id, editor.draft, editor.item.revision, { confirmWithdraw, requestId: requestId(["save", editor.item.id, editor.item.revision, editor.draft, confirmWithdraw]) });
         acceptSaved(item);
         setEditorMessage(item.publication ? "Opgeslagen. De huidige lobbypublicatie blijft staan totdat je de update opnieuw publiceert." : "Opgeslagen. Deze kaart is nog niet gepubliceerd in de lobby.");
-        setNotice({ text: `Kaart #${item.number} opgeslagen.` });
+        setNotice({ text: dpFeedback("feedback.kaart_value0_opgeslagen",{value0:item.number}) });
       }
       return true;
     } catch (error) {
@@ -210,7 +230,7 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
     if (!begin()) return false;
     try {
       const updated = await moveReleaseItem(item.id, status, item.revision, false, requestId(["move", item.id, status, item.revision, false]));
-      setNotice({ text: `#${updated.number} staat nu bij ${RELEASE_STATUSES[status]}.${item.publication && status !== "added" ? " De lobbypublicatie is ingetrokken." : status === "added" && !updated.publication ? " Nog niet gepubliceerd in de lobby." : ""}` });
+      setNotice({ text: dpFeedback("feedback.value0_staat_nu_bij_value1_value2",{value0:updated.number,value1:RELEASE_STATUSES[status],value2:item.publication && status !== "added" ? " De lobbypublicatie is ingetrokken." : status === "added" && !updated.publication ? " Nog niet gepubliceerd in de lobby." : ""}) });
       setMobileStatus(status);
       return true;
     } catch (error) { statusReturn.current = null; setNotice({ text: errorText(error), error: true }); if (isReleaseVersionConflict(error)) void board.reload().catch(() => {}); return false; }
@@ -255,7 +275,7 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
     if (confirmation.kind === "move-withdraw") {
       try {
         const next = await moveReleaseItem(confirmation.item.id, confirmation.status, confirmation.item.revision, true, requestId(["move", confirmation.item.id, confirmation.status, confirmation.item.revision, true]));
-        setMobileStatus(next.status); setNotice({ text: `#${next.number} verplaatst naar ${RELEASE_STATUSES[next.status]}. De lobbypublicatie is ingetrokken.` });
+        setMobileStatus(next.status); setNotice({ text: dpFeedback("feedback.value0_verplaatst_naar_value1_de_lobbypublicatie_is_ingetrokken",{value0:next.number,value1:RELEASE_STATUSES[next.status]}) });
         setConfirmation(null);
       } catch (error) { setConfirmationError(errorText(error)); if (isReleaseVersionConflict(error)) void board.reload().catch(() => {}); }
       finally { end(); }
@@ -296,24 +316,24 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
 
   return <div className={styles.page} aria-busy={busy || board.loading}>
     <section className={styles.intro}>
-      <div className={styles.introText}><span className={styles.eyebrow}>SAMEN MAKEN WE DARTSPOINT BETER</span><h2>Van goed idee naar mooie update.</h2><p>Verzamel ideeën, houd de voortgang bij en vertel spelers wat er is toegevoegd. Jij kiest wat in de lobby verschijnt.</p></div>
-      <div className={styles.introActions}><button ref={newButton} type="button" disabled={busy || board.loading} className={`${styles.button} ${styles.primary}`} onClick={openNew}><Plus size={16} aria-hidden="true"/>Nieuw idee</button>{onConfigureWidget && <button type="button" disabled={busy} className={`${styles.button} ${styles.quiet}`} onClick={onConfigureWidget}><LayoutGrid size={15} aria-hidden="true"/>Lobbywidget inrichten<ArrowRight size={14} aria-hidden="true"/></button>}</div>
+      <div className={styles.introText}><span className={styles.eyebrow}>{dpT("releases.samen_maken_we_dartspoint_beter")}</span><h2>{dpT("releases.van_goed_idee_naar_mooie_update")}</h2><p>{dpT("releases.verzamel_ideeen_houd_de_voortgang_bij_en_vertel")}</p></div>
+      <div className={styles.introActions}><button ref={newButton} type="button" disabled={busy || board.loading} className={`${styles.button} ${styles.primary}`} onClick={openNew}><Plus size={16} aria-hidden="true"/>{dpT("releases.nieuw_idee")}</button>{onConfigureWidget && <button type="button" disabled={busy} className={`${styles.button} ${styles.quiet}`} onClick={onConfigureWidget}><LayoutGrid size={15} aria-hidden="true"/>{dpT("releases.lobbywidget_inrichten")}<ArrowRight size={14} aria-hidden="true"/></button>}</div>
     </section>
-    {board.loading && <div className={styles.notice} role="status">Releasebord laden…</div>}
-    {board.error && <div className={`${styles.notice} ${styles.noticeError}`} role="alert"><CircleAlert size={17} aria-hidden="true"/><span>{board.error}</span><button type="button" disabled={busy} className={`${styles.button} ${styles.retry}`} onClick={() => { void board.reload().catch(() => {}); }}>Opnieuw laden</button></div>}
-    <div className={styles.metrics} aria-label="Overzicht van het releasebord">
-      <span className={styles.metric}><Lightbulb size={16} aria-hidden="true"/><strong>{board.items.length}</strong> ideeën & verbeteringen</span>
-      <span className={styles.metric}><Users size={16} aria-hidden="true"/><strong>{board.items.filter(item => item.source === "player").length}</strong> van spelers</span>
-      <span className={styles.metric}><Eye size={16} aria-hidden="true"/><strong>{publishedCount}</strong> lobbypublicaties</span>
+    {board.loading && <div className={styles.notice} role="status">{dpT("releases.releasebord_laden")}</div>}
+    {board.error && <div className={`${styles.notice} ${styles.noticeError}`} role="alert"><CircleAlert size={17} aria-hidden="true"/><span>{board.error}</span><button type="button" disabled={busy} className={`${styles.button} ${styles.retry}`} onClick={() => { void board.reload().catch(() => {}); }}>{dpT("releases.opnieuw_laden")}</button></div>}
+    <div className={styles.metrics} aria-label={dpT("releases.overzicht_van_het_releasebord")}>
+      <span className={styles.metric}><Lightbulb size={16} aria-hidden="true"/><strong>{board.items.length}</strong> {dpT("releases.ideeen_verbeteringen")}</span>
+      <span className={styles.metric}><Users size={16} aria-hidden="true"/><strong>{board.items.filter(item => item.source === "player").length}</strong> {dpT("releases.van_spelers")}</span>
+      <span className={styles.metric}><Eye size={16} aria-hidden="true"/><strong>{publishedCount}</strong> {dpT("releases.lobbypublicaties")}</span>
     </div>
     <div className={styles.toolbar}>
-      <label className={styles.search}><Search size={17} aria-hidden="true"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek op titel, nummer of inzender" aria-label="Zoek ideeën en verbeteringen"/>{query && <button type="button" aria-label="Zoekopdracht wissen" onClick={() => setQuery("")}><X size={15}/></button>}</label>
-      <label className={styles.filter}><span>Categorie</span><select value={category} onChange={event => setCategory(event.target.value as Category | "all")}><option value="all">Alle categorieën</option>{Object.entries(RELEASE_CATEGORIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-      {hasFilters && <button className={styles.clear} type="button" onClick={() => { setQuery(""); setCategory("all"); }}>Filters wissen</button>}
+      <label className={styles.search}><Search size={17} aria-hidden="true"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={dpT("releases.zoek_op_titel_nummer_of_inzender")} aria-label={dpT("releases.zoek_ideeen_en_verbeteringen")}/>{query && <button type="button" aria-label={dpT("releases.zoekopdracht_wissen")} onClick={() => setQuery("")}><X size={15}/></button>}</label>
+      <label className={styles.filter}><span>{dpT("releases.categorie")}</span><select value={category} onChange={event => setCategory(event.target.value as Category | "all")}><option value="all">{dpT("releases.alle_categorieen")}</option>{Object.entries(RELEASE_CATEGORIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+      {hasFilters && <button className={styles.clear} type="button" onClick={() => { setQuery(""); setCategory("all"); }}>{dpT("releases.filters_wissen")}</button>}
     </div>
-    <div className={styles.boardHint}><span>{hasFilters ? `${filtered.length} van ${board.items.length} kaarten` : "Sleep een kaart of kies de status op de kaart."}</span><span>Toegevoegd is pas openbaar na publiceren.</span></div>
-    <div className={styles.mobileTabs} role="group" aria-label="Kies een kolom">{statuses.map(status => <button type="button" key={status} className={mobileStatus === status ? styles.mobileTabActive : undefined} aria-pressed={mobileStatus === status} onClick={() => setMobileStatus(status)}>{RELEASE_STATUSES[status]}<span>{filtered.filter(item => item.status === status).length}</span></button>)}</div>
-    {notice && <div className={`${styles.notice} ${notice.error ? styles.noticeError : ""}`} role={notice.error ? "alert" : "status"}>{notice.error ? <CircleAlert size={17} aria-hidden="true"/> : <Check size={17} aria-hidden="true"/>}<span>{notice.text}</span><button type="button" aria-label="Melding sluiten" onClick={() => setNotice(null)}><X size={15}/></button></div>}
+    <div className={styles.boardHint}><span>{hasFilters ? dpT("releases.van_kaarten",{length:filtered.length,lengthValue:board.items.length}) : dpT("releases.sleep_een_kaart_of_kies_de_status_op")}</span><span>{dpT("releases.toegevoegd_is_pas_openbaar_na_publiceren")}</span></div>
+    <div className={styles.mobileTabs} role="group" aria-label={dpT("releases.kies_een_kolom")}>{statuses.map(status => <button type="button" key={status} className={mobileStatus === status ? styles.mobileTabActive : undefined} aria-pressed={mobileStatus === status} onClick={() => setMobileStatus(status)}>{RELEASE_STATUSES[status]}<span>{filtered.filter(item => item.status === status).length}</span></button>)}</div>
+    {notice && <div className={`${styles.notice} ${notice.error ? styles.noticeError : ""}`} role={notice.error ? "alert" : "status"}>{notice.error ? <CircleAlert size={17} aria-hidden="true"/> : <Check size={17} aria-hidden="true"/>}<span>{notice.text}</span><button type="button" aria-label={dpT("releases.melding_sluiten")} onClick={() => setNotice(null)}><X size={15}/></button></div>}
     <div className={styles.board} data-any-dragging={Boolean(dragged)}>
       {statuses.map(status => {
         const cards = filtered.filter(item => item.status === status), Icon = statusIcons[status];
@@ -326,12 +346,12 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
             onDragStart={event => { if (busy || (event.target as HTMLElement).closest("select")) { event.preventDefault(); return; } event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-dartspoint-release", item.id); setDragged({ item: copyItem(item), id: item.id }); }}
             onDragEnd={() => { setDragged(null); setDropTarget(null); }}>
             <div className={styles.cardTop}><span className={styles.number}>#{item.number}</span><span className={styles.source}>{item.source === "player" ? <Users size={11} aria-hidden="true"/> : <Sparkles size={11} aria-hidden="true"/>}{sourceLabel(item)}</span><GripVertical size={15} className={styles.dragHandle} aria-hidden="true"/></div>
-            <button type="button" disabled={busy} className={styles.cardButton} onClick={event => openItem(item, event.currentTarget)} aria-label={`Open #${item.number}: ${item.title}`}><h4 className={styles.cardTitle}>{item.title}</h4>{item.description && <p className={styles.cardDescription}>{item.description}</p>}</button>
+            <button type="button" disabled={busy} className={styles.cardButton} onClick={event => openItem(item, event.currentTarget)} aria-label={dpT("releases.open",{number:item.number,title:item.title})}><h4 className={styles.cardTitle}>{item.title}</h4>{item.description && <p className={styles.cardDescription}>{item.description}</p>}</button>
             <div className={styles.cardMeta}><span className={styles.category}>{RELEASE_CATEGORIES[item.category]}</span><span className={`${styles.priority} ${item.priority === "high" ? styles.priorityHigh : item.priority === "low" ? styles.priorityLow : ""}`}>{RELEASE_PRIORITIES[item.priority]}</span>{item.version && <span className={styles.version}>{item.version}</span>}</div>
-            {item.status === "added" && <span className={item.publication ? styles.publication : styles.publicationPrivate}>{item.publication ? <Eye size={12} aria-hidden="true"/> : <EyeOff size={12} aria-hidden="true"/>}{item.publication ? "In de lobby gepubliceerd" : "Nog niet in lobby"}</span>}
-            <div className={styles.cardFooter}><span title={item.authorName}>{item.authorName}</span><select ref={node => { if (node) statusInputs.current.set(item.id, node); else statusInputs.current.delete(item.id); }} disabled={busy} aria-label={`Status van #${item.number}: ${item.title}`} value={item.status} onChange={event => { statusReturn.current = { id: item.id, status: event.target.value as Status }; requestMove(item, event.target.value as Status); }}>{statuses.map(value => <option key={value} value={value}>{RELEASE_STATUSES[value]}</option>)}</select></div>
+            {item.status === "added" && <span className={item.publication ? styles.publication : styles.publicationPrivate}>{item.publication ? <Eye size={12} aria-hidden="true"/> : <EyeOff size={12} aria-hidden="true"/>}{item.publication ? dpT("releases.in_de_lobby_gepubliceerd") : dpT("releases.nog_niet_in_lobby")}</span>}
+            <div className={styles.cardFooter}><span title={item.authorName}>{item.authorName}</span><select ref={node => { if (node) statusInputs.current.set(item.id, node); else statusInputs.current.delete(item.id); }} disabled={busy} aria-label={dpT("releases.status_van",{number:item.number,title:item.title})} value={item.status} onChange={event => { statusReturn.current = { id: item.id, status: event.target.value as Status }; requestMove(item, event.target.value as Status); }}>{statuses.map(value => <option key={value} value={value}>{RELEASE_STATUSES[value]}</option>)}</select></div>
           </article>)}
-          {!cards.length && <div className={styles.empty}><Icon size={24} className={styles.emptyIcon} aria-hidden="true"/><strong>{hasFilters ? "Geen passende kaarten" : "Nog even rustig hier"}</strong><p>{hasFilters ? "Pas je zoekopdracht of categorie aan." : status === "ideas" ? "Voeg het eerste idee toe om te beginnen." : `Kies ‘${RELEASE_STATUSES[status]}’ op een kaart om deze hier te zetten.`}</p>{!hasFilters && status === "ideas" && <button type="button" className={styles.clear} onClick={openNew}>Nieuw idee<Plus size={13} aria-hidden="true"/></button>}</div>}
+          {!cards.length && <div className={styles.empty}><Icon size={24} className={styles.emptyIcon} aria-hidden="true"/><strong>{hasFilters ? dpT("releases.geen_passende_kaarten") : dpT("releases.nog_even_rustig_hier")}</strong><p>{hasFilters ? dpT("releases.pas_je_zoekopdracht_of_categorie_aan") : status === "ideas" ? dpT("releases.voeg_het_eerste_idee_toe_om_te_beginnen") : dpT("releases.kies_op_een_kaart_om_deze_hier_te",{value0:RELEASE_STATUSES[status]})}</p>{!hasFilters && status === "ideas" && <button type="button" className={styles.clear} onClick={openNew}>{dpT("releases.nieuw_idee")}<Plus size={13} aria-hidden="true"/></button>}</div>}
           </div>
         </section>;
       })}
@@ -344,41 +364,41 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
         onCloseAutoFocus={event => { event.preventDefault(); if (dialogReturn.current?.isConnected) dialogReturn.current.focus(); else newButton.current?.focus(); }}>
         {editor && <>
           <div className={styles.editorBody}>
-          <DialogHeader className={styles.dialogHeading}><span className={styles.dialogEyebrow}>{editor.item ? `KAART #${editor.item.number} · ${sourceLabel(editor.item).toUpperCase()}` : "EEN NIEUW IDEE"}</span><DialogTitle>{editor.item ? "Idee & voortgang" : "Wat kan er beter?"}</DialogTitle><DialogDescription>{editor.item ? "Houd het idee en de voortgang bij. De tekst voor spelers stel je apart in." : "Geef het idee een herkenbare naam en beschrijf wat het voor spelers oplevert."}</DialogDescription></DialogHeader>
-          {editor.item && <div className={styles.dialogMeta}><span>Ingezonden door <strong>{editor.item.authorName}</strong></span><span>Aangemaakt {dateLabel(editor.item.createdAt)}</span><span>Gewijzigd {dateLabel(editor.item.updatedAt)}</span><span>Revisie {editor.item.revision}</span><details><summary>Intern ID</summary><code>{editor.item.id}</code></details></div>}
-          {stale && <div className={styles.conflict} role="alert"><CircleAlert size={17} aria-hidden="true"/><div><strong>Er is een nieuwere versie van deze kaart.</strong><p>Jouw formulier is bewaard. Kopieer tekst die je wilt houden en laad daarna de nieuwste versie.</p><div className={styles.conflictActions}><button type="button" className={styles.button} onClick={() => ask({ kind: "reload" })}>Nieuwste versie laden</button></div></div></div>}
+          <DialogHeader className={styles.dialogHeading}><span className={styles.dialogEyebrow}>{editor.item ? dpT("releases.kaart",{number:editor.item.number,value1:sourceLabel(editor.item).toUpperCase()}) : dpT("releases.een_nieuw_idee")}</span><DialogTitle>{editor.item ? dpT("releases.idee_voortgang") : dpT("releases.wat_kan_er_beter")}</DialogTitle><DialogDescription>{editor.item ? dpT("releases.houd_het_idee_en_de_voortgang_bij_de") : dpT("releases.geef_het_idee_een_herkenbare_naam_en_beschrijf")}</DialogDescription></DialogHeader>
+          {editor.item && <div className={styles.dialogMeta}><span>{dpT("releases.ingezonden_door")} <strong>{editor.item.authorName}</strong></span><span>{dpT("releases.aangemaakt")} {dateLabel(editor.item.createdAt)}</span><span>{dpT("releases.gewijzigd")} {dateLabel(editor.item.updatedAt)}</span><span>{dpT("releases.revisie")} {editor.item.revision}</span><details><summary>{dpT("releases.intern_id")}</summary><code>{editor.item.id}</code></details></div>}
+          {stale && <div className={styles.conflict} role="alert"><CircleAlert size={17} aria-hidden="true"/><div><strong>{dpT("releases.er_is_een_nieuwere_versie_van_deze_kaart")}</strong><p>{dpT("releases.jouw_formulier_is_bewaard_kopieer_tekst_die_je")}</p><div className={styles.conflictActions}><button type="button" className={styles.button} onClick={() => ask({ kind: "reload" })}>{dpT("releases.nieuwste_versie_laden")}</button></div></div></div>}
           <form className={styles.form} id={`${formId}-form`} onSubmit={submit}>
             <fieldset className={styles.editingFields} disabled={busy}>
             <div className={styles.formGrid}>
-              <label className={`${styles.field} ${styles.fieldWide}`}><span>Titel van het idee</span><input ref={titleInput} autoFocus required minLength={3} maxLength={140} value={editor.draft.title} onChange={event => patch({ title: event.target.value })} placeholder="Bijvoorbeeld: favoriete wedstrijdvormen bewaren"/></label>
-              <label className={`${styles.field} ${styles.fieldWide}`}><span>Omschrijving</span><textarea rows={4} maxLength={3000} value={editor.draft.description} onChange={event => patch({ description: event.target.value })} placeholder="Wat wil je verbeteren, en voor wie?"/></label>
-              <label className={styles.field}><span>Categorie</span><select value={editor.draft.category} onChange={event => patch({ category: event.target.value as Category })}>{Object.entries(RELEASE_CATEGORIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-              <label className={styles.field}><span>Prioriteit</span><select value={editor.draft.priority} onChange={event => patch({ priority: event.target.value as Priority })}>{Object.entries(RELEASE_PRIORITIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+              <label className={`${styles.field} ${styles.fieldWide}`}><span>{dpT("releases.titel_van_het_idee")}</span><input ref={titleInput} autoFocus required minLength={3} maxLength={140} value={editor.draft.title} onChange={event => patch({ title: event.target.value })} placeholder={dpT("releases.bijvoorbeeld_favoriete_wedstrijdvormen_bewaren")}/></label>
+              <label className={`${styles.field} ${styles.fieldWide}`}><span>{dpT("releases.omschrijving")}</span><textarea rows={4} maxLength={3000} value={editor.draft.description} onChange={event => patch({ description: event.target.value })} placeholder={dpT("releases.wat_wil_je_verbeteren_en_voor_wie")}/></label>
+              <label className={styles.field}><span>{dpT("releases.categorie")}</span><select value={editor.draft.category} onChange={event => patch({ category: event.target.value as Category })}>{Object.entries(RELEASE_CATEGORIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+              <label className={styles.field}><span>{dpT("releases.prioriteit")}</span><select value={editor.draft.priority} onChange={event => patch({ priority: event.target.value as Priority })}>{Object.entries(RELEASE_PRIORITIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
               {editor.item && <>
-                <label className={styles.field}><span>Status</span><select value={editor.draft.status} onChange={event => patch({ status: event.target.value as Status })}>{statuses.map(status => <option value={status} key={status}>{RELEASE_STATUSES[status]}</option>)}</select><small className={styles.fieldHint}>Toegevoegd wordt niet automatisch openbaar.</small></label>
-                <label className={styles.field}><span>Versie <small>optioneel</small></span><input maxLength={40} value={editor.draft.version} onChange={event => patch({ version: event.target.value })} placeholder="Bijvoorbeeld 1.4"/><small className={styles.fieldHint}>Verschijnt bij de update wanneer je publiceert.</small></label>
-                <label className={`${styles.field} ${styles.fieldWide}`}><span>Interne notities</span><textarea rows={3} maxLength={5000} value={editor.draft.notes} onChange={event => patch({ notes: event.target.value })} placeholder="Afwegingen, afspraken of aandachtspunten voor het team."/><small className={styles.fieldHint}>Alleen voor beheer; nooit onderdeel van de lobbypublicatie.</small></label>
+                <label className={styles.field}><span>{dpT("releases.status")}</span><select value={editor.draft.status} onChange={event => patch({ status: event.target.value as Status })}>{statuses.map(status => <option value={status} key={status}>{RELEASE_STATUSES[status]}</option>)}</select><small className={styles.fieldHint}>{dpT("releases.toegevoegd_wordt_niet_automatisch_openbaar")}</small></label>
+                <label className={styles.field}><span>{dpT("releases.versie")} <small>{dpT("releases.optioneel")}</small></span><input maxLength={40} value={editor.draft.version} onChange={event => patch({ version: event.target.value })} placeholder={dpT("releases.bijvoorbeeld_1_4")}/><small className={styles.fieldHint}>{dpT("releases.verschijnt_bij_de_update_wanneer_je_publiceert")}</small></label>
+                <label className={`${styles.field} ${styles.fieldWide}`}><span>{dpT("releases.interne_notities")}</span><textarea rows={3} maxLength={5000} value={editor.draft.notes} onChange={event => patch({ notes: event.target.value })} placeholder={dpT("releases.afwegingen_afspraken_of_aandachtspunten_voor_het_team")}/><small className={styles.fieldHint}>{dpT("releases.alleen_voor_beheer_nooit_onderdeel_van_de_lobbypublicatie")}</small></label>
               </>}
             </div>
             {editor.item && <section className={styles.publicationPanel} aria-labelledby={`${formId}-publication`}>
-              <div className={styles.publicationHeading}><span><Send size={17} aria-hidden="true"/><h3 id={`${formId}-publication`}>De update voor spelers</h3></span><span className={editor.item.publication ? styles.publication : styles.publicationPrivate}>{editor.item.publication ? "Gepubliceerd" : "Niet gepubliceerd"}</span></div>
-              <p className={styles.publicationCopy}>Vertel wat er is verbeterd en wat spelers daaraan hebben. Publiceren bewaart een aparte momentopname van deze openbare tekst.</p>
+              <div className={styles.publicationHeading}><span><Send size={17} aria-hidden="true"/><h3 id={`${formId}-publication`}>{dpT("releases.de_update_voor_spelers")}</h3></span><span className={editor.item.publication ? styles.publication : styles.publicationPrivate}>{editor.item.publication ? dpT("releases.gepubliceerd") : dpT("releases.niet_gepubliceerd")}</span></div>
+              <p className={styles.publicationCopy}>{dpT("releases.vertel_wat_er_is_verbeterd_en_wat_spelers")}</p>
               <div className={styles.formGrid}>
-                <label className={`${styles.field} ${styles.fieldWide}`}><span>Openbare titel</span><input maxLength={140} value={editor.draft.releaseTitle} onChange={event => patch({ releaseTitle: event.target.value })} placeholder="Een korte titel voor de lobby"/><small className={styles.fieldHint}>Minimaal 3 tekens om te publiceren.</small></label>
-                <label className={`${styles.field} ${styles.fieldWide}`}><span>Openbare samenvatting</span><textarea rows={3} maxLength={800} value={editor.draft.releaseSummary} onChange={event => patch({ releaseSummary: event.target.value })} placeholder="Dit is er nieuw. Zo helpt het je tijdens het spelen."/><small className={styles.fieldHint}>20–800 tekens. Interne notities worden niet meegestuurd.</small></label>
+                <label className={`${styles.field} ${styles.fieldWide}`}><span>{dpT("releases.openbare_titel")}</span><input maxLength={140} value={editor.draft.releaseTitle} onChange={event => patch({ releaseTitle: event.target.value })} placeholder={dpT("releases.een_korte_titel_voor_de_lobby")}/><small className={styles.fieldHint}>{dpT("releases.minimaal_3_tekens_om_te_publiceren")}</small></label>
+                <label className={`${styles.field} ${styles.fieldWide}`}><span>{dpT("releases.openbare_samenvatting")}</span><textarea rows={3} maxLength={800} value={editor.draft.releaseSummary} onChange={event => patch({ releaseSummary: event.target.value })} placeholder={dpT("releases.dit_is_er_nieuw_zo_helpt_het_je")}/><small className={styles.fieldHint}>{dpT("releases.20_800_tekens_interne_notities_worden_niet_meegestuurd")}</small></label>
               </div>
-              {editor.item.publication && <><span className={styles.previewLabel}>NU GEPUBLICEERD · {dateLabel(editor.item.publication.publishedAt)}</span><ReleasePreview title={editor.item.publication.title} summary={editor.item.publication.summary} version={editor.item.publication.version} category={editor.item.publication.category ?? editor.item.category}/></>}
-              {publicChanged && <p className={styles.fieldHint}>Je opgeslagen openbare tekst wijkt af van de publicatie. Controleer en publiceer opnieuw om die te vervangen.</p>}
-              {editor.draft.status !== "added" ? <p className={styles.fieldHint}>{editor.item.publication ? "Bij opslaan met deze status wordt de huidige publicatie ingetrokken." : "Zet de kaart op Toegevoegd en sla op om deze update te publiceren."}</p> : <p className={styles.fieldHint}>{dirty ? "Sla je wijzigingen op voordat je de publicatie controleert." : "De releasewidget toont gepubliceerde updates in de ingestelde kamers."}</p>}
-              <div className={styles.footerActions}><button type="button" className={styles.button} disabled={editor.draft.status !== "added" || dirty || stale} onClick={requestPublish}><Eye size={15} aria-hidden="true"/>{editor.item.publication ? "Publicatie bijwerken" : "Publiceren in lobby"}</button>{editor.item.publication && <button type="button" className={`${styles.button} ${styles.quiet}`} disabled={dirty || stale} onClick={() => ask({ kind: "unpublish", item: copyItem(editor.item!) })}><EyeOff size={15} aria-hidden="true"/>Intrekken</button>}</div>
+              {editor.item.publication && <><span className={styles.previewLabel}>{dpT("releases.nu_gepubliceerd")} {dateLabel(editor.item.publication.publishedAt)}</span><ReleasePreview title={editor.item.publication.title} summary={editor.item.publication.summary} version={editor.item.publication.version} category={editor.item.publication.category ?? editor.item.category}/></>}
+              {publicChanged && <p className={styles.fieldHint}>{dpT("releases.je_opgeslagen_openbare_tekst_wijkt_af_van_de")}</p>}
+              {editor.draft.status !== "added" ? <p className={styles.fieldHint}>{editor.item.publication ? dpT("releases.bij_opslaan_met_deze_status_wordt_de_huidige") : dpT("releases.zet_de_kaart_op_toegevoegd_en_sla_op")}</p> : <p className={styles.fieldHint}>{dirty ? dpT("releases.sla_je_wijzigingen_op_voordat_je_de_publicatie") : dpT("releases.de_releasewidget_toont_gepubliceerde_updates_in_de_ingestelde")}</p>}
+              <div className={styles.footerActions}><button type="button" className={styles.button} disabled={editor.draft.status !== "added" || dirty || stale} onClick={requestPublish}><Eye size={15} aria-hidden="true"/>{editor.item.publication ? dpT("releases.publicatie_bijwerken") : dpT("releases.publiceren_in_lobby")}</button>{editor.item.publication && <button type="button" className={`${styles.button} ${styles.quiet}`} disabled={dirty || stale} onClick={() => ask({ kind: "unpublish", item: copyItem(editor.item!) })}><EyeOff size={15} aria-hidden="true"/>{dpT("releases.intrekken")}</button>}</div>
             </section>}
-            {editor.item && <section className={styles.history} aria-labelledby={`${formId}-history`}><h3 className={styles.sectionTitle} id={`${formId}-history`}><History size={16} aria-hidden="true"/>Geschiedenis</h3>{editor.item.history.map(entry => <div className={styles.historyRow} key={entry.id}><span className={styles.historyDot}/><div className={styles.historyBody}><p>{entry.text}</p><small>{entry.actor}</small></div><time className={styles.historyTime} dateTime={new Date(entry.at).toISOString()}>{dateLabel(entry.at)}</time></div>)}{!editor.item.history.length && <p className={styles.fieldHint}>Wijzigingen verschijnen hier zodra je opslaat.</p>}</section>}
+            {editor.item && <section className={styles.history} aria-labelledby={`${formId}-history`}><h3 className={styles.sectionTitle} id={`${formId}-history`}><History size={16} aria-hidden="true"/>{dpT("releases.geschiedenis")}</h3>{editor.item.history.map(entry => <div className={styles.historyRow} key={entry.id}><span className={styles.historyDot}/><div className={styles.historyBody}><p>{entry.text}</p><small>{entry.actor}</small></div><time className={styles.historyTime} dateTime={new Date(entry.at).toISOString()}>{dateLabel(entry.at)}</time></div>)}{!editor.item.history.length && <p className={styles.fieldHint}>{dpT("releases.wijzigingen_verschijnen_hier_zodra_je_opslaat")}</p>}</section>}
             </fieldset>
           </form>
           </div>
           {editorError && <div className={styles.inlineError} role="alert"><CircleAlert size={16} aria-hidden="true"/><span>{editorError}</span></div>}
           {editorMessage && <div className={styles.notice} role="status"><Check size={16} aria-hidden="true"/><span>{editorMessage}</span></div>}
-          <div className={styles.dialogFooter}><span className={styles.saveState} role="status">{busy ? "Wijziging wordt opgeslagen…" : dirty ? "Wijzigingen nog niet opgeslagen" : editor.item ? "Alle wijzigingen opgeslagen" : "Nieuw idee · start bij Ideeën"}</span><div className={styles.footerActions}><button type="button" disabled={busy} className={styles.button} onClick={requestClose}>Sluiten</button><button type="submit" form={`${formId}-form`} className={`${styles.button} ${styles.primary}`} disabled={busy || stale || Boolean(editor.item && !dirty)}><Check size={15} aria-hidden="true"/>{editor.item ? "Opslaan" : "Idee toevoegen"}</button></div></div>
+          <div className={styles.dialogFooter}><span className={styles.saveState} role="status">{busy ? dpT("releases.wijziging_wordt_opgeslagen") : dirty ? dpT("releases.wijzigingen_nog_niet_opgeslagen") : editor.item ? dpT("releases.alle_wijzigingen_opgeslagen") : dpT("releases.nieuw_idee_start_bij_ideeen")}</span><div className={styles.footerActions}><button type="button" disabled={busy} className={styles.button} onClick={requestClose}>{dpT("releases.sluiten")}</button><button type="submit" form={`${formId}-form`} className={`${styles.button} ${styles.primary}`} disabled={busy || stale || Boolean(editor.item && !dirty)}><Check size={15} aria-hidden="true"/>{editor.item ? dpT("releases.opslaan") : dpT("releases.idee_toevoegen")}</button></div></div>
         </>}
       </DialogContent>
     </Dialog>
@@ -395,8 +415,13 @@ function ReleaseBoard({ onConfigureWidget, onRegisterNavigationGuard }: Props) {
         {confirmation?.kind === "publish" && <ReleasePreview title={confirmation.item.releaseTitle} summary={confirmation.item.releaseSummary} version={confirmation.item.version} category={confirmation.item.category}/>}
         {confirmationError && <div className={styles.inlineError} role="alert"><CircleAlert size={16} aria-hidden="true"/><span>{confirmationError}</span></div>}
         </div>
-        <div className={styles.confirmActions}><button ref={confirmationCancel} type="button" disabled={busy} className={styles.button} onClick={cancelConfirmation}>{confirmation?.kind === "discard" ? "Verder bewerken" : "Annuleren"}</button><button type="button" disabled={busy} className={`${styles.button} ${confirmation?.kind === "publish" || confirmation?.kind === "reload" ? styles.primary : styles.danger}`} onClick={() => { void confirmAction(); }}>{busy ? "Even wachten…" : confirmationButton}</button></div>
+        <div className={styles.confirmActions}><button ref={confirmationCancel} type="button" disabled={busy} className={styles.button} onClick={cancelConfirmation}>{confirmation?.kind === "discard" ? dpT("releases.verder_bewerken") : dpT("releases.annuleren")}</button><button type="button" disabled={busy} className={`${styles.button} ${confirmation?.kind === "publish" || confirmation?.kind === "reload" ? styles.primary : styles.danger}`} onClick={() => { void confirmAction(); }}>{busy ? dpT("releases.even_wachten") : confirmationButton}</button></div>
       </AlertDialogContent>
     </AlertDialog>
   </div>;
 }
+
+const dpStaticCopyKeys={
+  "Speleridee": "releases.copy_speleridee",
+  "Teamidee": "releases.copy_teamidee"
+};

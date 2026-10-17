@@ -8,9 +8,9 @@ export const companyDetails={name:'DG Webservices',address:'Markenseplein 1',pos
 export const rolloutGateKeys=['staging_review','retention_jobs','backup_maximum_age','restore_replay','mail_delivery','provider_configuration'] as const;
 export const legalDraftSchema=z.object({key:z.enum(legalDocumentKeys),title:z.string().trim().min(3).max(150),version:z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/),language:z.literal('nl'),markdown:z.string().trim().min(50).max(100000),summary:z.string().trim().min(5).max(2000),material:z.boolean(),requiresAcceptance:z.boolean(),reason:z.string().trim().min(5).max(500)}).strict();
 export const legalPublishSchema=z.object({versionId:z.string().uuid(),effectiveAt:z.string().datetime({offset:true}),exceptionReason:z.string().trim().min(10).max(1000).optional(),reason:z.string().trim().min(5).max(500)}).strict();
-export const legalAcceptanceSchema=z.object({termsVersionId:z.string().uuid(),privacyVersionId:z.string().uuid(),age16Confirmed:z.literal(true),termsAccepted:z.literal(true)}).strict();
-export const legalOnboardingSchema=legalAcceptanceSchema.extend({username:z.string().max(80)}).strict();
-export type LegalVersion={id:string;key:LegalDocumentKey;title:string;version:string;language:'nl';markdown:string;summary:string;material:boolean;requiresAcceptance:boolean;createdAt:string;publishedAt:string|null;effectiveAt:string|null};
+export const legalAcceptanceSchema=z.object({language:z.enum(['nl','en']).optional(),termsTranslationId:z.string().uuid().optional(),privacyTranslationId:z.string().uuid().optional(),termsVersionId:z.string().uuid(),privacyVersionId:z.string().uuid(),age16Confirmed:z.literal(true),termsAccepted:z.literal(true)}).strict();
+export const legalOnboardingSchema=legalAcceptanceSchema.extend({locale:z.enum(['nl','en']).optional(),username:z.string().max(80)}).strict();
+export type LegalVersion={id:string;key:LegalDocumentKey;title:string;version:string;language:'nl'|'en';translationId?:string;translationRevision?:string;translationPublishedAt?:string;markdown:string;summary:string;material:boolean;requiresAcceptance:boolean;createdAt:string;publishedAt:string|null;effectiveAt:string|null};
 
 /** Safe destinations are local paths from a fixed product allowlist. */
 export function safeAuthDestination(value:string|null|undefined){

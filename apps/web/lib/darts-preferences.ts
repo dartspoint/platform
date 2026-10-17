@@ -1,6 +1,7 @@
 "use client";
 import {getPlatform,usePlatform,mutate} from "./platform-client";
 export type DartsPreferences = {
+  locale?: 'nl' | 'en' | null;
   favoriteRooms:string[];
   sound: boolean;
   lessMotion: boolean;

@@ -1,0 +1,23 @@
+{
+  "terms": {
+    "version": "2.0",
+    "revision": "en-1",
+    "sourceSha256": "b523df2bd816043c0b9f42ffb8bae3db05108174573e5b5d8a077415fcc3a8dc",
+    "translationSha256": "fc5f6ec694d850c913c4469336769c57a524cd1f02f1754b42f891ff4cbb1383",
+    "sourceUrl": "https://dartspoint.nl/algemene-voorwaarden"
+  },
+  "privacy": {
+    "version": "2.0",
+    "revision": "en-1",
+    "sourceSha256": "f74fe800515a1a1a75bf47e7e11af409655e1155c19c90d28baf5c5574bcd129",
+    "translationSha256": "fcc802a36e01b8e684c9f27fdf504fa77695205a372ac5113c8e67458e4cc201",
+    "sourceUrl": "https://dartspoint.nl/privacy"
+  },
+  "guide": {
+    "version": "2.0",
+    "revision": "en-1",
+    "sourceSha256": "9530aea8eaaa94713bc88515ba242a31f4f944b9726327879b3c0170cc9908be",
+    "translationSha256": "1f0d0f7d130f2b2ccb1ddd811f3c3455f4e3333b18fb5261d46bac56b4ed3039",
+    "sourceUrl": "https://dartspoint.nl/handleiding"
+  }
+}

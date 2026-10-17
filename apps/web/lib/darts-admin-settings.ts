@@ -1,4 +1,6 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+
 import {ELO_K,ELO_START,PLACEMENT_MATCHES,PLACEMENT_OPPONENTS} from "./darts-elo";
 import {getPlatform,usePlatform,mutate} from "./platform-client";
 export type AdminGameDefaults = {
@@ -47,33 +49,33 @@ export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   platform: { name: "DartsPoint", tagline: "Jouw club. Jouw volgende dart.", registrationOpen: true, maintenance: false, maintenanceMessage: "We maken DartsPoint nog een beetje beter. Je bent zo weer welkom.", announcement: "Vanavond tijd voor een potje? Kies je kamer en schuif aan.", announcementActive: false, supportEmail: "", chatSlowMode: 0, chatBurstCount:3, chatBurstSeconds:2, chatDuplicateSeconds:2, privateMessages: "everyone" },
   eloDraft: { k: ELO_K, startRating: ELO_START, placementMatches: PLACEMENT_MATCHES, placementOpponents: PLACEMENT_OPPONENTS, redBelow: 1450, greenFrom: 1550 },
 };
-function numberIn(value: unknown, min: number, max: number, label: string) { if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < min || value > max) throw new Error(`${label}: kies een heel getal tussen ${min} en ${max}.`); }
+function numberIn(value: unknown, min: number, max: number, label: string) { if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < min || value > max) throw new Error(runtimeFeedback("feedback.value1_kies_een_heel_getal_tussen_value2_en",{value1:label,value2:min,value3:max})); }
 function boolean(value: unknown, label: string) { if (typeof value !== "boolean") throw new Error(`${label}: kies aan of uit.`); }
-function text(value: unknown, max: number, label: string, required = false) { if (typeof value !== "string" || value.length > max || (required && !value.trim())) throw new Error(`${label}: ${required ? "vul een waarde in van " : "gebruik "}maximaal ${max} tekens.`); }
+function text(value: unknown, max: number, label: string, required = false) { if (typeof value !== "string" || value.length > max || (required && !value.trim())) throw new Error(runtimeFeedback("feedback.fieldLength",{label,required:String(required),max})); }
 export function validateAdminSettings(settings: AdminSettings) {
   const { game, entry, platform, eloDraft } = settings;
   if (![301, 501, 701].includes(game.startScore)) throw new Error("Kies 301, 501 of 701 als startscore.");
   if (!["double", "single"].includes(game.finish)) throw new Error("Kies single-out of double-out.");
-  for (const [name, value] of [["Legs per ronde", game.bestOfLegs], ["Legs in de finale", game.finalBestOfLegs]] as const) { numberIn(value, 1, 21, name); if (value % 2 === 0) throw new Error(`${name}: gebruik een oneven aantal.`); }
+  for (const [name, value] of [["Legs per ronde", game.bestOfLegs], ["Legs in de finale", game.finalBestOfLegs]] as const) { numberIn(value, 1, 21, name); if (value % 2 === 0) throw new Error(runtimeFeedback("feedback.value1_gebruik_een_oneven_aantal",{value1:name})); }
   numberIn(game.turnSeconds, 10, 120, "Beurttijd"); numberIn(game.reconnectSeconds, 15, 600, "Hersteltijd");
   boolean(game.spectators, "Toeschouwers"); boolean(game.checkoutHints, "Uitgooihulp");
   if (![4, 8, 16, 32, 64].includes(entry.maxPlayers)) throw new Error("Kies 4, 8, 16, 32 of 64 deelnemers.");
   numberIn(entry.minRating, 0, 5000, "Minimumrating"); numberIn(entry.maxRating, 0, 5000, "Maximumrating");
-  if (entry.minRating > entry.maxRating) throw new Error("De minimumrating mag niet hoger zijn dan de maximumrating.");
+  if (entry.minRating > entry.maxRating) throw new Error(runtimeFeedback("feedback.de_minimumrating_mag_niet_hoger_zijn_dan_de"));
   numberIn(entry.minMatches, 0, 500, "Minimaal gespeelde wedstrijden"); numberIn(entry.checkInMinutes, 5, 120, "Check-inperiode");
   boolean(entry.requireCheckIn, "Check-in"); boolean(entry.approval, "Goedkeuring"); boolean(entry.vipOnly, "Alleen VIP");
   text(platform.name, 40, "Platformnaam", true); text(platform.tagline, 100, "Slogan"); text(platform.maintenanceMessage, 300, "Onderhoudsbericht", platform.maintenance); text(platform.announcement, 240, "Aankondiging", platform.announcementActive); text(platform.supportEmail, 120, "Supportadres");
-  if (platform.supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(platform.supportEmail)) throw new Error("Vul een geldig support-e-mailadres in, of laat dit leeg.");
+  if (platform.supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(platform.supportEmail)) throw new Error(runtimeFeedback("feedback.vul_een_geldig_support_e_mailadres_in_of"));
   numberIn(platform.chatSlowMode, 0, 60, "Chatvertraging");
   numberIn(platform.chatBurstCount, 1, 30, "Berichten per korte periode");
   numberIn(platform.chatBurstSeconds, 1, 10, "Korte periode");
   numberIn(platform.chatDuplicateSeconds, 0, 30, "Dubbele tekst blokkeren");
   for (const name of ["registrationOpen", "maintenance", "announcementActive"] as const) boolean(platform[name], name);
-  if (!["everyone", "friends", "nobody"].includes(platform.privateMessages)) throw new Error("Kies een geldige standaard voor privéberichten.");
+  if (!["everyone", "friends", "nobody"].includes(platform.privateMessages)) throw new Error(runtimeFeedback("feedback.kies_een_geldige_standaard_voor_priveberichten"));
   numberIn(eloDraft.k, 8, 64, "K-factor"); numberIn(eloDraft.startRating, 500, 2500, "Beginrating"); numberIn(eloDraft.placementMatches, 1, 50, "Plaatsingswedstrijden"); numberIn(eloDraft.placementOpponents, 1, 50, "Unieke tegenstanders");
-  if (eloDraft.placementOpponents > eloDraft.placementMatches) throw new Error("Het aantal unieke tegenstanders mag niet hoger zijn dan het aantal plaatsingswedstrijden.");
+  if (eloDraft.placementOpponents > eloDraft.placementMatches) throw new Error(runtimeFeedback("feedback.het_aantal_unieke_tegenstanders_mag_niet_hoger_zijn"));
   numberIn(eloDraft.redBelow, 0, 4000, "Ondergrens geel"); numberIn(eloDraft.greenFrom, 1, 5000, "Ondergrens groen");
-  if (eloDraft.redBelow >= eloDraft.greenFrom) throw new Error("De grens voor groen moet hoger zijn dan de grens voor geel.");
+  if (eloDraft.redBelow >= eloDraft.greenFrom) throw new Error(runtimeFeedback("feedback.de_grens_voor_groen_moet_hoger_zijn_dan"));
 }
 export function hydrateAdminSettings(){}
 export function getAdminSettings():AdminSettings{return getPlatform().settings??DEFAULT_ADMIN_SETTINGS;}

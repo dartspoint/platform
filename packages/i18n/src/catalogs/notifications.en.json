@@ -1,0 +1,22 @@
+{
+  "notifications.nodigt_je_uit": "invites you",
+  "notifications.accepteer_de_uitnodiging_en_speel_mee": "Accept the invitation and join in",
+  "notifications.een_supportticket_vraagt_aandacht": "A support ticket needs attention",
+  "notifications.er_is_een_reactie_op_je_ticket": "There is a reply to your ticket",
+  "notifications.je_melding_is_behandeld": "Your report has been handled",
+  "notifications.vriendschapsverzoek": "Friend request",
+  "notifications.welkom_bij_dartspoint": "Welcome to DartsPoint",
+  "notifications.bericht_van_beheer": "Message from administration",
+  "notifications.je_toernooi_begint_binnenkort": "Your tournament starts soon",
+  "notifications.je_divisiewedstrijd": "Your division match",
+  "notifications.clubnieuws": "Club news",
+  "notifications.nieuw_bericht": "New message",
+  "notifications.ongelezen": "Unread",
+  "notifications.bekijk_ticket": "View ticket #",
+  "notifications.in_je_afgeschermde_inbox": " in your private inbox.",
+  "notifications.bekijk_de_reactie_in_je_afgeschermde_inbox": "View the reply in your private inbox.",
+  "notifications.open_ticket": "Open ticket",
+  "notifications.in_nieuw_tabblad": " in a new tab ↗",
+  "notifications.je_melding_over": "Your report about",
+  "notifications.je_hebt_nog_geen_meldingen": "You have no notifications yet."
+}

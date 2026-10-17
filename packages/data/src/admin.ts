@@ -1,3 +1,4 @@
+import {roomRegionSchema,roomLanguageSchema} from '../../contracts/src/room-metadata';
 import {supportModerationTicket} from './support';
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
@@ -57,7 +58,7 @@ export async function moderate(actor:Actor,input:unknown){
   if(p.kind==='suspend')await c.query('update profiles set session_version=session_version+1 where id=$1',[p.targetId]);
   if(p.kind==='remove'&&p.roomId)await c.query('delete from room_memberships where user_id=$1 and room_id=$2',[p.targetId,p.roomId]);
   await audit(c,actor.id,'moderation.'+p.kind,p.targetId,{roomId:p.roomId,channelId:p.channelId,matchId:p.matchId,messageId:p.messageId,sanctionId:r.rows[0].id},p.reason);
-  await outbox(c,'moderation:'+r.rows[0].id,'moderation',p.targetId,{action:p.kind,reason:p.reason,caseId:p.caseId??r.rows[0].id,durationLabel:p.minutes+' minuten'});
+  await outbox(c,'moderation:'+r.rows[0].id,'moderation',p.targetId,{action:p.kind,reason:p.reason,caseId:p.caseId??r.rows[0].id,durationMinutes:p.minutes,durationLabel:p.minutes+' minuten'});
   if(p.caseId){staff(actor);await resolveCase(c,actor,p.caseId,'resolved',p.reason,p.targetId);}return {ok:true,id:r.rows[0].id};
  });
 }
@@ -95,17 +96,18 @@ export async function adminAction(actor:Actor,input:unknown){
    await c.query('update profiles set session_version=session_version+1 where id=$1',[id]);await audit(c,actor.id,'member.role',id,{role,beforeRole});return {ok:true};
   }
   if(action==='room-save'){
-   const p=z.object({id:uuid.optional(),name:z.string().trim().min(1).max(80),subtitle:z.string().max(300),capacity:z.number().int().min(2).max(50),category:z.enum(['social','ranked','beginners','tournament']),status:z.enum(['active','closed','private']),rules:z.string().max(2000),minRating:z.number().int().min(0).max(5000),maxRating:z.number().int().min(0).max(5000),moderator:z.string().max(20).optional(),moderatorIds:z.array(uuid).max(50).optional()}).strict().parse(args[0]);requireThat(p.minRating<=p.maxRating,'rating_range');
-   let before:any;const id=p.id??crypto.randomUUID();if(p.id){const existing=(await c.query('select * from community_rooms where id=$1 for update',[id])).rows[0];requireThat(existing,'room_not_found',404);before={name:existing.name,status:existing.status,category:existing.category,capacity:existing.capacity};const live=Number((await c.query('select count(*) n from room_memberships where room_id=$1 and lease_until>now()',[id])).rows[0].n);requireThat(p.capacity>=live,'capacity_below_occupancy',409);requireThat(!(await c.query("select 1 from matches where room_id=$1 and lifecycle in('assigned','playing','paused')",[id])).rowCount||p.status!=='private','active_matches',409);}
+   const p=z.object({region:roomRegionSchema.optional(),primaryLanguage:roomLanguageSchema.optional(),id:uuid.optional(),name:z.string().trim().min(1).max(80),subtitle:z.string().max(300),capacity:z.number().int().min(2).max(50),category:z.enum(['social','ranked','beginners','tournament']),status:z.enum(['active','closed','private']),rules:z.string().max(2000),minRating:z.number().int().min(0).max(5000),maxRating:z.number().int().min(0).max(5000),moderator:z.string().max(20).optional(),moderatorIds:z.array(uuid).max(50).optional()}).strict().parse(args[0]);requireThat(p.minRating<=p.maxRating,'rating_range');
+   let before:any;const id=p.id??crypto.randomUUID();if(p.id){const existing=(await c.query('select * from community_rooms where id=$1 for update',[id])).rows[0];requireThat(existing,'room_not_found',404);before={name:existing.name,status:existing.status,category:existing.category,capacity:existing.capacity,region:existing.region,primaryLanguage:existing.primary_language};const live=Number((await c.query('select count(*) n from room_memberships where room_id=$1 and lease_until>now()',[id])).rows[0].n);requireThat(p.capacity>=live,'capacity_below_occupancy',409);requireThat(!(await c.query("select 1 from matches where room_id=$1 and lifecycle in('assigned','playing','paused')",[id])).rowCount||p.status!=='private','active_matches',409);}
    await c.query('insert into community_rooms(id,name,slug,description,capacity,category,status,rules,min_rating,max_rating) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(id) do update set name=$2,description=$4,capacity=$5,category=$6,status=$7,rules=$8,min_rating=$9,max_rating=$10,version=community_rooms.version+1',[id,p.name,p.name.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'-'+id.slice(0,8),p.subtitle,p.capacity,p.category,p.status==='active'?'open':p.status,p.rules,p.minRating,p.maxRating]);
    await c.query("insert into channels(kind,room_id) values('community',$1) on conflict do nothing",[id]);
+   if(p.region!==undefined||p.primaryLanguage!==undefined)await c.query('update community_rooms set region=case when $2 then $3 else region end,primary_language=case when $4 then $5 else primary_language end where id=$1',[id,p.region!==undefined,p.region??null,p.primaryLanguage!==undefined,p.primaryLanguage??null]);
    const previousMods=(await c.query('select user_id from room_moderators where room_id=$1',[id])).rows.map(r=>r.user_id as string);
    let nextMods=p.moderatorIds ? [...new Set(p.moderatorIds)] : previousMods;
    if(p.moderatorIds===undefined && p.moderator!==undefined){nextMods=[];if(p.moderator){const mod=(await c.query('select id from profiles where username_key=lower($1) and status=$2',[p.moderator,'active'])).rows[0];requireThat(mod,'moderator_not_found',400);nextMods=[mod.id];}}
    if(nextMods.length)requireThat((await c.query("select id from profiles where id=any($1::uuid[]) and status='active'",[nextMods])).rowCount===nextMods.length,'moderator_not_found',400);
    for(const removed of previousMods.filter(userId=>!nextMods.includes(userId))){await c.query('delete from room_moderators where room_id=$1 and user_id=$2',[id,removed]);await audit(c,actor.id,'room.moderator.revoked',removed,{roomId:id,roomName:p.name});}
    for(const added of nextMods.filter(userId=>!previousMods.includes(userId))){await c.query('insert into room_moderators(room_id,user_id) values($1,$2)',[id,added]);await audit(c,actor.id,'room.moderator.assigned',added,{roomId:id,roomName:p.name});}
-   await audit(c,actor.id,'room.save',id,{created:!p.id,before,after:{name:p.name,status:p.status,category:p.category,capacity:p.capacity}});return {ok:true,id};
+   await audit(c,actor.id,'room.save',id,{created:!p.id,before,after:{name:p.name,status:p.status,category:p.category,capacity:p.capacity,region:p.region,primaryLanguage:p.primaryLanguage}});return {ok:true,id};
   }
   if(action==='room-close'||action==='room-delete'){
    const id=uuid.parse(args[0]);const r=(await c.query('select * from community_rooms where id=$1 for update',[id])).rows[0];requireThat(r,'room_not_found',404);if(action==='room-delete')requireThat(!(await c.query("select 1 from matches where room_id=$1 and lifecycle in('assigned','playing','paused')",[id])).rowCount,'active_matches',409);

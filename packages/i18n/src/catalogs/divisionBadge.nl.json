@@ -1,0 +1,5 @@
+{
+  "divisionBadge.label": "{name} · {nameValue}",
+  "divisionBadge.speelt_in": "Speelt in {name}, {nameValue}",
+  "divisionBadge.d": "D{level}"
+}

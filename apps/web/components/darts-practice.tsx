@@ -1,4 +1,8 @@
 "use client";
+import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
+import {localiseStaticCopy} from "../../../packages/i18n/src/static-copy";
+import {useI18n} from '@/lib/i18n/provider';
+
 import {useTimingInput} from "@/lib/use-timing-input";
 import {ServerClock,TIMING_VERSION} from "../../../packages/game-core/src/timing";
 import {drawMeter,lockMeter,meterGeometry,timingTrace,type DrawnMeterSample} from '@/lib/drawn-meter';
@@ -34,27 +38,31 @@ export function usePracticeProgress() {
 }
 
 export function WeeklyChallengeCard({ onStart }: { onStart?: () => void }) {
+ const dpT = useI18n("practice").t;
+
   const { progress, challenge } = usePracticeProgress();
   const hit = progress.weeks[challenge.id] ?? [];
   const count = challenge.targets.filter(target => hit.includes(target)).length;
   return <section className="practice-week-card">
-    <div className="practice-card-eyebrow"><Flame size={16}/><span>DEZE WEEK · WEEK {challenge.number}</span><b>{count}/5</b></div>
-    <h3>Vijf dubbels. Jouw ritme.</h3><p>Raak alle vijf dubbels op het oefenbord om de uitdaging te voltooien.</p>
+    <div className="practice-card-eyebrow"><Flame size={16}/><span>{dpT("practice.deze_week_week")} {challenge.number}</span><b>{count}/5</b></div>
+    <h3>{dpT("practice.vijf_dubbels_jouw_ritme")}</h3><p>{dpT("practice.raak_alle_vijf_dubbels_op_het_oefenbord_om")}</p>
     <div className="practice-week-targets">{challenge.targets.map(target => <span className={hit.includes(target) ? "is-hit" : ""} key={target}>{hit.includes(target) && <Check size={13}/>} {target}</span>)}</div>
-    <div className="practice-progress-line" role="progressbar" aria-label="Weekuitdaging" aria-valuenow={count} aria-valuemin={0} aria-valuemax={5}><i style={{ width: `${count * 20}%` }}/></div>
-    {onStart ? <button className="practice-text-link" onClick={onStart}>{count === 5 ? "Uitdaging voltooid · blijf oefenen" : "Ga naar het oefenbord"}<ArrowRight size={15}/></button> : <a className="practice-text-link" href="/oefenen?uitdaging=1">{count === 5 ? "Uitdaging voltooid · blijf oefenen" : "Ga naar het oefenbord"}<ArrowRight size={15}/></a>}
+    <div className="practice-progress-line" role="progressbar" aria-label={dpT("practice.weekuitdaging")} aria-valuenow={count} aria-valuemin={0} aria-valuemax={5}><i style={{ width: `${count * 20}%` }}/></div>
+    {onStart ? <button className="practice-text-link" onClick={onStart}>{count === 5 ? dpT("practice.uitdaging_voltooid_blijf_oefenen") : dpT("practice.ga_naar_het_oefenbord")}<ArrowRight size={15}/></button> : <a className="practice-text-link" href="/oefenen?uitdaging=1">{count === 5 ? dpT("practice.uitdaging_voltooid_blijf_oefenen") : dpT("practice.ga_naar_het_oefenbord")}<ArrowRight size={15}/></a>}
   </section>;
 }
 
 export function PracticeAchievements() {
+ const dpT = useI18n("practice").t;
+
   const { badges, progress } = usePracticeProgress();
   return <section className="practice-achievements">
-    <div className="practice-section-title"><div><span className="practice-eyebrow">JOUW VERZAMELING</span><h3>Verdiend op het bord.</h3></div><span>{badges.filter(badge => badge.unlocked).length}/{badges.length}</span></div>
-    <p className="practice-muted">Oefen op je eigen tempo en speel badges vrij. Je DP verandert niet.</p>
+    <div className="practice-section-title"><div><span className="practice-eyebrow">{dpT("practice.jouw_verzameling")}</span><h3>{dpT("practice.verdiend_op_het_bord")}</h3></div><span>{badges.filter(badge => badge.unlocked).length}/{badges.length}</span></div>
+    <p className="practice-muted">{dpT("practice.oefen_op_je_eigen_tempo_en_speel_badges")}</p>
     <div className="practice-badge-grid">{badges.map((badge, index) => { const Icon = [Sparkles, Target, Flame, Crosshair, Award][index]; return <article key={badge.id} className={`practice-badge ${badge.unlocked ? "is-unlocked" : "is-locked"}`}>
-      <div className="practice-badge-medal"><Icon size={25}/>{badge.unlocked ? <CheckCircle2 size={13}/> : <LockKeyhole size={12}/>}</div><h4>{badge.title}</h4><p>{badge.description}</p><span>{badge.unlocked ? "VERDIEND" : `${badge.progress} / ${badge.total}`}</span>
+      <div className="practice-badge-medal"><Icon size={25}/>{badge.unlocked ? <CheckCircle2 size={13}/> : <LockKeyhole size={12}/>}</div><h4>{badge.title}</h4><p>{badge.description}</p><span>{badge.unlocked ? dpT("practice.verdiend") : dpT("practice.label",{progress:badge.progress,total:badge.total})}</span>
     </article>; })}</div>
-    <div className="practice-records"><div><strong>{progress.dartsThrown}</strong><span>Oefenpijlen</span></div><div><strong>{progress.highestVisit || "—"}</strong><span>Hoogste beurt</span></div><div><strong>{progress.highestCheckout || "—"}</strong><span>Hoogste finish</span></div><div><strong>{progress.oneEighties}</strong><span>180’s</span></div></div>
+    <div className="practice-records"><div><strong>{progress.dartsThrown}</strong><span>{dpT("practice.oefenpijlen")}</span></div><div><strong>{progress.highestVisit || "—"}</strong><span>{dpT("practice.hoogste_beurt")}</span></div><div><strong>{progress.highestCheckout || "—"}</strong><span>{dpT("practice.hoogste_finish")}</span></div><div><strong>{progress.oneEighties}</strong><span>180’s</span></div></div>
   </section>;
 }
 
@@ -87,10 +95,12 @@ function PracticeDart({ hit, flying, onLand }: { hit: DartHit; flying: boolean; 
 }
 
 const PracticeBoard = memo(function PracticeBoard({ target, dart, flying, chip, onLand }: { target: string | null; dart: { id: number; hit: DartHit } | null; flying: boolean; chip: boolean; onLand: () => void }) {
+ const dpT = useI18n("practice").t;
+
   const uid = useId().replace(/:/g, "");
   const g = BOARD_GEOMETRY;
   const position = dart ? dartTipPosition(dart.hit) : null;
-  return <svg className="practice-board" viewBox="0 0 440 440" role="img" aria-label={`Oefenbord${target ? `, doel ${target}` : ""}`}>
+  return <svg className="practice-board" viewBox="0 0 440 440" role="img" aria-label={dpT("practice.oefenbord",{value0:target ? `, doel ${target}` : ""})}>
     <defs><radialGradient id={`${uid}-rim`}><stop offset="75%" stopColor="#08150e"/><stop offset="94%" stopColor="#1c3025"/><stop offset="100%" stopColor="#102218"/></radialGradient><filter id={`${uid}-shadow`} x="-25%" y="-25%" width="150%" height="160%"><feDropShadow dx="0" dy="13" stdDeviation="11" floodOpacity=".65"/></filter></defs>
     <circle cx="220" cy="220" r="209" fill={`url(#${uid}-rim)`} stroke="#6c8b7550" strokeWidth="2" filter={`url(#${uid}-shadow)`}/>
     <circle cx="220" cy="220" r="177" fill="#07100b" stroke="#99a59840"/>
@@ -116,8 +126,19 @@ const tutorialSteps = [
   { title: "Ontdek de dubbels.", text: "De buitenste smalle ring verdubbelt de waarde. De binnenste smalle ring is een treble en telt driemaal.", hint: "D20 is 40 punten. T20 is 60 punten." },
   { title: "Nog één pijl. Helemaal van jou.", text: "Je kent de bediening. Pak je eigen ritme en kies een vak. In een 501-wedstrijd eindig je op een dubbel of BULL.", hint: "Je score verandert pas wanneer de punt het bord raakt." },
 ];
+const tutorialStepsStaticSource = tutorialSteps;
 
 export function DartsPractice({ tutorial = false, onClose,embedded=false }: { tutorial?: boolean; onClose?: () => void;embedded?:boolean }) {
+ const {formatLocale:dpFormatLocale}=useI18n();
+
+ const dpFeedback=useI18n("feedback").t;
+
+ const dpT = useI18n("practice").t;
+
+ const tutorialSteps=localiseStaticCopy(tutorialStepsStaticSource,dpT,dpStaticCopyKeys);
+
+
+
   const { progress, challenge } = usePracticeProgress();
   const query = useSyncExternalStore(subscribeQuery, browserQuery, emptyQuery);
   const queryParams = new URLSearchParams(query);
@@ -206,28 +227,46 @@ export function DartsPractice({ tutorial = false, onClose,embedded=false }: { tu
   const buttonText = phase === "horizontal" ? "RICHTING" : phase === "vertical" ? "HOOGTE" : phase === "flying" ? "GOOI!" : phase === "done" ? "KLAAR" : attemptEnded ? "OPNIEUW" : "VOLGENDE";
 
   return <div className={`darts-practice ${embedded?'practice-is-embedded':''}`}>
-    {!embedded&&<header className="practice-header">{onClose ? <button className="practice-back" onClick={onClose}><ArrowLeft size={18}/><span>Terug</span></button> : <a className="practice-back" href="/spelen"><ArrowLeft size={18}/><span>Kamer</span></a>}<div><Target size={18}/><strong>{isTutorial ? "Je eerste vijf pijlen" : "Het oefenbord"}</strong></div><span className="practice-unranked"><i/>Geen ratingpunten</span></header>}
+    {!embedded&&<header className="practice-header">{onClose ? <button className="practice-back" onClick={onClose}><ArrowLeft size={18}/><span>{dpT("practice.terug")}</span></button> : <a className="practice-back" href="/spelen"><ArrowLeft size={18}/><span>{dpT("practice.kamer")}</span></a>}<div><Target size={18}/><strong>{isTutorial ? dpT("practice.je_eerste_vijf_pijlen") : dpT("practice.het_oefenbord")}</strong></div><span className="practice-unranked"><i/>{dpT("practice.geen_ratingpunten")}</span></header>}
     <main className="practice-layout">
       <section className="practice-play">
-        <div className="practice-heading"><div><span className="practice-eyebrow">{isTutorial ? `PIJL ${Math.min(count + 1, 5)} VAN 5` : "RUIMTE OM BETER TE WORDEN"}</span><h1>{isTutorial ? tutorialStep.title : "Vind jouw ritme."}</h1></div><button className="practice-icon-button" aria-label="Oefensessie opnieuw starten" disabled={phase === "flying" || sending || !sessionReady} onClick={() => reset()}><RotateCcw size={17}/></button></div>
+        <div className="practice-heading"><div><span className="practice-eyebrow">{isTutorial ? dpT("practice.pijl_van_5",{value0:Math.min(count + 1, 5)}) : dpT("practice.ruimte_om_beter_te_worden")}</span><h1>{isTutorial ? tutorialStep.title : dpT("practice.vind_jouw_ritme")}</h1></div><button className="practice-icon-button" aria-label={dpT("practice.oefensessie_opnieuw_starten")} disabled={phase === "flying" || sending || !sessionReady} onClick={() => reset()}><RotateCcw size={17}/></button></div>
         {isTutorial ? <div className="practice-tutorial-copy"><p>{tutorialStep.text}</p><div className="practice-tutorial-dots">{tutorialSteps.map((_, index) => <span key={index} className={index < count ? "is-done" : index === count ? "is-current" : ""}>{index < count ? <Check size={12}/> : index + 1}</span>)}<small>{tutorialStep.hint}</small></div></div> : <>
-          <div className="practice-mode-tabs" role="group" aria-label="Oefenvorm">{([{ id: "free", label: "Vrij gooien" }, { id: "doubles", label: "Dubbels" }, { id: "bull", label: "Bull" }, { id: "checkout", label: "Finishes" }, { id: "challenge", label: "Weekdoel" }] as const).map(option => <button key={option.id} aria-pressed={mode === option.id} disabled={phase === "flying" || sending || !sessionReady} className={mode === option.id ? "is-active" : ""} onClick={() => reset(option.id, false)}>{option.label}</button>)}</div>
-          <div className="practice-mode-options">{mode === "doubles" ? <><label htmlFor="practice-double">Jouw dubbel</label><select id="practice-double" value={chosenDouble} disabled={phase === "flying" || sending || !sessionReady} onChange={event => { const next=Number(event.target.value);setChosenDouble(next);void reset(mode,isTutorial,finish,next); }}>{Array.from({ length: 20 }, (_, i) => 20 - i).map(number => <option key={number} value={number}>D{number} · {number * 2} punten</option>)}</select></> : mode === "checkout" ? <><label htmlFor="practice-checkout">Uitgooien vanaf</label><input id="practice-checkout" type="number" min={2} max={170} value={finishInput} disabled={phase === "flying" || sending || !sessionReady} onChange={event => setFinishInput(event.target.value)}/><button onClick={updateFinish} disabled={phase === "flying" || sending || !sessionReady}>Instellen<Check size={14}/></button></> : mode === "challenge" ? <><Flame size={16}/><span>{target ? `Volgende dubbel: ${target}` : "Alle vijf dubbels geraakt. Lekker gegooid!"}</span><b>{challenge.targets.filter(label => challengeHit.includes(label)).length}/5</b></> : mode === "bull" ? <><Crosshair size={16}/><span>De rode BULL telt 50. Groen eromheen is 25.</span></> : <><Target size={16}/><span>Drie pijlen per beurt. Alle ruimte om te oefenen.</span></>}</div>
+          <div className="practice-mode-tabs" role="group" aria-label={dpT("practice.oefenvorm")}>{([{ id: "free", label: dpFeedback("feedback.vrij_gooien") }, { id: "doubles", label: dpFeedback("feedback.dubbels") }, { id: "bull", label: "Bull" }, { id: "checkout", label: dpFeedback("feedback.finishes") }, { id: "challenge", label: dpFeedback("feedback.weekdoel") }] as const).map(option => <button key={option.id} aria-pressed={mode === option.id} disabled={phase === "flying" || sending || !sessionReady} className={mode === option.id ? "is-active" : ""} onClick={() => reset(option.id, false)}>{option.label}</button>)}</div>
+          <div className="practice-mode-options">{mode === "doubles" ? <><label htmlFor="practice-double">{dpT("practice.jouw_dubbel")}</label><select id="practice-double" value={chosenDouble} disabled={phase === "flying" || sending || !sessionReady} onChange={event => { const next=Number(event.target.value);setChosenDouble(next);void reset(mode,isTutorial,finish,next); }}>{Array.from({ length: 20 }, (_, i) => 20 - i).map(number => <option key={number} value={number}>D{number} · {number * 2} {dpT("practice.punten")}</option>)}</select></> : mode === "checkout" ? <><label htmlFor="practice-checkout">{dpT("practice.uitgooien_vanaf")}</label><input id="practice-checkout" type="number" min={2} max={170} value={finishInput} disabled={phase === "flying" || sending || !sessionReady} onChange={event => setFinishInput(event.target.value)}/><button onClick={updateFinish} disabled={phase === "flying" || sending || !sessionReady}>{dpT("practice.instellen")}<Check size={14}/></button></> : mode === "challenge" ? <><Flame size={16}/><span>{target ? dpT("practice.volgende_dubbel",{target:target}) : dpT("practice.alle_vijf_dubbels_geraakt_lekker_gegooid")}</span><b>{challenge.targets.filter(label => challengeHit.includes(label)).length}/5</b></> : mode === "bull" ? <><Crosshair size={16}/><span>{dpT("practice.de_rode_bull_telt_50_groen_eromheen_is")}</span></> : <><Target size={16}/><span>{dpT("practice.drie_pijlen_per_beurt_alle_ruimte_om_te")}</span></>}</div>
         </>}
         {inputError && <p className="practice-error" role="alert">{inputError}</p>}
         <div className="practice-arena">
-          <div className={`practice-meter practice-meter-x ${phase === "horizontal" ? "is-running" : ""}`} aria-label="Richtingsbalk"><ArrowRight size={16}/><div><i ref={xIndicator} style={{ left: '50%' }}/></div></div>
+          <div className={`practice-meter practice-meter-x ${phase === "horizontal" ? "is-running" : ""}`} aria-label={dpT("practice.richtingsbalk")}><ArrowRight size={16}/><div><i ref={xIndicator} style={{ left: '50%' }}/></div></div>
           <div className="practice-board-space"><PracticeBoard target={target} dart={dart} flying={phase === "flying"} chip={phase === "pause" || phase === "done"} onLand={land}/></div>
-          <div className={`practice-meter practice-meter-y ${phase === "vertical" ? "is-running" : ""}`} aria-label="Hoogtebalk"><span>↑</span><div><i ref={yIndicator} style={{ top: '50%' }}/></div><span>↓</span></div>
-          <button className="practice-throw" {...throwInput} disabled={!sessionReady || !timingReady || sending || phase === "flying" || phase === "done"} aria-label={phase === "horizontal" ? "Stop de richting" : phase === "vertical" ? "Stop de hoogte en gooi" : "Volgende pijl"}><strong>{buttonText}</strong><ArrowUpRight size={22}/></button>
-          <AnimatePresence>{phase === "done" && <motion.div className="practice-complete" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} role="status"><span className="practice-complete-medal"><Award size={30}/></span><span className="practice-eyebrow">JE EERSTE BADGE IS BINNEN</span><h2>Jij hebt het ritme.</h2><p>Vijf pijlen. {sessionPoints} {sessionPoints === 1 ? "punt" : "punten"}. Klaar voor je eerste wedstrijd?</p><a href="/lobby">Naar de lobby<ArrowRight size={16}/></a><button onClick={() => reset("free", false)}>Nog even oefenen</button></motion.div>}</AnimatePresence>
+          <div className={`practice-meter practice-meter-y ${phase === "vertical" ? "is-running" : ""}`} aria-label={dpT("practice.hoogtebalk")}><span>↑</span><div><i ref={yIndicator} style={{ top: '50%' }}/></div><span>↓</span></div>
+          <button className="practice-throw" {...throwInput} disabled={!sessionReady || !timingReady || sending || phase === "flying" || phase === "done"} aria-label={phase === "horizontal" ? dpT("practice.stop_de_richting") : phase === "vertical" ? dpT("practice.stop_de_hoogte_en_gooi") : dpT("practice.volgende_pijl")}><strong>{buttonText}</strong><ArrowUpRight size={22}/></button>
+          <AnimatePresence>{phase === "done" && <motion.div className="practice-complete" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} role="status"><span className="practice-complete-medal"><Award size={30}/></span><span className="practice-eyebrow">{dpT("practice.je_eerste_badge_is_binnen")}</span><h2>{dpT("practice.jij_hebt_het_ritme")}</h2><p>{dpT("practice.vijf_pijlen")} {sessionPoints} {sessionPoints === 1 ? dpT("practice.punt") : dpT("practice.punten")}{dpT("practice.klaar_voor_je_eerste_wedstrijd")}</p><a href="/lobby">{dpT("practice.naar_de_lobby")}<ArrowRight size={16}/></a><button onClick={() => reset("free", false)}>{dpT("practice.nog_even_oefenen")}</button></motion.div>}</AnimatePresence>
         </div>
-        <div className="practice-status" role="status" aria-live="polite"><span className={attemptEnded && remaining === 0 ? "is-success" : ""}>{message}</span><small>Spatie werkt ook</small></div>
-        <div className="practice-visit"><div className="practice-dart-slots">{[0, 1, 2].map(index => <span key={index} className={visit[index] ? "is-filled" : ""}>{visit[index]?.label ?? "—"}</span>)}</div><div><small>{mode === "checkout" && !isTutorial ? "OVER" : "BEURT"}</small><strong>{mode === "checkout" && !isTutorial ? remaining : visitTotal}</strong></div><span>{count} {count === 1 ? "pijl" : "pijlen"}{target ? ` · doel ${target}` : ""}</span></div>
-        {mode === "checkout" && !isTutorial && <div className="practice-checkout-routes"><Target size={14}/>{checkoutRoutes.length ? checkoutRoutes.map((route, index) => <span key={index}>{route.join(" ")}</span>) : <span>{attemptEnded ? "Nieuwe poging begint weer op je gekozen finish." : "Geen finish mogelijk met de resterende pijlen."}</span>}</div>}
+        <div className="practice-status" role="status" aria-live="polite"><span className={attemptEnded && remaining === 0 ? "is-success" : ""}>{message}</span><small>{dpT("practice.spatie_werkt_ook")}</small></div>
+        <div className="practice-visit"><div className="practice-dart-slots">{[0, 1, 2].map(index => <span key={index} className={visit[index] ? "is-filled" : ""}>{visit[index]?.label ?? "—"}</span>)}</div><div><small>{mode === "checkout" && !isTutorial ? dpT("practice.over") : dpT("practice.beurt")}</small><strong>{mode === "checkout" && !isTutorial ? remaining : visitTotal}</strong></div><span>{count} {count === 1 ? dpT("practice.pijl") : dpT("practice.pijlen")}{target ? dpT("practice.doel_2",{target:target}) : ""}</span></div>
+        {mode === "checkout" && !isTutorial && <div className="practice-checkout-routes"><Target size={14}/>{checkoutRoutes.length ? checkoutRoutes.map((route, index) => <span key={index}>{route.join(" ")}</span>) : <span>{attemptEnded ? dpT("practice.nieuwe_poging_begint_weer_op_je_gekozen_finish") : dpT("practice.geen_finish_mogelijk_met_de_resterende_pijlen")}</span>}</div>}
       </section>
-      <aside className="practice-sidebar"><section className="practice-session-card"><span className="practice-eyebrow">DEZE OEFENSESSIE</span><h3>Elke pijl telt.</h3><div className="practice-session-stats"><div><strong>{count}</strong><span>Pijlen</span></div><div><strong>{sessionPoints}</strong><span>Punten</span></div><div><strong>{count ? (sessionPoints / count * 3).toFixed(1) : "—"}</strong><span>3-pijlsgem.</span></div><div><strong>{targetsHit}</strong><span>Doel geraakt</span></div></div><p>Oefenen verandert je DP niet.</p></section><WeeklyChallengeCard onStart={() => reset("challenge", false)}/>{!isTutorial && <button className="practice-tutorial-link" onClick={() => reset("free", true)}><BookOpen size={19}/><span><strong>Even de bediening leren?</strong><small>Vijf pijlen, helemaal op je eigen tempo.</small></span><ChevronRight size={18}/></button>}</aside>
+      <aside className="practice-sidebar"><section className="practice-session-card"><span className="practice-eyebrow">{dpT("practice.deze_oefensessie")}</span><h3>{dpT("practice.elke_pijl_telt")}</h3><div className="practice-session-stats"><div><strong>{count}</strong><span>{dpT("practice.pijlen_2")}</span></div><div><strong>{sessionPoints}</strong><span>{dpT("practice.punten_2")}</span></div><div><strong>{count ? new Intl.NumberFormat(dpFormatLocale,{minimumFractionDigits:1,maximumFractionDigits:1}).format((sessionPoints / count * 3)) : "—"}</strong><span>{dpT("practice.3_pijlsgem")}</span></div><div><strong>{targetsHit}</strong><span>{dpT("practice.doel_geraakt")}</span></div></div><p>{dpT("practice.oefenen_verandert_je_dp_niet")}</p></section><WeeklyChallengeCard onStart={() => reset("challenge", false)}/>{!isTutorial && <button className="practice-tutorial-link" onClick={() => reset("free", true)}><BookOpen size={19}/><span><strong>{dpT("practice.even_de_bediening_leren")}</strong><small>{dpT("practice.vijf_pijlen_helemaal_op_je_eigen_tempo")}</small></span><ChevronRight size={18}/></button>}</aside>
     </main>
     <div className="practice-achievements-wrap"><PracticeAchievements/></div>
   </div>;
 }
+
+const dpStaticCopyKeys={
+  "Vind je richting.": "practice.copy_vind_je_richting",
+  "De groene indicator beweegt vanzelf. Stop hem op de plek waar je horizontaal wilt mikken. Daarna kies je de hoogte.": "practice.copy_de_groene_indicator_beweegt_vanzelf_stop_hem_op",
+  "Eerst links–rechts, dan boven–onder.": "practice.copy_eerst_links_rechts_dan_boven_onder",
+  "Jij bepaalt de hoogte.": "practice.copy_jij_bepaalt_de_hoogte",
+  "De verticale balk werkt hetzelfde: bovenin is hoog op het bord, onderin is laag. De pijl vertrekt zodra je de tweede indicator stopt.": "practice.copy_de_verticale_balk_werkt_hetzelfde_bovenin_is_hoog",
+  "Twee tikken. Eén worp.": "practice.copy_twee_tikken_een_worp",
+  "Voel het ritme.": "practice.copy_voel_het_ritme",
+  "Probeer nu het midden te vinden. De kleine rode bull is 50 punten waard; de groene ring eromheen 25.": "practice.copy_probeer_nu_het_midden_te_vinden_de_kleine",
+  "Mik voor de BULL op het midden van beide balken.": "practice.copy_mik_voor_de_bull_op_het_midden_van",
+  "Ontdek de dubbels.": "practice.copy_ontdek_de_dubbels",
+  "De buitenste smalle ring verdubbelt de waarde. De binnenste smalle ring is een treble en telt driemaal.": "practice.copy_de_buitenste_smalle_ring_verdubbelt_de_waarde_de",
+  "D20 is 40 punten. T20 is 60 punten.": "practice.copy_d20_is_40_punten_t20_is_60_punten",
+  "Nog één pijl. Helemaal van jou.": "practice.copy_nog_een_pijl_helemaal_van_jou",
+  "Je kent de bediening. Pak je eigen ritme en kies een vak. In een 501-wedstrijd eindig je op een dubbel of BULL.": "practice.copy_je_kent_de_bediening_pak_je_eigen_ritme",
+  "Je score verandert pas wanneer de punt het bord raakt.": "practice.copy_je_score_verandert_pas_wanneer_de_punt_het"
+};
