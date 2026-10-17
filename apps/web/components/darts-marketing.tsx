@@ -80,7 +80,11 @@ function HeroSpotlight() {
   const [paused, setPaused] = useState(false);
   const [interacting, setInteracting] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const reduced = useReducedMotion();
+  const prefersReducedMotion = useReducedMotion();
+  // Keep the server and initial browser markup identical. The media query is
+  // only available in the browser; apply it after hydration, before any slide.
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => { setReduced(Boolean(prefersReducedMotion)); }, [prefersReducedMotion]);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => { const change = () => setHidden(document.hidden); document.addEventListener("visibilitychange", change); change(); return () => document.removeEventListener("visibilitychange", change); }, []);
   useEffect(() => {

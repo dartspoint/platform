@@ -147,3 +147,13 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   De browsercheck wacht nu twee renderframes op de responsive layout en meet
   resultaat en foutdiagnostiek in hetzelfde frame. De oorspronkelijke
   éénpixelgrens, beide viewportbreedtes en alle opslagasserties blijven gelijk.
+- De volledige CI en stagingdeploy van `3fef7cb` slaagden, inclusief vier
+  migraties, Engelse voorwaarden/privacy 2.0, vlagassets, readiness en mobiele
+  geometrie. De extra echte HTTPS-controle vond een bestaande marketingfout bij
+  `prefers-reduced-motion`: de browser tekende een ander carrouselicoon dan SSR.
+  De voorkeur wordt nu na hydration toegepast; NL en EN worden met verminderde
+  beweging op foutloze hydration en uitblijvende automatische slides getest.
+  De drie reeds gesaneerde i18n-resultaten worden ook als CI-artifact opgenomen.
+- De vier PWA-installatie-instructies staan nu eveneens in de catalogus. Een
+  geopende instructie verandert mee met de interfacetaal zonder de prompt opnieuw
+  te openen of de installatieactie te herhalen.

@@ -226,6 +226,9 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
           path: |
+            artifacts/ci-safe/internationalisation-database.json
+            artifacts/ci-safe/internationalisation-browser.json
+            artifacts/ci-safe/internationalisation-room-metadata.json
             artifacts/ci-safe/workspace-chat-results.json
             artifacts/ci-safe/documents-support-results.json
             artifacts/ci-safe/support-delivery-results.json

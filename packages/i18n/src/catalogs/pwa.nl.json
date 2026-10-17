@@ -1,4 +1,8 @@
 {
   "pwa.dartspoint_is_geinstalleerd": "DartsPoint is geïnstalleerd",
-  "pwa.installeer_dartspoint": "Installeer DartsPoint"
+  "pwa.installeer_dartspoint": "Installeer DartsPoint",
+  "pwa.installHelp.accepted": "Je kunt DartsPoint straks als app openen.",
+  "pwa.installHelp.later": "Je kunt de app later nog installeren.",
+  "pwa.installHelp.ios": "Open DartsPoint in Safari. Tik op Delen en kies ‘Zet op beginscherm’.",
+  "pwa.installHelp.browser": "Kies ‘App installeren’ of ‘Toevoegen aan startscherm’ in het menu van je browser. Je hebt internet nodig om te spelen en je oefenvoortgang te bewaren."
 }

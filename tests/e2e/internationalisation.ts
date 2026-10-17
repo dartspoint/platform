@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import {Client} from '@colyseus/sdk';
 import {login,get,post,origin,testClientHeaders} from './helpers';
 await mkdir('artifacts/i18n',{recursive:true});
@@ -10,6 +10,18 @@ await context.addInitScript('globalThis.__name = (fn) => fn;');
 const page=await context.newPage(),errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
 let matchId:string|undefined,token:string|undefined;
 try{
+ const reducedContext=await browser.newContext({locale:'nl-NL',reducedMotion:'reduce'}),reducedPage=await reducedContext.newPage(),reducedErrors:string[]=[];
+ reducedPage.on('pageerror',error=>reducedErrors.push(error.message));
+ await reducedContext.addCookies([{name:'dp-locale',value:'en',url:origin}]);
+ for(const locale of ['nl','en']){
+  await reducedPage.goto(origin+'/'+locale,{waitUntil:'domcontentloaded'});
+  await expect(reducedPage.locator('.mk-slide-buttons button').nth(1)).toBeDisabled();
+  assert.equal(await reducedPage.locator('html').getAttribute('lang'),locale);
+  assert.deepEqual(reducedErrors,[],'Reduced-motion public pages hydrate without replacing the server HTML');
+ }
+ await reducedPage.waitForTimeout(6700);
+ await expect(reducedPage.locator('.mk-slide-dots button').first()).toHaveAttribute('aria-pressed','true');
+ assert.deepEqual(reducedErrors,[]);await reducedContext.close();
  const headers=testClientHeaders();await context.route('**/api/platform/auth/**',route=>route.continue({headers:{...route.request().headers(),...headers}}));
  await page.goto(origin+'/en');assert.equal(await page.locator('html').getAttribute('lang'),'en');await page.getByRole('heading',{name:/last leg/i}).waitFor();
  assert.equal(await page.locator('html').evaluate(el=>el.scrollWidth>innerWidth),false);
@@ -59,7 +71,7 @@ try{
  assert.equal(await page.getByLabel('Chatbericht',{exact:true}).first().inputValue(),draft);
  boot=await get(page,'bootstrap');assert.equal(boot.preferences.locale,'nl');
  await page.screenshot({path:'artifacts/i18n/match-language-switch.png',fullPage:true});assert.deepEqual(errors,[]);
- await writeFile('artifacts/i18n/e2e-result.json',JSON.stringify({ok:true,actualEnglishOtp:true,languageChangeDoesNotResend:true,accountPreference:true,realTwoPlayerMatch:true,statePreserved:true,boardNodePreserved:true,socketsPreserved:true,draftPreserved:true},null,2));console.log('Real English OTP, bilingual registration and language switch in an active match passed');
+ await writeFile('artifacts/i18n/e2e-result.json',JSON.stringify({ok:true,reducedMotionHydration:true,reducedMotionDoesNotAutoplay:true,actualEnglishOtp:true,languageChangeDoesNotResend:true,accountPreference:true,realTwoPlayerMatch:true,statePreserved:true,boardNodePreserved:true,socketsPreserved:true,draftPreserved:true},null,2));console.log('Real English OTP, bilingual registration and language switch in an active match passed');
 }catch(error){
  await page.screenshot({path:'artifacts/i18n/match-language-failure.png',fullPage:true}).catch(()=>{});
  console.error(JSON.stringify({event:'i18n_browser_failure',path:new URL(page.url()).pathname,language:await page.locator('html').getAttribute('lang'),buttons:await page.getByRole('button').allTextContents(),errors}));throw error;
