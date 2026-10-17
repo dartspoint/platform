@@ -157,3 +157,5 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
 - De vier PWA-installatie-instructies staan nu eveneens in de catalogus. Een
   geopende instructie verandert mee met de interfacetaal zonder de prompt opnieuw
   te openen of de installatieactie te herhalen.
+- Support- en privacyverzoeklinks vanuit juridische pagina’s behouden de taal
+  van het document, ook bij een direct bezoek zonder gastvoorkeurcookie.
