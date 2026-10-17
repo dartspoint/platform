@@ -47,12 +47,20 @@ try{
  await recordLegalAcceptance(player.id,{...acceptance,termsVersionId:changed.id});assert.equal(await getRequiredLegalAcceptance(player.id),null);
  // Existing admin can publish only after an explicit owner grant.
  await updateLegalAuthority(owner,{userId:editor.id,enabled:true,reason:'Test expliciete machtiging'});assert.equal((await getLegalAdminBundle(editor)).canPublish,true);
- // Production publication fails closed until all external evidence is recorded.
- const guide=drafts.find(v=>v.key==='guide')!;process.env.APP_ENV='production';await assert.rejects(publishLegalVersion(owner,{versionId:guide.id,effectiveAt:new Date().toISOString(),reason:'Test productie gate'}),/aantoonbare controle/);process.env.APP_ENV='development';
+ // Production publication requires explicit authority, without manual rollout checks.
+ await updateLegalAuthority(owner,{userId:editor.id,enabled:false,reason:'Test ingetrokken publicatiemachtiging'});assert.equal((await getLegalAdminBundle(editor)).canPublish,false);
+ const guide=drafts.find(v=>v.key==='guide')!;process.env.APP_ENV='production';
+ assert.equal((await admin.query("select count(*) n from private.legal_rollout_checks where environment='production'")).rows[0].n,'0');
+ await assert.rejects(publishLegalVersion(player,{versionId:guide.id,effectiveAt:new Date().toISOString(),reason:'Test speler mag niet publiceren'}),{code:'forbidden',status:403});
+ await assert.rejects(publishLegalVersion(editor,{versionId:guide.id,effectiveAt:new Date().toISOString(),reason:'Test beheerder zonder publicatiemachtiging'}),{code:'legal_publish_forbidden',status:403});
+ await publishLegalVersion(owner,{versionId:guide.id,effectiveAt:new Date().toISOString(),reason:'Test eigenaar publiceert zonder handmatige uitrolcontroles'});
+ assert.equal((await getLegalPublicBundle()).current.guide?.id,guide.id);
+ await assert.rejects(publishLegalVersion(owner,{versionId:guide.id,effectiveAt:new Date().toISOString(),reason:'Test dubbele publicatie blijft geweigerd'}),{code:'already_published',status:409});
+ process.env.APP_ENV='development';
  await verifyLegalRolloutCheck(owner,{environment:'staging',key:'staging_review',evidence:'Geïsoleerde geautomatiseerde werkingstest uitgevoerd.'});
  // Direct Auth insertion, representing any provider, obeys closed admission.
  await admin.query(`insert into private.system_settings(key,data) values('settings','{"platform":{"registrationOpen":false}}') on conflict(key) do update set data=excluded.data`);
  await assert.rejects(admin.query('insert into auth.users(id) values($1)',[randomUUID()]),/registraties.*gesloten/);
  assert.equal((await admin.query('select username from public.profiles where id=$1',[owner.id])).rows[0].username,null,'Provider metadata is never an automatic public username');
- console.log('Legal drafts, immutable publication/evidence, explicit authority, atomic onboarding/retries, acceptance version checks, production gates and provider-independent closed registration passed on isolated PostgreSQL.');
+ console.log('Legal drafts, immutable publication/evidence, explicit authority, atomic onboarding/retries, acceptance version checks, production publication without manual rollout checks and provider-independent closed registration passed on isolated PostgreSQL.');
 }finally{process.env.APP_ENV='development';await db().end();await admin?.end();await rm(directory,{recursive:true,force:true});spawnSync('docker',['rm','--force','--volumes',name],{stdio:'ignore'});}

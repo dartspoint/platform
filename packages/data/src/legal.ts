@@ -41,14 +41,6 @@ export async function publishLegalVersion(actor:Actor,input:unknown){const p=leg
  const v=(await c.query('select * from private.legal_versions where id=$1',[p.versionId])).rows[0];requireThat(v,'not_found',404);
  const existing=(await c.query('select 1 from private.legal_publications where version_id=$1',[p.versionId])).rowCount;requireThat(!existing,'already_published',409);
  try{validatePublicationTiming({material:v.material,publishedAt:new Date(),effectiveAt:new Date(p.effectiveAt),exceptionReason:p.exceptionReason});}catch(e){throw new DomainError('publication_timing',400,(e as Error).message);}
- // Every proposed document describes the combined rollout. Production needs
- // recorded evidence for external controls as well as the staging review.
- const environment=process.env.APP_ENV??'production';
- if(environment!=='development'&&environment!=='test'){
-  const required=environment==='production'?rolloutGateKeys:['staging_review'];
-  const checks=(await c.query('select check_key from private.legal_rollout_checks where environment=$1 and check_key=any($2::text[])',[environment,required])).rows;
-  requireThat(checks.length===required.length,'legal_rollout_incomplete',409,'Publicatie wacht op aantoonbare controle van de inrichting en bewaartermijnen.');
- }
  await c.query('insert into private.legal_publications(version_id,published_by,effective_at,exception_reason,reason) values($1,$2,$3,$4,$5)',[v.id,actor.id,p.effectiveAt,p.exceptionReason??null,p.reason]);
  await audit(c,actor.id,'legal.publish',v.id,{key:v.document_key,version:v.version,effectiveAt:p.effectiveAt},p.reason);
  // Existing notification infrastructure delivers an announcement once. No mail
