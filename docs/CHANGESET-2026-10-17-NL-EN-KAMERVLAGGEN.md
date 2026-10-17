@@ -50,7 +50,7 @@ werkelijk verbonden domeinen. Een gesimuleerde `.app`-host bewijst geen DNS/TLS.
 ## Uitgevoerde opdrachten
 
 - `npm run build:deploy`: standalone web-, realtime- en workerbundles gebouwd.
-- `npm run verify:ci`: typechecks, 99 unitchecks en 49 bestaande opschecks geslaagd.
+- `npm run verify:ci`: typechecks, 100 unitchecks en 49 bestaande opschecks geslaagd.
 - `tests/integration/internationalisation.ts`: echte lokale DB/Auth-integratie.
 - `tests/e2e/internationalisation.ts`: echte browsers, OTP/Mailpit, onboarding en
   taalwissel tijdens een actieve wedstrijd.
@@ -121,3 +121,18 @@ uitgerold of gewijzigd. Dit volgt de expliciete staginggrens uit de opdracht.
   tabdoel. Document/supportacceptatie: 18 checks geslaagd. Bezorgstatusacceptatie:
   4 checks geslaagd bij herhaling na een eerste timeout bij claimen. Releasebeheer:
   opslag, idempotentie, privérechten, publicatie en mobiele bediening geslaagd.
+
+- Toernooiblokkades, rondes en doorstroomwaarschuwingen gebruiken een gecontroleerde
+  presentatielaag. De oorspronkelijke bronwaarden blijven leidend voor deelname,
+  planning, filters en audit; vrije namen en inhoud blijven intact.
+- Stagingrun op `d499cd1` stopte vóór tests/deployment op
+  `qa_supabase_resource_scope_invalid`. De bestaande guard blijft ongewijzigd
+  weigeren; de bestaande gedocumenteerde hosted fallback voert dezelfde volledige suite uit.
+  De dedicated runner en zijn beveiliging worden niet gewijzigd.
+
+- De QA-runner was online en niet bezet. De repositorykeuze
+  `DARTSPOINT_QA_ON_VPS` is voor deze uitrol tijdelijk naar de gedocumenteerde
+  hosted route gezet; dezelfde tests, grenswaarden, images en beperkte
+  stagingdeployhelper blijven gelden. De oorspronkelijke waarde `true` wordt
+  na de uitrol hersteld. De nog benodigde QA-opruiming blijft een expliciet
+  operationeel punt zolang Tailscale extra authenticatie vereist.

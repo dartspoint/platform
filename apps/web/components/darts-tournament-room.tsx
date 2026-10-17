@@ -1,4 +1,5 @@
 "use client";
+import {competitionText} from "../../../packages/i18n/src/competition-messages";
 import {FixedCopy} from "@/components/fixed-copy";
 import {runtimeFeedback} from "../../../packages/i18n/src/feedback";
 import {localiseStaticCopy} from "../../../packages/i18n/src/static-copy";
@@ -25,8 +26,8 @@ import "./darts-tournament-room.css";
 const statusLabels = { draft: "Concept", registration: "Inschrijving", checkin: "Check-in", live: "In de toernooikamer", completed: "Afgerond", cancelled: "Geannuleerd" };
 const statusLabelsStaticSource = statusLabels;
 const gameKey = (t: Tournament, m: TournamentMatch) => `tournament-${t.id}-${m.id}-${m.players.join("-")}-${m.startedAt ?? 0}`;
-const matchName = (t: Tournament, m: TournamentMatch, side: number) => t.participants.find(p => p.id === m.players[side])?.name ?? "Nog te bepalen";
-const laneName = (m: TournamentMatch) => m.bracket === "grand-final" ? "Grote finale" : m.bracket === "reset" ? "Beslissende finale" : `${m.bracket === "losers" ? "Tweede kans" : "Winnaars"} · ronde ${m.round + 1}`;
+const matchName = (t: Tournament, m: TournamentMatch, side: number) => t.participants.find(p => p.id === m.players[side])?.name ?? competitionText("Nog te bepalen");
+const laneName = (m: TournamentMatch) => competitionText(m.bracket === "grand-final" ? "Grote finale" : m.bracket === "reset" ? "Beslissende finale" : `${m.bracket === "losers" ? "Tweede kans" : "Winnaars"} · ronde ${m.round + 1}`);
 function SavedBoard({ tournament, match }: { tournament: Tournament; match: TournamentMatch }) {
  const dpT = useI18n("tournamentRoom").t;
 

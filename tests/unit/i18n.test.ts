@@ -78,3 +78,15 @@ test('Explicit manifest locale is stable even with a different guest preference'
   const manifest=await result.json();assert.equal(manifest.lang,locale);assert.equal(manifest.scope,'/');assert.match(result.headers.get('cache-control')??'',/private.*no-store/);
  }
 });
+
+test('Competition blockers localise their presentation while source decisions and names stay intact',async()=>{
+ const {competitionText}=await import('../../packages/i18n/src/competition-messages');
+ assert.equal(competitionText('Minimaal 1 gespeelde wedstrijden',[],'en'),'At least 1 match played');
+ assert.equal(competitionText('Minimaal 3 gespeelde wedstrijden',[],'en'),'At least 3 matches played');
+ const name='Nick: nog niet klaar <b>';
+ assert.equal(competitionText(name+': nog niet klaar',[name],'en'),name+': not ready yet');
+ assert.equal(competitionText(name+': nog niet klaar',[],'en'),name+': nog niet klaar');
+ assert.equal(competitionText('Spelregels nog niet geaccepteerd',[],'nl'),'Spelregels nog niet geaccepteerd');
+ assert.equal(competitionText('Winnaars · ronde 2',[],'en'),'Winners bracket · round 2');
+ assert.equal(competitionText('Unchanged source content',[],'en'),'Unchanged source content');
+});
