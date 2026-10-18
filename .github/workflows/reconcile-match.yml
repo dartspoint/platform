@@ -1,0 +1,65 @@
+name: Inspect or reconcile one completed match
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [inspect, repair]
+        default: inspect
+        required: true
+      player_a:
+        type: string
+        required: true
+      player_b:
+        type: string
+        required: true
+      before_utc:
+        description: Fixed request cutoff in YYYY-MM-DDTHH:mm:ssZ
+        type: string
+        required: true
+      game_number:
+        type: string
+        required: false
+      expected_hash:
+        description: Result hash from the preceding inspection; required for repair
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: dartspoint-match-reconciliation
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.18.0
+      - name: Install reviewed dependencies without environment credentials
+        run: npm ci
+      - name: Inspect by default or apply the exact reviewed correction
+        env:
+          APP_ENV: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_CA_CERT_BASE64: ${{ vars.DATABASE_CA_CERT_BASE64 }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+          RECONCILE_OPERATION: ${{ inputs.operation }}
+          RECONCILE_PLAYER_A: ${{ inputs.player_a }}
+          RECONCILE_PLAYER_B: ${{ inputs.player_b }}
+          RECONCILE_BEFORE: ${{ inputs.before_utc }}
+          RECONCILE_GAME_NUMBER: ${{ inputs.game_number }}
+          RECONCILE_EXPECTED_HASH: ${{ inputs.expected_hash }}
+        run: node --import tsx scripts/reconcile-timeout-match.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: match-reconciliation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/match-reconciliation/result.json
+          if-no-files-found: error
+          retention-days: 7

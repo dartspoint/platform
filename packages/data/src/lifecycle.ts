@@ -18,16 +18,11 @@ export async function maintainMatches(){return transaction(async c=>{
   const state={...m.state,phase:'won',winner};await finishMatch(c,m,state,'no-show',winner);await persist(c,m,state,'no-show',null);
   await audit(c,null,'match.no-show',m.id,{winner,deadlineMinutes:5},winner===null?'Geen eenduidige aanwezige speler; hernieuwde bevestiging of beheerbesluit nodig':'Enige aanwezige speler had de wedstrijd bevestigd; administratieve walkover');
  }
- const turns=(await c.query("select m.* from matches m where lifecycle='playing' and state->'pendingDart'='null'::jsonb and not exists(select 1 from match_players p where p.match_id=m.id and disconnected_at is not null) and coalesce((state->>'turnStartedAt')::bigint,(state->>'phaseStartedAt')::bigint)+coalesce((competition->>'turnSeconds')::integer,30)*1000<$1 for update skip locked",[Date.now()])).rows;
+ const turns=(await c.query("select m.* from matches m where lifecycle='playing' and state->'pendingDart'='null'::jsonb and not exists(select 1 from match_players p where p.match_id=m.id and disconnected_at is not null) and (state->'timeoutDecision' is null or state->'timeoutDecision'='null'::jsonb) and coalesce((state->>'turnDeadlineAt')::bigint,coalesce((state->>'turnStartedAt')::bigint,(state->>'phaseStartedAt')::bigint)+coalesce((competition->>'turnSeconds')::integer,30)*1000)<$1 for update skip locked",[Date.now()])).rows;
  for(const m of turns){
   const now=Date.now(),intervalMs=(m.competition?.turnSeconds??30)*1000,timeout=observeTurnTimeout(m.state,now,intervalMs);if(!timeout)continue;
-  if(timeout.forfeit){
-   const s={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:m.state.turn}),...timeout,phaseToken:randomUUID(),lastResult:'Wedstrijd verloren na drie opeenvolgende beurttijdoverschrijdingen.'};
-   await finishMatch(c,m,s,'forfeit',s.winner);await persist(c,m,s,'turn-timeout',null);await audit(c,null,'match.turn-timeout',m.id,{player:m.state.turn,strike:3,intervalMs});
-  }else{
-   await persist(c,m,{...m.state,...timeout,phaseToken:randomUUID(),phaseStartedAt:now},'turn-timeout-warning',null);
-   await audit(c,null,'match.turn-timeout-warning',m.id,{player:m.state.turn,strike:timeout.timeoutWarning!.strike,deadlineAt:timeout.timeoutWarning!.deadlineAt,intervalMs});
-  }
+  await persist(c,m,{...m.state,...timeout,phaseToken:randomUUID(),phaseStartedAt:now},timeout.timeoutDecision?'turn-timeout-decision':'turn-timeout-warning',null);
+  await audit(c,null,timeout.timeoutDecision?'match.turn-timeout-decision':'match.turn-timeout-warning',m.id,{player:m.state.turn,strike:timeout.timeoutStrikes[m.state.turn],intervalMs});
  }
 });}
 export async function scheduleReminders(){return transaction(async c=>{

@@ -21,8 +21,8 @@
   "matchExperience.begint": "{opponentName} starts",
   "matchExperience.daarna": "Afterwards",
   "matchExperience.om_de_beurt_starten": "Take turns starting",
-  "matchExperience.bij_winst": "If you win",
-  "matchExperience.bij_verlies": "If you lose",
+  "matchExperience.bij_winst": "Per leg won",
+  "matchExperience.bij_verlies": "Per leg lost",
   "matchExperience.dit_is_een_indicatie_op_basis_van_jullie": "This is an estimate based on your current DP. The final change follows the result.",
   "matchExperience.speel_ontspannen_deze_partij_verandert_je_rating_niet": "Enjoy a relaxed game. This match does not change your rating.",
   "matchExperience.wedstrijd_voorbereiden": "Preparing match…",
@@ -60,5 +60,10 @@
   "matchExperience.nog_niet_geopend_alleen_een_dubbel_telt_als": "Not opened yet: only a double counts as the first scoring dart.",
   "matchExperience.0_in": "0 · IN",
   "matchExperience.uit": " · Out!",
-  "matchExperience.over": " remaining"
+  "matchExperience.over": " remaining",
+  "matchExperience.timeout_title": "Turn time expired",
+  "matchExperience.timeout_description": "{opponent} has exceeded the turn time. End the match or allow one more minute. After that minute, you can choose again. Ending the match records the current leg as a loss for your opponent.",
+  "matchExperience.timeout_wait": "Wait 1 more minute",
+  "matchExperience.timeout_finish": "End match",
+  "matchExperience.timeout_pending": "Your turn time has expired. Your opponent is deciding whether to allow one more minute."
 }

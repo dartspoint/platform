@@ -280,5 +280,8 @@
   "errors.captcha_failed": "De botcontrole is mislukt. Probeer het opnieuw.",
   "errors.conflict": "Deze waarde is al in gebruik.",
   "errors.invite_unavailable": "Deze uitnodiging is niet meer beschikbaar.",
-  "errors.unknown": "Dit is niet gelukt. Probeer het nog eens."
+  "errors.unknown": "Dit is niet gelukt. Probeer het nog eens.",
+  "errors.timeout_decision_missing": "Deze timeoutkeuze is niet meer beschikbaar.",
+  "errors.timeout_opponent_only": "Alleen de wachtende tegenstander kan deze keuze maken.",
+  "errors.timeout_decision_pending": "Je tegenstander kiest of de wedstrijd doorgaat."
 }

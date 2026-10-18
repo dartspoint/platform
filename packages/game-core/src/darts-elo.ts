@@ -1,4 +1,4 @@
-/** DartsPoint V1: one zero-sum Elo update per completed ranked match. */
+/** Zero-sum Elo formula shared by legacy match policy 1 and leg policy 2. */
 export const ELO_START = 1500;
 export const ELO_K = 32;
 export const PLACEMENT_MATCHES = 10;

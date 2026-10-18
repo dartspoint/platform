@@ -21,8 +21,8 @@
   "matchExperience.begint": "{opponentName} begint",
   "matchExperience.daarna": "Daarna",
   "matchExperience.om_de_beurt_starten": "Om de beurt starten",
-  "matchExperience.bij_winst": "Bij winst",
-  "matchExperience.bij_verlies": "Bij verlies",
+  "matchExperience.bij_winst": "Bij legwinst",
+  "matchExperience.bij_verlies": "Bij legverlies",
   "matchExperience.dit_is_een_indicatie_op_basis_van_jullie": "Dit is een indicatie op basis van jullie huidige DP. De definitieve wijziging volgt na de uitslag.",
   "matchExperience.speel_ontspannen_deze_partij_verandert_je_rating_niet": "Speel ontspannen. Deze partij verandert je rating niet.",
   "matchExperience.wedstrijd_voorbereiden": "Wedstrijd voorbereiden…",
@@ -60,5 +60,10 @@
   "matchExperience.nog_niet_geopend_alleen_een_dubbel_telt_als": "Nog niet geopend: alleen een dubbel telt als eerste worp.",
   "matchExperience.0_in": "0 · IN",
   "matchExperience.uit": " · Uit!",
-  "matchExperience.over": " over"
+  "matchExperience.over": " over",
+  "matchExperience.timeout_title": "Beurttijd verstreken",
+  "matchExperience.timeout_description": "{opponent} heeft de beurttijd overschreden. Beëindig de wedstrijd of geef één minuut extra. Na die minuut kun je opnieuw kiezen. De lopende leg telt bij beëindigen als verlies voor je tegenstander.",
+  "matchExperience.timeout_wait": "1 minuut extra wachten",
+  "matchExperience.timeout_finish": "Wedstrijd beëindigen",
+  "matchExperience.timeout_pending": "Je beurttijd is verstreken. Je tegenstander kiest of je één minuut extra krijgt."
 }

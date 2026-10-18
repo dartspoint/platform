@@ -6,10 +6,12 @@ import {postgresOptions} from '../../packages/data/src/postgres';
 import {db,redis,transaction} from '../../packages/data/src/db';
 import {actorById} from '../../packages/data/src/auth';
 import {joinRoom,heartbeat,expireRoomMemberships,sendMessage,chatHistory,resolveChannel,social} from '../../packages/data/src/community';
-import {createMatch,matchAccess,matchAccessBatch,matchCommand,captureMatchIngress,acquireMatch,spectateMatch} from '../../packages/data/src/matches';
+import {createMatch,matchAccess,matchAccessBatch,matchCommand,captureMatchIngress,acquireMatch,spectateMatch,settleImpacts,expireDisconnects} from '../../packages/data/src/matches';
+import {correctLegacyLegResult} from '../../packages/data/src/legacy-leg-correction';
+import {scoreDart} from '../../packages/game-core/src/darts-rules';
 import {maintainMatches} from '../../packages/data/src/lifecycle';
 import {bootstrap,chatChannelsProjection} from '../../packages/data/src/projections';
-import {matchHistory} from '../../packages/data/src/history';
+import {matchHistory,personalRecords} from '../../packages/data/src/history';
 import {domainTiming} from './timing-fixture';
 
 assert.equal(process.env.APP_ENV,'development');
@@ -108,8 +110,80 @@ try{
  assert.equal((await privileged.query('select count(*)::int n from match_darts where match_id=$1',[mainMatch])).rows[0].n,0);checks.verticalWarningPreservesHorizontalLockAndRejectsPreWarningInputs=true;
  assert.deepEqual(await matchCommand(actors[0],accepted.payload,writer,fence,accepted.ingress),accepted.receipt);
  assert.deepEqual((await matchAccess(actors[0],mainMatch)).state.timeoutStrikes,[1,0]);checks.retryCannotClearLaterWarnings=true;
- const beforeSecondVerticalWarning=await matchAccess(actors[0],mainMatch);current=await expireTurn();assertWarningRenewal(beforeSecondVerticalWarning,current,2);assert.deepEqual(current.state.timeoutStrikes,[2,0]);current=await expireTurn();assert.equal(current.lifecycle,'completed');assert.equal(current.state.winner,1);assert.equal(current.state.timeoutStrikes![0],3);
- assert.equal((await privileged.query('select count(*)::int n from match_results where match_id=$1',[mainMatch])).rows[0].n,1);await maintainMatches();assert.equal((await privileged.query('select count(*)::int n from match_results where match_id=$1',[mainMatch])).rows[0].n,1);checks.exactThirdTimeoutForfeitsOnce=true;
+ const beforeSecondVerticalWarning=await matchAccess(actors[0],mainMatch);current=await expireTurn();assertWarningRenewal(beforeSecondVerticalWarning,current,2);current=await expireTurn();
+ assert.equal(current.lifecycle,'playing');assert.equal(current.state.winner,null);assert.equal(current.state.timeoutDecision?.player,0);
+ assert.equal((await privileged.query('select count(*)::int n from match_results where match_id=$1',[mainMatch])).rows[0].n,0);
+ await assert.rejects(command(0,'match.timeout_finish'),{code:'timeout_opponent_only'});
+ await assert.rejects(command(4,'match.timeout_wait'),{code:'spectator_read_only'});
+ const firstWait=await command(1,'match.timeout_wait');current=await matchAccess(actors[0],mainMatch);
+ assert.equal(current.state.turnDeadlineAt!-current.state.turnStartedAt,60000);assert.equal(current.state.timeoutDecision,null);
+ const waitVersion=current.stateVersion;assert.deepEqual(await matchCommand(actors[1],firstWait.payload,writer,fence,firstWait.ingress),firstWait.receipt);assert.equal((await matchAccess(actors[0],mainMatch)).stateVersion,waitVersion);
+ await privileged.query("update matches set state=jsonb_set(state,'{turnStartedAt}',to_jsonb($2::bigint)) where id=$1",[mainMatch,Date.now()-31000]);await maintainMatches();assert.equal((await matchAccess(actors[0],mainMatch)).stateVersion,waitVersion,'normal 30-second deadline cannot consume the extra minute');
+ await privileged.query("update match_players set disconnected_at=now()-interval '3 minutes' where match_id=$1 and seat=0",[mainMatch]);await expireDisconnects();assert.equal((await matchAccess(actors[0],mainMatch)).lifecycle,'playing','a granted minute cannot be replaced by reconnect expiry');
+ for(let extension=0;extension<2;extension++){
+  await privileged.query("update matches set state=jsonb_set(state,'{turnDeadlineAt}',to_jsonb($2::bigint)) where id=$1",[mainMatch,Date.now()-1]);await Promise.all([maintainMatches(),expireDisconnects()]);current=await matchAccess(actors[0],mainMatch);assert.equal(current.state.timeoutDecision?.player,0);assert.equal(current.lifecycle,'playing');
+  if(extension===0)await command(1,'match.timeout_wait');
+ }
+ const finished=await command(1,'match.timeout_finish');current=await matchAccess(actors[0],mainMatch);
+ assert.equal(current.lifecycle,'completed');assert.equal(current.state.winner,1);assert.deepEqual(current.state.totalLegs,[0,1]);
+ assert.deepEqual(await matchCommand(actors[1],finished.payload,writer,fence,finished.ingress),finished.receipt);
+ assert.equal((await privileged.query('select count(*)::int n from match_results where match_id=$1',[mainMatch])).rows[0].n,1);await maintainMatches();assert.equal((await privileged.query('select count(*)::int n from private.match_leg_settlements where match_id=$1',[mainMatch])).rows[0].n,1);checks.opponentChoosesRepeatableWholeMinuteOrFinishExactlyOnce=true;
+ // A sealed checkout in an owned ranked fixture must book the leg before the
+ // match ends. Winning the first leg as seat 1 also keeps the same next starter.
+ const timeoutMatch=mainMatch;
+ const ranked=await transaction(c=>createMatch(c,actors[0],ids[1],room,{...rules,bestOf:3,format:'legs'},'ranked'));matches.push(ranked.matchId);mainMatch=ranked.matchId;writer=randomUUID();fence=await acquireMatch(mainMatch,writer);
+ await command(0,'match.ready');await command(1,'match.ready');
+ const hit=scoreDart(0,-166/170),dartId=900001,beforeImpact=Date.now()-10000;
+ assert.equal(hit.label,'D20');
+ const fixture=(await privileged.query('select state from matches where id=$1',[mainMatch])).rows[0].state;
+ const pending={id:dartId,hit,opponentName:fixture.names[0]};
+ await privileged.query('update matches set state=$2 where id=$1',[mainMatch,JSON.stringify({...fixture,turn:1,scores:[501,40],visitStart:40,turnStartedAt:beforeImpact,phase:'flight',pendingDart:pending,impactAt:Date.now()-1})]);
+ await privileged.query("insert into match_darts(match_id,dart_id,player_id,hit,impact_at) values($1,$2,$3,$4,now()-interval '1 millisecond')",[mainMatch,dartId,ids[1],JSON.stringify(hit)]);
+ await Promise.all([settleImpacts(),settleImpacts()]);current=await matchAccess(actors[0],mainMatch);
+ assert.equal(current.lifecycle,'playing');assert.deepEqual(current.state.totalLegs,[0,1]);assert.equal(current.state.turn,1);assert.ok(current.state.turnStartedAt>beforeImpact+9000,'new leg resets turn time even when the winner is the next starter');
+ let settled=(await privileged.query('select * from private.match_leg_settlements where match_id=$1 order by leg_number',[mainMatch])).rows;assert.equal(settled.length,1);assert.equal(Number(settled[0].after_b),1516);
+ let statistics=(await privileged.query('select user_id,data from match_statistics where match_id=$1',[mainMatch])).rows;assert.equal(statistics.find(row=>row.user_id===ids[1]).data.legs,1);assert.equal(statistics.find(row=>row.user_id===ids[1]).data.darts,1);
+ const records=await personalRecords(actors[1]);assert.equal(records.fastestLeg,1);assert.equal(records.highestCheckout,40);
+ assert.equal(Number((await privileged.query('select rating from player_ratings where user_id=$1',[ids[1]])).rows[0].rating),1516);assert.equal((await privileged.query('select 1 from rating_ledger where match_id=$1',[mainMatch])).rowCount,0,'the aggregate match ledger waits; earned leg DP is already applied');
+ // Arrange the other seat's expired visit in leg two, preserving the sealed
+ // first-leg event and statistics. No extra dart or checkout is invented.
+ await privileged.query("update matches set state=jsonb_set(state,'{turn}','0'::jsonb) where id=$1",[mainMatch]);
+ await expireTurn();await expireTurn();current=await expireTurn();assert.equal(current.state.timeoutDecision?.player,0);
+ const secondLegFinish=await command(1,'match.timeout_finish');await matchCommand(actors[1],secondLegFinish.payload,writer,fence,secondLegFinish.ingress);await settleImpacts();
+ current=await matchAccess(actors[0],mainMatch);assert.equal(current.lifecycle,'completed');assert.deepEqual(current.state.totalLegs,[0,2]);assert.equal(current.state.events.length,1);assert.deepEqual(current.state.dartCount,[0,1]);assert.deepEqual(current.state.pointsScored,[0,40]);
+ settled=(await privileged.query('select * from private.match_leg_settlements where match_id=$1 order by leg_number',[mainMatch])).rows;assert.equal(settled.length,2);assert.equal(settled[0].kind,'played');assert.equal(settled[1].kind,'forfeit');assert.equal(settled[0].after_b,settled[1].before_b);
+ const aggregate=(await privileged.query('select user_id,before,after,delta,policy_version from rating_ledger where match_id=$1 order by user_id',[mainMatch])).rows;assert.equal(aggregate.length,2);assert.ok(aggregate.every(row=>row.policy_version===2));assert.equal((await privileged.query('select sum(delta)=0 balanced from rating_ledger where match_id=$1',[mainMatch])).rows[0].balanced,true);
+ assert.equal(aggregate.find(row=>row.user_id===ids[1]).after,settled[1].after_b);assert.ok(Number(settled[1].after_b)>1516,'second leg adds its own DP without losing the first leg');
+ statistics=(await privileged.query('select user_id,data from match_statistics where match_id=$1',[mainMatch])).rows;assert.equal(statistics.find(row=>row.user_id===ids[1]).data.legs,2);assert.equal(statistics.find(row=>row.user_id===ids[1]).data.darts,1);assert.equal(statistics.find(row=>row.user_id===ids[1]).data.points,40);
+ assert.equal((await privileged.query("select has_table_privilege('dartspoint_app','private.match_leg_settlements','UPDATE') or has_table_privilege('dartspoint_app','private.match_leg_settlements','DELETE') mutable")).rows[0].mutable,false);
+ // Retention removes paired numeric leg evidence at the existing identity
+ // detachment boundary. Roll back this owned-fixture probe afterwards.
+ await privileged.query('begin');try{
+  await privileged.query("update matches set ended_at=now()-interval '25 months' where id=$1",[mainMatch]);
+  await privileged.query('update match_players set user_id=null where match_id=$1 and seat=0',[mainMatch]);
+  assert.equal((await privileged.query('select 1 from private.match_leg_settlements where match_id=$1',[mainMatch])).rowCount,0);
+ }finally{await privileged.query('rollback');}
+ assert.equal((await privileged.query('select count(*)::int n from private.match_leg_settlements where match_id=$1',[mainMatch])).rows[0].n,2);checks.legAuditRespectsExistingRetentionBoundary=true;
+ // Recreate the same owned result under the old match-only policy, preserving
+ // a later unrelated +/-5 rating movement. The repair must append a correction
+ // and must leave the immutable original ledger and unrelated movement intact.
+ const legacy={...current.state,legs:[0,1],totalLegs:[0,1]};delete legacy.ratingPolicyVersion;
+ await privileged.query('delete from private.match_leg_settlements where match_id=$1',[mainMatch]);await privileged.query('delete from rating_ledger where match_id=$1',[mainMatch]);
+ await privileged.query('insert into rating_ledger(match_id,user_id,before,after,delta,policy_version) values($1,$2,1500,1484,-16,1),($1,$3,1500,1516,16,1)',[mainMatch,ids[0],ids[1]]);
+ await privileged.query('update player_ratings set rating=case when user_id=$1 then 1489 else 1511 end where user_id=any($2::uuid[])',[ids[0],ids.slice(0,2)]);
+ await privileged.query('update matches set state=$2 where id=$1',[mainMatch,JSON.stringify(legacy)]);
+ await privileged.query("update match_results set data=$2,result_hash=encode(sha256(convert_to($2::jsonb::text,'UTF8')),'hex') where match_id=$1",[mainMatch,JSON.stringify({...legacy,kind:'forfeit',winner:1})]);
+ await privileged.query("update match_statistics set data=jsonb_set(data,'{legs}',to_jsonb(case when user_id=$2::uuid then 1 else 0 end)) where match_id=$1",[mainMatch,ids[1]]);
+ const repair=async(expected?:string)=>transaction(async c=>{const m=(await c.query('select m.*,r.kind,r.winner_id,r.data result_data,r.result_hash from matches m join match_results r on r.match_id=m.id where m.id=$1 for update of m',[mainMatch])).rows[0];const players=(await c.query('select user_id,seat from match_players where match_id=$1 order by seat',[mainMatch])).rows;return correctLegacyLegResult(c,m,players,expected??m.result_hash,'Owned fixture legacy leg correction');});
+ await assert.rejects(repair('0'.repeat(64)),{code:'correction_source_changed'});const restored=await repair();assert.equal(restored.changed,true);assert.equal((await repair()).changed,false);
+ const corrected=await matchAccess(actors[0],mainMatch);assert.deepEqual(corrected.state.totalLegs,[0,2]);
+ const record=(await matchHistory(actors[1],{})).find(row=>row.id===mainMatch)!;const ownLedger=record.ledger.find((entry:any)=>entry.id===ids[1]);assert.ok(Number(ownLedger.after)>1530);assert.equal((await privileged.query('select rating=$2::numeric-5 preserved from player_ratings where user_id=$1',[ids[1],ownLedger.after])).rows[0].preserved,true);
+ assert.equal((await privileged.query('select after::text,policy_version from rating_ledger where match_id=$1 and user_id=$2',[mainMatch,ids[1]])).rows[0].after,'1516.0000000000');
+ assert.equal((await privileged.query("select count(*)::int n from private.audit_events where action='match.leg-score-correction' and subject=$1",[mainMatch])).rows[0].n,1);
+ assert.equal((await privileged.query('select sum(rating)=3000 balanced from player_ratings where user_id=any($1::uuid[])',[ids.slice(0,2)])).rows[0].balanced,true);
+ checks.legacyRepairIsAuditedIdempotentAndPreservesOtherMatches=true;
+ checks.perLegDpStatsAndSameStarterTimer=true;checks.secondLegForfeitAddsExactlyOneLossWithoutDoubleRating=true;mainMatch=timeoutMatch;
+
  assert.equal((await matchHistory(actors[0],{})).find(value=>value.id===mainMatch)!.publicGameId,numbers[0]);checks.publicNumberStableThroughReceiptsWarningsAndHistory=true;
  const postgame=(await resolveChannel(actors[0],{kind:'match',target:mainMatch})).channelId;
  const sportsmanlike=await sendMessage(actors[0],{channelId:postgame,clientMessageId:randomUUID(),body:'Goed gespeeld!'});assert.ok((await chatHistory(actors[1],postgame)).some(row=>row.id===sportsmanlike.id));
@@ -164,4 +238,4 @@ try{
   await c.query('commit');assert.equal((await c.query('select count(*)::int n from profiles where id=any($1::uuid[])',[ids])).rows[0].n,0);checks.ownedFixturesCleaned=true;
  }catch(error){await c.query('rollback');throw error;}finally{c.release();await privileged.end();await db().end();await(await redis()).quit();}
 }
-await mkdir('artifacts',{recursive:true});await writeFile('artifacts/match-room-expansion-result.json',JSON.stringify({ok:true,checks},null,2));console.log('Three timeout intervals, actual idle, stable numeric IDs and spectator ACL passed');
+await mkdir('artifacts',{recursive:true});await writeFile('artifacts/match-room-expansion-result.json',JSON.stringify({ok:true,checks},null,2));console.log('Opponent timeout decisions, whole-minute extensions, actual idle, stable numeric IDs and spectator ACL passed');

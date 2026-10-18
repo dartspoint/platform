@@ -232,7 +232,24 @@ try{
  assert.ok(held.every(value=>Math.abs(value.horizontal-lastAxes.horizontal)<=1&&Math.abs(value.vertical-lastAxes.vertical)<=1),'Both last stopped axes stay fixed within 1CSSpx while B has the turn');checks.lastDartAxesRemainFixedDuringOpponentTurn=true;
  await expect(dialog.locator('.dp-flying-dart')).toHaveCount(3,{timeout:15000});checks.realSpectatorShowsThreeAuthoritativeLandedDarts=true;
  await dialog.getByRole('button',{name:'Terug naar jouw wedstrijd',exact:false}).click();await expect(viewer.page.locator('.spectator-live-game')).toHaveCount(0);checks.spectatorClosesWithoutChangingMatch=true;
- assert.equal((await get(a.page,'match/'+matchId)).state.turn,1);proof.ok=true;
+ assert.equal((await get(a.page,'match/'+matchId)).state.turn,1);
+ // Expire only the owned turn's clock; the real worker and authenticated native
+ // buttons must decide, grant a whole minute and finally settle exactly once.
+ for(let strike=1;strike<=3;strike++){
+  await privileged.query("update matches set state=jsonb_set(state,'{turnStartedAt}',to_jsonb($2::bigint)) where id=$1",[matchId,Date.now()-31000]);
+  state=await eventual(()=>get(a.page,'match/'+matchId),value=>value.state.timeoutStrikes[1]===strike,'timeout_strike_missing');
+ }
+ const choice=a.page.getByRole('dialog').filter({has:a.page.getByRole('heading',{name:'Beurttijd verstreken',exact:true})});
+ await expect(choice).toBeVisible();await expect(b.page.getByText('Je beurttijd is verstreken. Je tegenstander kiest of je één minuut extra krijgt.',{exact:true})).toBeVisible();
+ await choice.getByRole('button',{name:'1 minuut extra wachten',exact:true}).click();
+ state=await eventual(()=>get(a.page,'match/'+matchId),value=>!value.state.timeoutDecision&&value.state.turnDeadlineAt,'timeout_minute_missing');
+ assert.equal(state.state.turnDeadlineAt-state.state.turnStartedAt,60000);assert.deepEqual(state.state.dartCount,[3,0]);await expect(choice).toHaveCount(0);
+ await privileged.query("update matches set state=jsonb_set(state,'{turnDeadlineAt}',to_jsonb($2::bigint)) where id=$1",[matchId,Date.now()-1]);
+ await expect(choice).toBeVisible({timeout:15000});await choice.getByRole('button',{name:'Wedstrijd beëindigen',exact:true}).click();
+ state=await eventual(()=>get(a.page,'match/'+matchId),value=>value.lifecycle==='completed','timeout_match_not_finished');
+ assert.equal(state.state.winner,0);assert.deepEqual(state.state.totalLegs,[1,0]);assert.deepEqual(state.state.dartCount,[3,0]);
+ assert.equal((await privileged.query('select count(*)::int n from private.match_leg_settlements where match_id=$1',[matchId])).rows[0].n,1);
+ checks.nativeOpponentTimeoutChoiceWholeMinuteAndFinish=true;proof.ok=true;
 }catch(error){failed=true;originalError=error;proof.failureCategory='browser_expansion_failed';await checkpoint();}
 finally{
  try{if(matchId&&actors.length>=2){await forfeitGame(actors[0].page,matchId,actors.slice(0,2).map(actor=>actor.page));proof.cleanup.forfeit=true;}}catch{failed=true;proof.cleanup.forfeit=false;}

@@ -280,5 +280,8 @@
   "errors.captcha_failed": "The bot check failed. Please try again.",
   "errors.conflict": "This value is already in use.",
   "errors.invite_unavailable": "This invitation is no longer available.",
-  "errors.unknown": "That did not work. Please try again."
+  "errors.unknown": "That did not work. Please try again.",
+  "errors.timeout_decision_missing": "This timeout decision is no longer available.",
+  "errors.timeout_opponent_only": "Only the waiting opponent can make this decision.",
+  "errors.timeout_decision_pending": "Your opponent is deciding whether the match continues."
 }

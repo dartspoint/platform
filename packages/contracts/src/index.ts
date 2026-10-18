@@ -5,7 +5,7 @@ export const usernameSchema = z.string().trim().regex(/^[A-Za-z0-9_-]{3,20}$/).r
 export const uuid = z.string().uuid();
 export const meterSpeedSchema=z.enum(['standard-v1','faster-v2']);
 export const renderSampleSchema=z.object({sampleAt:z.number().finite().positive(),connectionId:uuid,dartNumber:z.number().int().positive(),meterSpeedVersion:meterSpeedSchema.optional()}).strict();
-export const commandSchema = z.object({protocolVersion:z.literal(1),commandId:uuid,expectedStateVersion:z.number().int().nonnegative(),matchId:uuid,type:z.enum(['match.ready','dart.stop_horizontal','dart.stop_vertical','match.forfeit','match.resync']),phaseToken:uuid.optional(),renderSample:renderSampleSchema.optional()}).strict();
+export const commandSchema = z.object({protocolVersion:z.literal(1),commandId:uuid,expectedStateVersion:z.number().int().nonnegative(),matchId:uuid,type:z.enum(['match.ready','dart.stop_horizontal','dart.stop_vertical','match.forfeit','match.resync','match.timeout_wait','match.timeout_finish']),phaseToken:uuid.optional(),renderSample:renderSampleSchema.optional()}).strict();
 export type GameCommand = z.infer<typeof commandSchema>;
 export class DomainError extends Error {
  constructor(public code:string,public status=400,message='Deze actie kon niet worden uitgevoerd.',public retryAfter?:number) { super(message); }

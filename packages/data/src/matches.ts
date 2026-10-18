@@ -1,7 +1,8 @@
 import {assertLegalParticipation} from './legal';
 import {randomUUID,createHash} from 'node:crypto';
 import {meterPosition,admittedMoment,admittedSample,TIMING_VERSION,METER_SPEED_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../game-core/src/timing';
-import {acceptedTurnStop} from '../../game-core/src/turn-timeout';
+import {acceptedTurnStop,extendTimedOutTurn,turnDeadline,observeTurnTimeout} from '../../game-core/src/turn-timeout';
+import {awardForfeitLeg,settleLeg,finalizeLegRatings,matchPlayerStatistics} from './leg-settlements';
 import {registerIngress,type TrustedIngress} from './timing';
 export {meterPosition} from '../../game-core/src/timing';
 import {z} from 'zod';
@@ -18,9 +19,9 @@ import {calculateElo} from '../../game-core/src/darts-elo';
 
 export const FLIGHT_MS=560;
 export const RECONNECT_MS=120000;
-export type ServerGame=GameState & {phaseToken:string;phaseStartedAt:number;turnStartedAt:number;lockedX:number|null;lockedY?:number|null;lastAcceptedAt?:number;timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};
+export type ServerGame=GameState & {ratingPolicyVersion?:2;phaseToken:string;phaseStartedAt:number;turnStartedAt:number;lockedX:number|null;lockedY?:number|null;lastAcceptedAt?:number;timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};
 const rulesSchema=z.object({startScore:z.union([z.literal(301),z.literal(501),z.literal(701)]),bestOf:z.number().int().min(1).max(21).refine(n=>n%2===1),format:z.enum(['legs','sets']),bestOfSets:z.number().int().min(1).max(7).refine(n=>n%2===1),doubleIn:z.boolean().optional(),doubleOut:z.literal(true).optional()}).strict().transform(r=>normalizeGameRules({...r,doubleIn:r.startScore===301,doubleOut:true}));
-function initialServerGame(id:string,names:[string,string],rules:GameRules,starter:0|1=0):ServerGame{return {...initialGameState(starter,id,0,rules),phase:'horizontal',phaseToken:randomUUID(),phaseStartedAt:0,turnStartedAt:0,timeoutStrikes:[0,0],timeoutWarning:null,lockedX:null,lockedY:null,lastAcceptedAt:0,timingVersion:TIMING_VERSION,meterSpeedVersion:METER_SPEED_VERSION,impactAt:null,ready:[false,false],names};}
+function initialServerGame(id:string,names:[string,string],rules:GameRules,starter:0|1=0):ServerGame{return {...initialGameState(starter,id,0,rules),phase:'horizontal',phaseToken:randomUUID(),phaseStartedAt:0,turnStartedAt:0,ratingPolicyVersion:2,timeoutStrikes:[0,0],timeoutWarning:null,timeoutDecision:null,turnDeadlineAt:null,lockedX:null,lockedY:null,lastAcceptedAt:0,timingVersion:TIMING_VERSION,meterSpeedVersion:METER_SPEED_VERSION,impactAt:null,ready:[false,false],names};}
 export function requireMeterSpeed(stored:MeterSpeedVersion|undefined,claimed:MeterSpeedVersion|undefined){const actual=stored??'standard-v1';requireThat(claimed===actual||actual==='standard-v1'&&claimed===undefined,'meter_speed_update_required',409,'De indicatorsnelheid is bijgewerkt. Ververs de pagina voordat je verder gooit.');}
 export async function admission(c:PoolClient){await c.query('select * from private.admission_lock where id=1 for update');requireThat(!await draining(),'maintenance',503,'Er is onderhoud. Bestaande partijen kunnen doorgaan.');}
 async function playersAvailable(c:PoolClient,senderId:string,targetId:string){
@@ -88,7 +89,7 @@ export async function matchAccess(actor:Actor,id:string){
   requireThat(seat!==undefined || (await c.query('select 1 from room_memberships where user_id=$1 and room_id=$2 and lease_until>now()',[actor.id,m.room_id])).rowCount,'join_room_first',403);
   if(seat===undefined)requireThat(!(await c.query('select 1 from user_blocks b join match_players p on p.match_id=$2 where (b.blocker_id=$1 and b.blocked_id=p.user_id) or (b.blocked_id=$1 and b.blocker_id=p.user_id)',[actor.id,id])).rowCount,'blocked',403);
   const budget=(m.competition?.reconnectSeconds??RECONNECT_MS/1000)*1000;
-  return {matchId:id,roomId:m.room_id,state:await publicMatchState(c,id,m.state),stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:seat??null,canRematch:!m.competition,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now(),remainingReconnectMs:Math.max(0,budget-Number(membership?.reconnect_used_ms??0)-(membership?.disconnected_at?Date.now()-new Date(membership.disconnected_at).getTime():0))};
+  return {matchId:id,roomId:m.room_id,state:await publicMatchState(c,id,m.state),stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,ranked:m.ranked,seat:seat??null,canRematch:!m.competition,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now(),remainingReconnectMs:Math.max(0,budget-Number(membership?.reconnect_used_ms??0)-(membership?.disconnected_at?Date.now()-new Date(membership.disconnected_at).getTime():0))};
  });
 }
 export async function spectateMatch(actor:Actor,input:unknown){
@@ -128,7 +129,7 @@ export async function matchAccessBatch(actors:readonly Actor[],id:string){
   return new Map(actors.flatMap(actor=>{
    const p=rows.find(r=>r.id===actor.id);
    if(!p||actor.expiresAt<=now||p.session_version!==actor.sessionVersion||!p.rating_allowed||!p.room_allowed||!p.sanctions_allowed||!p.blocks_allowed||(actor.sessionId&&p.revoked_sessions.includes(actor.sessionId))||!p.membership_allowed)return [];
-   return [[actor.id,{matchId:id,roomId:m.room_id,state:publicState,stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat:p.seat??null,canRematch:!m.competition,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:now,remainingReconnectMs:Math.max(0,budget-Number(p.reconnect_used_ms??0)-(p.disconnected_at?now-new Date(p.disconnected_at).getTime():0))}]] as const;
+   return [[actor.id,{matchId:id,roomId:m.room_id,state:publicState,stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,ranked:m.ranked,seat:p.seat??null,canRematch:!m.competition,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:now,remainingReconnectMs:Math.max(0,budget-Number(p.reconnect_used_ms??0)-(p.disconnected_at?now-new Date(p.disconnected_at).getTime():0))}]] as const;
   }));
  });
 }
@@ -141,18 +142,22 @@ export async function persist(c:PoolClient,m:any,state:ServerGame,kind:string,ac
  const nextVersion=Number(m.state_version)+1;
  await c.query('update matches set state=$2,state_version=$3 where id=$1',[m.id,JSON.stringify({...state,history:[]}),nextVersion]);
  await c.query('insert into match_events(match_id,sequence,kind,actor_id,payload) values($1,$2,$3,$4,$5)',[m.id,nextVersion,kind,actorId,JSON.stringify({state:{...state,history:[]}})]);
- m.state=state;m.state_version=nextVersion;return {matchId:m.id,state,stateVersion:nextVersion,lifecycle:m.lifecycle,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now()};
+ m.state=state;m.state_version=nextVersion;return {matchId:m.id,state,stateVersion:nextVersion,lifecycle:m.lifecycle,ranked:m.ranked,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now()};
 }
 export async function finishMatch(c:PoolClient,m:any,state:ServerGame,kind:'played'|'forfeit'|'disconnect'|'no-show'|'abandoned',winner:0|1|null){
+ const existing=(await c.query('select data from match_results where match_id=$1',[m.id])).rows[0];if(existing)return existing.data as ServerGame;
+ if(state.ratingPolicyVersion===2&&m.started_at&&winner!==null&&['forfeit','disconnect'].includes(kind)){state=awardForfeitLeg(state,winner);await settleLeg(c,m,state,winner,'forfeit');}
  const players=(await c.query('select user_id,seat from match_players where match_id=$1 order by seat',[m.id])).rows;
  const winnerId=winner===null?null:players[winner].user_id;
  const data={...state,history:[],kind,winner};
  const hash=createHash('sha256').update(JSON.stringify(data)).digest('hex');
  const inserted=await c.query('insert into match_results(match_id,kind,winner_id,result_hash,final_version,data) values($1,$2,$3,$4,$5,$6) on conflict(match_id) do nothing returning match_id',[m.id,kind,winnerId,hash,Number(m.state_version)+1,JSON.stringify(data)]);
- if(!inserted.rowCount)return;
- const real=m.started_at&&['played','forfeit','disconnect'].includes(kind)&&state.events.length>0;
+ if(!inserted.rowCount)return state;
+ const real=m.started_at&&(['played','forfeit','disconnect'].includes(kind)||kind==='abandoned'&&state.ratingPolicyVersion===2&&state.totalLegs[0]+state.totalLegs[1]>0)&&(state.events.length>0||state.ratingPolicyVersion===2);
  if(real){
   if(m.ranked&&winner!==null){
+   if(state.ratingPolicyVersion===2)await finalizeLegRatings(c,m,players);
+   else{
    const ratings=(await c.query('select user_id,rating from player_ratings where user_id=any($1::uuid[]) order by user_id for update',[players.map(p=>p.user_id)])).rows;
    const rating=(id:string)=>Number(ratings.find(r=>r.user_id===id)!.rating);
    const elo=calculateElo(rating(players[0].user_id),rating(players[1].user_id),winner);
@@ -165,8 +170,10 @@ export async function finishMatch(c:PoolClient,m:any,state:ServerGame,kind:'play
     await c.query('update player_ratings set rating=rating+$2::numeric,ranked_played=ranked_played+1 where user_id=$1',[uid,clean]);
     await c.query('insert into player_opponents(user_id,opponent_id,first_match_id) values($1,$2,$3) on conflict do nothing',[uid,opponent,m.id]);
    }
+   }
   }
-  for(const seat of [0,1]){const events=state.events.filter(e=>e.player===seat);const stats={won:winner===seat,darts:state.dartCount[seat],points:state.pointsScored[seat],average:state.dartCount[seat]?state.pointsScored[seat]/state.dartCount[seat]*3:0,highestVisit:state.highestVisit[seat],highestCheckout:state.highestCheckout[seat],legs:state.totalLegs[seat],oneEighties:events.filter((e,i,a)=>!e.bust&&e.before-e.after===60&&i>=2&&a[i-1]?.visit===e.visit&&a[i-2]?.visit===e.visit&&a[i-2].before-e.after===180).length};await c.query('insert into match_statistics(match_id,user_id,data) values($1,$2,$3)',[m.id,players[seat].user_id,JSON.stringify(stats)]);if(stats.won)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'first-win',$2) on conflict do nothing",[players[seat].user_id,m.id]);if(stats.highestCheckout>0)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'first-finish',$2) on conflict do nothing",[players[seat].user_id,m.id]);if(stats.highestVisit>=180)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'180',$2) on conflict do nothing",[players[seat].user_id,m.id]);if(stats.highestCheckout>=100)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'checkout-100',$2) on conflict do nothing",[players[seat].user_id,m.id]);}
+  if(m.ranked&&winner===null&&state.ratingPolicyVersion===2)await finalizeLegRatings(c,m,players,false);
+  for(const seat of [0,1]){const stats=matchPlayerStatistics(state,seat,winner);await c.query('insert into match_statistics(match_id,user_id,data) values($1,$2,$3) on conflict(match_id,user_id) do update set data=excluded.data',[m.id,players[seat].user_id,JSON.stringify(stats)]);if(stats.won)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'first-win',$2) on conflict do nothing",[players[seat].user_id,m.id]);if(stats.highestCheckout>0)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'first-finish',$2) on conflict do nothing",[players[seat].user_id,m.id]);if(stats.highestVisit>=180)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'180',$2) on conflict do nothing",[players[seat].user_id,m.id]);if(stats.highestCheckout>=100)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'checkout-100',$2) on conflict do nothing",[players[seat].user_id,m.id]);}
   for(const seat of [0,1]){
    const uid=players[seat].user_id;const doubles=(await c.query("select count(distinct e->'hit'->>'label') n from match_results r join match_players p on p.match_id=r.match_id cross join lateral jsonb_array_elements(r.data->'events') e where p.user_id=$1 and (e->>'player')::integer=p.seat and (e->'hit'->>'double')::boolean and e->'hit'->>'label'<>'BULL' and exists(select 1 from match_statistics s where s.match_id=r.match_id and s.user_id=$1)",[uid])).rows[0];
    if(Number(doubles.n)>=10)await c.query("insert into user_badges(user_id,badge,match_id) values($1,'10-doubles',$2) on conflict do nothing",[uid,m.id]);
@@ -175,6 +182,7 @@ export async function finishMatch(c:PoolClient,m:any,state:ServerGame,kind:'play
  await c.query("update matches set lifecycle=$2,ended_at=now() where id=$1",[m.id,kind==='abandoned'?'abandoned':'completed']);m.lifecycle=kind==='abandoned'?'abandoned':'completed';
  await c.query('delete from active_player_reservations where match_id=$1',[m.id]);
  await outbox(c,'result:'+m.id,'match-result',null,{matchId:m.id,competition:m.competition,kind,winnerId,score:state.totalLegs});
+ return state;
 }
 export async function captureMatchIngress(actor:Actor,input:unknown,ingress:TrustedIngress){
  const p=commandSchema.parse(input),policy=(await db().query("select state->>'timingVersion' version from matches where id=$1",[p.matchId])).rows[0];requireThat(policy,'match_not_found',404);
@@ -202,16 +210,25 @@ export async function matchCommand(actor:Actor,input:unknown,writerId:string,fen
    requireThat(!await draining()||m.started_at,'maintenance',503);state={...state,ready:state.ready.map((v,i)=>i===seat?true:v) as [boolean,boolean]};
    await c.query('update match_players set ready=true where match_id=$1 and user_id=$2',[m.id,actor.id]);
    if(state.ready.every(Boolean)&&m.lifecycle!=='playing'){m.lifecycle='playing';state={...state,startedAt:state.startedAt||now,turnStartedAt:now,phaseStartedAt:now,phaseToken:randomUUID()};await c.query("update matches set lifecycle='playing',started_at=coalesce(started_at,now()) where id=$1",[m.id]);}
-  }else if(p.type==='match.resync'){return {commandId:p.commandId,matchId:m.id,roomId:m.room_id,state:await publicMatchState(c,m.id,m.state),stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,seat,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now()};}
+  }else if(p.type==='match.resync'){return {commandId:p.commandId,matchId:m.id,roomId:m.room_id,state:await publicMatchState(c,m.id,m.state),stateVersion:Number(m.state_version),lifecycle:m.lifecycle,mode:m.mode,ranked:m.ranked,seat,gameNumber:Number(m.game_number),publicGameId:Number(m.game_number),serverAt:Date.now()};}
   else{
    requireThat(m.lifecycle==='playing','match_not_started',409);
-   requireThat(!players.some(p=>p.disconnected_at),'opponent_disconnected',409);
-   if(p.type==='match.forfeit'){
-    requireThat(!state.pendingDart,'impact_pending',409);state={...state,...dartsGameReducer(state,{type:'forfeit',player:seat}),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:null,impactAt:null,ready:state.ready,names:state.names};await finishMatch(c,m,state,'forfeit',state.winner);
+   if(p.type==='match.timeout_wait'||p.type==='match.timeout_finish'){
+    const decision=state.timeoutDecision;
+    requireThat(decision&&decision.player===state.turn,'timeout_decision_missing',409);
+    requireThat(seat!==decision.player,'timeout_opponent_only',403);
+    requireThat(p.phaseToken===state.phaseToken,'stale_phase',409);requireThat(!state.pendingDart,'impact_pending',409);
+    if(p.type==='match.timeout_wait')state={...state,...extendTimedOutTurn(state,now),phaseStartedAt:now,phaseToken:randomUUID()};
+    else{state={...state,...dartsGameReducer(state,{type:'forfeit',player:decision.player}),phaseToken:randomUUID(),timeoutDecision:null};state=await finishMatch(c,m,state,'forfeit',state.winner);}
+    await audit(c,actor.id,p.type,m.id,{player:decision.player,extraSeconds:p.type==='match.timeout_wait'?60:0});
+   }else if(p.type==='match.forfeit'){
+    requireThat(!state.pendingDart,'impact_pending',409);state={...state,...dartsGameReducer(state,{type:'forfeit',player:seat}),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:null,impactAt:null,ready:state.ready,names:state.names};state=await finishMatch(c,m,state,'forfeit',state.winner);
    }else{
+    requireThat(!players.some(p=>p.disconnected_at),'opponent_disconnected',409);
+    requireThat(!state.timeoutDecision,'timeout_decision_pending',409);
     requireThat(state.turn===seat,'not_your_turn',403);requireThat(p.phaseToken===state.phaseToken,'stale_phase',409);
     requireMeterSpeed(state.meterSpeedVersion,p.renderSample?.meterSpeedVersion);
-    requireThat(registered.receivedAt<=state.turnStartedAt+(m.competition?.turnSeconds??30)*1000,'turn_expired',409,'Je beurttijd is verstreken.');
+    requireThat(registered.receivedAt<=turnDeadline(state,(m.competition?.turnSeconds??30)*1000),'turn_expired',409,'Je beurttijd is verstreken.');
     let admittedAt:number;
     if(state.timingVersion===TIMING_VERSION){
      requireThat(p.renderSample&&p.renderSample.connectionId===registered.connectionId,'timing_connection_mismatch',409,'De timingverbinding is gewijzigd. Herstel de verbinding en probeer opnieuw.');
@@ -242,13 +259,15 @@ export async function settleImpacts(){
   const rows=(await c.query("select m.* from matches m where m.lifecycle='playing' and exists(select 1 from match_darts d where d.match_id=m.id and d.impacted_at is null and d.impact_at<=now()) order by m.id for update skip locked limit 32")).rows;
   for(const m of rows){let state=m.state as ServerGame;const dart=(await c.query('select * from match_darts where match_id=$1 and impacted_at is null and impact_at<=now() order by dart_id for update limit 1',[m.id])).rows[0];
    requireThat(dart&&state.pendingDart?.id===Number(dart.dart_id),'impact_integrity',500);
-   const oldTurn=state.turn;
+   const oldTurn=state.turn,oldLegs=state.totalLegs[0]+state.totalLegs[1];
    state={...state,...dartsGameReducer(state,{type:'land',id:Number(dart.dart_id),at:new Date(dart.impact_at).getTime()}),phaseToken:randomUUID(),phaseStartedAt:Date.now(),lockedX:null,impactAt:null,ready:state.ready,names:state.names};
-   if(state.turn!==oldTurn)state.turnStartedAt=Date.now();
+   const legCompleted=state.totalLegs[0]+state.totalLegs[1]>oldLegs;
+   if(state.turn!==oldTurn||legCompleted){state.turnStartedAt=Date.now();state.turnDeadlineAt=null;state.timeoutWarning=null;state.timeoutDecision=null;}
+   if(legCompleted&&state.ratingPolicyVersion===2)await settleLeg(c,m,state,oldTurn,'played');
    state.lastResult=state.lastResult.replaceAll('Nick',state.names[0]);
    if(state.winner===null)state.phase='horizontal';
    await c.query('update match_darts set impacted_at=now() where match_id=$1 and dart_id=$2',[m.id,dart.dart_id]);
-   if(state.winner!==null)await finishMatch(c,m,state,'played',state.winner);
+   if(state.winner!==null)state=await finishMatch(c,m,state,'played',state.winner);
    await persist(c,m,state,'impact',null);
   }
   return rows.map(m=>m.id);
@@ -267,6 +286,14 @@ export async function expireDisconnects(){return transaction(async c=>{
  const rows=(await c.query("select m.* from matches m where m.lifecycle='playing' and exists(select 1 from match_players p where p.match_id=m.id and p.disconnected_at is not null and p.reconnect_used_ms+extract(epoch from now()-p.disconnected_at)*1000>=coalesce((m.competition->>'reconnectSeconds')::integer*1000,$1)) for update skip locked",[RECONNECT_MS])).rows;
  for(const m of rows){if(m.state.pendingDart)continue;const players=(await c.query('select * from match_players where match_id=$1 order by seat',[m.id])).rows;const budget=(m.competition?.reconnectSeconds??RECONNECT_MS/1000)*1000;const expired=players.filter(p=>p.disconnected_at&&p.reconnect_used_ms+Date.now()-new Date(p.disconnected_at).getTime()>=budget);
   if(expired.length===2){await finishMatch(c,m,m.state,'abandoned',null);await persist(c,m,{...m.state,phase:'won',winner:null},'abandoned',null);}
-  else if(expired.length===1){const state={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:expired[0].seat})};await finishMatch(c,m,state,'disconnect',state.winner);await persist(c,m,state,'disconnect',null);}
+  else if(expired.length===1){
+   const late=expired[0].seat;
+   if(m.state.timeoutDecision?.player===late)continue;
+   if(m.state.turn===late&&m.state.turnDeadlineAt){
+    const now=Date.now();if(now<m.state.turnDeadlineAt)continue;
+    const timeout=observeTurnTimeout(m.state,now,(m.competition?.turnSeconds??30)*1000);
+    if(timeout?.timeoutDecision){await persist(c,m,{...m.state,...timeout,phaseStartedAt:now,phaseToken:randomUUID()},'turn-timeout-decision',null);continue;}
+   }
+   let state={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:expired[0].seat})};state=await finishMatch(c,m,state,'disconnect',state.winner);await persist(c,m,state,'disconnect',null);}
  }return rows.length;
 });}

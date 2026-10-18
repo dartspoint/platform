@@ -44,6 +44,6 @@
   "game.stop": "STOP",
   "game.gooi": "THROW",
   "game.je_beurttijd_is_voorbij_gooi_binnen_de_nieuwe": "your turn time has expired. Throw within the new time limit.",
-  "game.je_beurttijd_is_voor_de_tweede_keer_voorbij": "your turn time has expired for the second time. A third consecutive timeout loses the match.",
+  "game.je_beurttijd_is_voor_de_tweede_keer_voorbij": "Your turn time has expired for the second time. After the next expiry, your opponent chooses whether to end the match or allow one more minute.",
   "game.de_livewedstrijd_wordt_geladen": "Loading the live match…"
 }

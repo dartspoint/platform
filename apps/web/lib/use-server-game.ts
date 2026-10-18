@@ -16,10 +16,10 @@ import {initialGameState,type GameState} from './darts-game-state';
 import {useDartsPreferences} from './darts-preferences';
 import type {MatchMode,MatchRatingChange} from './darts-match-records';
 import type {MatchSetup} from './darts-match-setup';
-import type {TurnTimeoutWarning} from '../../../packages/game-core/src/turn-timeout';
+import type {TurnTimeoutWarning,TurnTimeoutDecision} from '../../../packages/game-core/src/turn-timeout';
 
-type Snapshot={commandId?:string;timing?:Record<string,unknown>;matchId:string;roomId?:string;canRematch?:boolean;publicGameId?:number;state:GameState&{timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;timeoutStrikes?:[number,number];timeoutWarning?:TurnTimeoutWarning|null;phaseToken:string;phaseStartedAt:number;lockedX:number|null;lockedY?:number|null;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};stateVersion:number;lifecycle:string;mode:string;seat:number|null;gameNumber:number;serverAt:number;remainingReconnectMs?:number};
-const empty=initialGameState(0,'',0);
+type Snapshot={commandId?:string;timing?:Record<string,unknown>;matchId:string;roomId?:string;canRematch?:boolean;publicGameId?:number;state:GameState&{timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;timeoutStrikes?:[number,number];timeoutWarning?:TurnTimeoutWarning|null;timeoutDecision?:TurnTimeoutDecision|null;phaseToken:string;phaseStartedAt:number;lockedX:number|null;lockedY?:number|null;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};stateVersion:number;lifecycle:string;mode:string;ranked?:boolean;seat:number|null;gameNumber:number;serverAt:number;remainingReconnectMs?:number};
+const empty=initialGameState(0,'',0) as GameState&{timeoutDecision?:TurnTimeoutDecision|null};
 export function useServerGame(initialOpponentName='',explicitMatchId?:string,readOnly=false){
  const {locale:uiLocale}=useI18n();
 
@@ -52,7 +52,7 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
   if(state.lockedX!==null)paintLock('horizontal',(state.lockedX+1.14)/2.28);
   if(state.lockedY!=null)paintLock('vertical',(state.lockedY+1.14)/2.28);
  },[paintLock]);
- const movingView=useCallback(()=>{const view=current.current;if(!renderLive.current||!view||!socket.current||renderControl.current.readOnly||!renderControl.current.active||view.seat===null||view.seat!==view.state.turn||view.lifecycle!=='playing'||!clock.current.ready||!serverCalibrated.current||pending.current?.phaseToken===view.state.phaseToken)return null;
+ const movingView=useCallback(()=>{const view=current.current;if(!renderLive.current||!view||!socket.current||renderControl.current.readOnly||!renderControl.current.active||view.seat===null||view.seat!==view.state.turn||view.lifecycle!=='playing'||!!view.state.timeoutDecision||!clock.current.ready||!serverCalibrated.current||pending.current?.phaseToken===view.state.phaseToken)return null;
   const axis=view.state.phase;if(axis!=='horizontal'&&axis!=='vertical')return null;
   // Preserve the original authoritative-lock priority over any moving draw.
   if(axis==='horizontal'?view.state.lockedX!==null:view.state.lockedY!=null)return null;
@@ -76,7 +76,7 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
  useLayoutEffect(()=>{renderLive.current=true;projectLocks();wake();return()=>{renderLive.current=false;cancelFrame();};},[cancelFrame,projectLocks,wake]);
  // Snapshot projection is after DOM commit, including loading->panel mounts.
  useLayoutEffect(()=>{renderControl.current={active,readOnly};projectLocks();wake();},[active,readOnly,snapshot,projectLocks,wake]);
- const apply=useCallback((value:Snapshot)=>{const previous=current.current;if(previous&&previous.matchId===value.matchId&&previous.stateVersion>value.stateVersion)return;const next={...previous,...value};clock.current.seed(value.serverAt);current.current=next;projectLocks();wake();setSnapshot(next);},[projectLocks,wake]);
+ const apply=useCallback((value:Snapshot)=>{const previous=current.current;if(previous&&previous.matchId===value.matchId&&previous.stateVersion>value.stateVersion)return;const next={...previous,...value};clock.current.seed(value.serverAt);current.current=next;projectLocks();wake();setSnapshot(next);if(previous&&((value.state.totalLegs[0]+value.state.totalLegs[1])>(previous.state.totalLegs[0]+previous.state.totalLegs[1])||value.lifecycle!==previous.lifecycle&&['completed','abandoned'].includes(value.lifecycle)))void refreshPlatform().catch(()=>{});},[projectLocks,wake]);
  useEffect(()=>{
   if(!actualId)return;let cancelled=false,retry:ReturnType<typeof setTimeout>|undefined,renew:ReturnType<typeof setInterval>|undefined,ping:ReturnType<typeof setInterval>|undefined;
   const connect=async()=>{
@@ -132,14 +132,17 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
   else setSending(true);
   if(axis&&sample){const geometry=element?meterGeometry(element,axis):undefined,trace={event:'local-stop',commandId:payload.commandId,matchId:s.matchId,dartNumber:s.state.dartCount[0]+s.state.dartCount[1]+1,phase:axis,phaseToken:s.state.phaseToken,phaseStartedAt:s.state.phaseStartedAt,timingVersion:s.state.timingVersion,rendered:sample,geometry,inputAt:stoppedAt,stopAppliedAt,sendAt,sendReturnedAt,clockOffset:clock.current.phaseOffset(s.state.phaseToken),localLock:sample.fraction};timingTrace(trace);performance.mark('dp-local-stop',{detail:{...trace,axis:type,at:stoppedAt,x:xMeter.get(),y:yMeter.get(),handlerCompletedAt:performance.now()}});}
  },[readOnly,xMeter,yMeter,cancelFrame]);
- const startOrStop=useCallback(()=>{const s=current.current;if(readOnly||!active||!s||s.seat!==s.state.turn||s.lifecycle!=='playing'||pending.current)return;if(s.state.phase==='horizontal')command('dart.stop_horizontal');else if(s.state.phase==='vertical')command('dart.stop_vertical');if(preferences.haptics)navigator.vibrate?.(12);},[readOnly,active,preferences.haptics,command]);
+ const startOrStop=useCallback(()=>{const s=current.current;if(readOnly||!active||!s||s.seat!==s.state.turn||s.lifecycle!=='playing'||s.state.timeoutDecision||pending.current)return;if(s.state.phase==='horizontal')command('dart.stop_horizontal');else if(s.state.phase==='vertical')command('dart.stop_vertical');if(preferences.haptics)navigator.vibrate?.(12);},[readOnly,active,preferences.haptics,command]);
  const beginMatch=useCallback(async()=>command('match.ready'),[command]);
  const raw=snapshot?.state??empty,swap=snapshot?.seat===1;
  const pair=<T,>(value:[T,T]):[T,T]=>swap?[value[1],value[0]]:value;
  const turn=(swap?1-raw.turn:raw.turn) as 0|1,winner=raw.winner===null?null:(swap?1-raw.winner:raw.winner) as 0|1;
  const names=snapshot?pair(snapshot.state.names):[selfName(),initialOpponentName];
- const myTurn=!readOnly&&snapshot?.seat!==null&&snapshot?.seat===raw.turn;
- const warning=snapshot?.state.timeoutWarning;
+ const myTurn=!readOnly&&!raw.timeoutDecision&&snapshot?.seat!==null&&snapshot?.seat===raw.turn;
+ const warning=snapshot?.state.timeoutWarning,decision=raw.timeoutDecision;
+ const timeoutDecision=decision?{...decision,player:(swap?1-decision.player:decision.player) as 0|1}:null;
+ const grantTimeoutMinute=useCallback(()=>command('match.timeout_wait'),[command]);
+ const finishTimedOutMatch=useCallback(()=>command('match.timeout_finish'),[command]);
  const state={...raw,scores:pair(raw.scores),legs:pair(raw.legs),sets:pair(raw.sets),totalLegs:pair(raw.totalLegs),opened:pair(raw.opened),dartCount:pair(raw.dartCount),pointsScored:pair(raw.pointsScored),visitScores:pair(raw.visitScores),visitBusts:pair(raw.visitBusts),highestVisit:pair(raw.highestVisit),highestCheckout:pair(raw.highestCheckout),timeoutStrikes:pair(snapshot?.state.timeoutStrikes??[0,0]),timeoutWarning:warning?{...warning,player:(swap?1-warning.player:warning.player) as 0|1}:null,turn,winner,phase:raw.phase==='won'||raw.phase==='flight'?raw.phase:myTurn?raw.phase:'opponent' as const,events:raw.events.map(e=>({...e,player:(swap?1-e.player:e.player) as 0|1})),history:[]};
  const rematch=useCallback(async()=>{if(readOnly||!actualId)throw new Error(runtimeFeedback("feedback.open_eerst_je_eigen_wedstrijdoverzicht"));return mutate<{id:string}>('match/rematch',{matchId:actualId});},[readOnly,actualId]);
  const startNewMatch=useCallback(async(name:string,setup?:MatchSetup)=>{if(readOnly)return;const p=getPlatform();const room=p.rooms.find(r=>r.name===sessionStorage.getItem('dartspoint-room-v1'))??p.rooms[0];await mutate('invite',{targetId:playerId(name),roomId:room.id,rules:setup?.rules??empty.rules,ranked:setup?.ranked===true});setConnectionMessage('De uitnodiging is verstuurd.');},[readOnly]);
@@ -154,6 +157,6 @@ export function useServerGame(initialOpponentName='',explicitMatchId?:string,rea
   clearMatchSelection();
  },[readOnly,clearMatchSelection]);
  const noOp=useCallback(()=>{},[]);
- const mode:MatchMode=snapshot?.mode==='ranked'?'ranked-demo':'casual';
- return {...state,lastResult:renderGameMessage(state.lastResult,uiLocale,names),bustReason:state.bustReason?renderGameMessage(state.bustReason,uiLocale):null,clearMatchSelection,closeCompletedMatch,canRematch:snapshot?.canRematch!==false&&snapshot?.lifecycle==='completed',id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:renderGameMessage(snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',uiLocale),offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage:renderGameMessage(connectionMessage,uiLocale),ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
+ const mode:MatchMode=snapshot?.ranked||snapshot?.mode==='ranked'?'ranked-demo':'casual';
+ return {...state,timeoutDecision,grantTimeoutMinute,finishTimedOutMatch,lastResult:renderGameMessage(state.lastResult,uiLocale,names),bustReason:state.bustReason?renderGameMessage(state.bustReason,uiLocale):null,clearMatchSelection,closeCompletedMatch,canRematch:snapshot?.canRematch!==false&&snapshot?.lifecycle==='completed',id:actualId??'',publicGameId:snapshot?.publicGameId??snapshot?.gameNumber,isSpectator:readOnly||snapshot?.seat===null,xMeter,yMeter,xIndicator:bindXIndicator,yIndicator:bindYIndicator,timingReady,startOrStop,reset,startNewMatch,rematch,undo:noOp,canUndo:false,landDart:noOp,averages:state.dartCount.map((n,i)=>n?state.pointsScored[i]/n*3:0) as [number,number],playerName:names[0],opponentName:names[1],setActive,ready:!!snapshot&&['playing','completed','abandoned'].includes(snapshot.lifecycle),preparing:!!actualId&&!snapshot,beginMatch,mode,modeLabel:renderGameMessage(snapshot?.mode==='ranked'?'Gerankt':snapshot?.mode==='tournament'?'Toernooi':snapshot?.mode==='division'?'Divisie':'Vrij spelen',uiLocale),offlineUntil,remainingReconnect:offlineUntil?Math.max(0,Math.ceil((offlineUntil-Date.now())/1000)):Math.ceil((snapshot?.remainingReconnectMs??120000)/1000),reconnect,simulateDisconnect,reconnected,sending,verification:'server' as const,connectionMessage:renderGameMessage(connectionMessage,uiLocale),ratingChange:getMatchRecords().find(r=>r.id===actualId)?.ratingChange,preferences,matchId:actualId,gameNumber:snapshot?.gameNumber,seat:snapshot?.seat,waitingForOpponent:!readOnly&&!!snapshot&&snapshot.seat!==null&&snapshot.state.ready[snapshot.seat]&&snapshot.lifecycle==='assigned'};
 }

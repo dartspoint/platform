@@ -2,7 +2,7 @@ import type { DartHit } from "./darts-rules";
 import { advanceMatchScoring, initialMatchScoring, restoreMatchScoring, type GameRules, type MatchScoringState } from "./darts-match-rules";
 export { DEFAULT_GAME_RULES, normalizeGameRules, type GameRules } from "./darts-match-rules";
 import type { MatchDartEvent } from "./darts-match-records";
-import type {TurnTimeoutWarning} from './turn-timeout';
+import type {TurnTimeoutWarning,TurnTimeoutDecision} from './turn-timeout';
 
 export type Phase = "horizontal" | "vertical" | "flight" | "opponent" | "won";
 export type BoardDart = { id: number; hit: DartHit };
@@ -19,6 +19,7 @@ export type GameCore = MatchScoringState & {
   highestVisit: [number, number]; highestCheckout: [number, number];
   bustReason: string | null; celebration: "180" | "checkout" | null; forfeit: boolean;
   timeoutStrikes?: [number,number]; timeoutWarning?: TurnTimeoutWarning | null;
+  timeoutDecision?: TurnTimeoutDecision | null; turnDeadlineAt?: number | null;
 };
 export type GameState = GameCore & { history: GameCore[]; pendingDart: PendingDart | null };
 export type GameAction =

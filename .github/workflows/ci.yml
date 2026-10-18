@@ -55,7 +55,7 @@ jobs:
           DARTSPOINT_QA_TOOLS: ${{ runner.temp }}/dartspoint-tools
         run: |
           python3 scripts/fetch-qa-tools.py "$DARTSPOINT_QA_TOOLS"
-          "$DARTSPOINT_QA_TOOLS/actionlint" .github/workflows/ci.yml .github/workflows/deploy.yml
+          "$DARTSPOINT_QA_TOOLS/actionlint" .github/workflows/ci.yml .github/workflows/deploy.yml .github/workflows/reconcile-match.yml
           "$DARTSPOINT_QA_TOOLS/caddy" validate --config ops/Caddyfile.staging --adapter caddyfile
           "$DARTSPOINT_QA_TOOLS/caddy" validate --config ops/Caddyfile.production --adapter caddyfile
       - name: Start isolated infrastructure and run acceptance tests

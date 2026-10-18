@@ -44,6 +44,6 @@
   "game.stop": "STOP",
   "game.gooi": "GOOI",
   "game.je_beurttijd_is_voorbij_gooi_binnen_de_nieuwe": "je beurttijd is voorbij. Gooi binnen de nieuwe beurttijd.",
-  "game.je_beurttijd_is_voor_de_tweede_keer_voorbij": "je beurttijd is voor de tweede keer voorbij. Bij een derde keer verlies je de wedstrijd.",
+  "game.je_beurttijd_is_voor_de_tweede_keer_voorbij": "Je beurttijd is voor de tweede keer voorbij. Bij de volgende overschrijding kiest je tegenstander of de wedstrijd eindigt of je één minuut extra krijgt.",
   "game.de_livewedstrijd_wordt_geladen": "De livewedstrijd wordt geladen…"
 }
