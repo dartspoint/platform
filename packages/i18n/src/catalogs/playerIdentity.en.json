@@ -18,5 +18,11 @@
   "playerIdentity.dp_dartspoints_rankingpunten_start_1500_k_32_rolkleuren": "DP — DartsPoints: ranking points. Start 1500 · K = 32. Role colours belong to the name. Rating changes are linked to your account.",
   "playerIdentity.copy_eigenaar": "Owner",
   "playerIdentity.copy_platformbeheerder": "Platform administrator",
-  "playerIdentity.copy_speler": "Player"
+  "playerIdentity.copy_speler": "Player",
+  "playerIdentity.email": "Email address",
+  "playerIdentity.email_loading": "Loading email address…",
+  "playerIdentity.email_error": "The email address could not be loaded.",
+  "playerIdentity.email_retry": "Try again",
+  "playerIdentity.email_unavailable": "This player profile is no longer available.",
+  "playerIdentity.no_email": "No email address available."
 }

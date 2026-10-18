@@ -140,6 +140,7 @@ python3 tests/ops/test_privacy_backups.py
 python3 tests/ops/test_restic_privacy.py
 if [[ -n "${DARTSPOINT_QA_TOOLS:-}" ]]; then python3 tests/integration/support-caddy.py "$DARTSPOINT_QA_TOOLS/caddy"; fi
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/legal.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/profile-contact.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/offline-internationalisation.ts
@@ -180,6 +181,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/turnstile.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/auth.ts
 
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/interface.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/profile-contact.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/documents-support.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/documents-support-delivery.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/legal-admin-hotfix.ts

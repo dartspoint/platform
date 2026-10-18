@@ -9,6 +9,7 @@ import {useI18n} from '@/lib/i18n/provider';
 import {RoomMetadataEditor} from "../room-metadata";
 import {selfName,usePlatform} from "@/lib/platform-client";
 import {publicGameLabel} from '@/lib/public-game-label';
+import {PlayerContact} from "@/components/player-contact";
 
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, ChevronRight, Clock3, Crown, DoorOpen, Flag, LockKeyhole, Plus, Search, Shield, ShieldCheck, SlidersHorizontal, Trash2, UserRound, Users } from "lucide-react";
@@ -91,6 +92,7 @@ function MemberDetail({ member }: { member: AdminMember }) {
   const now = useNow();
   return <div className="ops-member-detail">
     <div className="ops-detail-person"><div className={`ops-avatar role-${member.role}`}>{member.initials}</div><div><MemberName member={member}/><span>{member.country} {dpT("operations.lid_sinds")} {new Date(member.joinedAt).toLocaleDateString(dpFormatLocale)}</span></div><span className={`ops-pill ${memberStatus(member, now)}`}>{statusLabel[memberStatus(member, now)]}</span></div>
+    <PlayerContact userId={member.id}/>
     <div className="ops-metrics"><div><span>{dpT("operations.dp")}</span><strong>{Math.round(profile.rating)}</strong><small>{profile.provisional ? dpT("operations.plaatsingsfase") : dpT("operations.geplaatst")}</small></div><div><span>{dpT("operations.partijen")}</span><strong>{member.played}</strong><small>{member.wins} {dpT("operations.gewonnen")}</small></div><div><span>{dpT("operations.gemiddelde")}</span><strong>{new Intl.NumberFormat(dpFormatLocale,{minimumFractionDigits:1,maximumFractionDigits:1}).format(member.average)}</strong><small>{member.oneEighties} × 180</small></div></div>
     <form className="ops-inline-form" onSubmit={async event => { event.preventDefault(); const result = await updateAdminMemberRole(member.name, role); setFeedback(resultText(result, dpFeedback("feedback.rol_opgeslagen"))); }}>
       <label>{dpT("operations.platformrol")}<select value={member.role === "owner" ? "owner" : role} onChange={event => setRole(event.target.value as AdminMember["role"])} disabled={member.role === "owner"}>{member.role === "owner" ? <option value="owner">{dpT("operations.eigenaar_beschermd")}</option> : <><option value="player">{dpT("operations.speler")}</option><option value="vip">{dpT("operations.vip")}</option><option value="admin">{dpT("operations.admin")}</option></>}</select></label>
