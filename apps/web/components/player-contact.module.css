@@ -1,0 +1,49 @@
+.contact {
+  margin-block: 20px;
+  padding: 13px 15px;
+  border: 1px solid var(--border, #8caa9525);
+  border-radius: 10px;
+  background: #ffffff03;
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted, #9cb4a3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 5px;
+  color: var(--text, #d9e2d6);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.email {
+  user-select: text;
+  min-width: 0;
+}
+
+.content button {
+  border: 1px solid var(--border, #8caa9540);
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: inherit;
+  background: #ffffff08;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.content button:focus-visible {
+  outline: 2px solid var(--accent, #ed4b42);
+  outline-offset: 3px;
+}

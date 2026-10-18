@@ -7,6 +7,7 @@ import {lobbyAdmin,lobbyFeed,lobbyAction,lobbyPreview,lobbyVote,lobbyApplause} f
 import {releaseAdmin,releaseMine,releasePublications,releaseSubmit,releaseAdminAction} from '../../../../../../packages/data/src/releases';
 import {boundedMediaForm,uploadMedia,readMedia,deleteMedia} from '../../../../../../packages/data/src/media';
 import {staff} from '../../../../../../packages/data/src/auth';
+import {profileContact} from '../../../../../../packages/data/src/profile-contact';
 import {timingPing,timingEcho,practiceIngress} from '../../../../../../packages/data/src/timing';
 import {matchHistory} from '../../../../../../packages/data/src/history';
 import {revokeSession} from '../../../../../../packages/data/src/auth';
@@ -36,6 +37,7 @@ export async function GET(request:Request,context:Context){try{
  const path=(await context.params).path;
  if(path[0]==='public')return response(await publicProjection());
  const actor=await currentActor(request,path[0]!=='profile');
+ if(path.join('/')==='admin/player-contact')return response(await profileContact(actor,Object.fromEntries(new URL(request.url).searchParams)));
  if(path.join('/')==='lobby/admin')return response(await lobbyAdmin(actor));
  if(path.join('/')==='releases/admin')return response(await releaseAdmin(actor));
  if(path.join('/')==='releases/mine')return response(await releaseMine(actor));
