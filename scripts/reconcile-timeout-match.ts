@@ -3,7 +3,9 @@ import {Pool} from 'pg';
 import {postgresOptions} from '../packages/data/src/postgres';
 import {correctLegacyLegResult,planLegacyLegCorrection} from '../packages/data/src/legacy-leg-correction';
 import {DomainError,requireThat} from '../packages/contracts/src/index';
+import {normalizeOperatorDatabaseUrl} from './operator-database';
 
+let phase='configuration';
 async function main(){
 const mode=process.env.RECONCILE_OPERATION??'inspect';
 requireThat(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_REF==='refs/heads/production'&&process.env.APP_ENV==='production','operator_production_workflow_required');
@@ -17,7 +19,7 @@ if(mode==='repair'){
  const origin=process.env.NEXT_PUBLIC_APP_URL;requireThat(origin==='https://dartspoint.nl','operator_invalid_origin');
  for(const path of ['/healthz','/readyz']){const response=await fetch(origin+path,{signal:AbortSignal.timeout(15000)});const data=await response.json();requireThat(response.ok&&data.ok&&data.release===process.env.GITHUB_SHA,'operator_release_not_active');}
 }
-const pool=new Pool({...postgresOptions(process.env.DATABASE_URL!),max:1,connectionTimeoutMillis:15000}),c=await pool.connect();
+const pool=new Pool({...postgresOptions(normalizeOperatorDatabaseUrl(process.env.DATABASE_URL!)),max:1,connectionTimeoutMillis:15000});phase='connect';const c=await pool.connect();phase='query';
 try{
  await c.query(mode==='inspect'?'begin read only':'begin');await c.query('set local role dartspoint_app');await c.query("set local lock_timeout='5s'");await c.query("set local statement_timeout='20s'");
  const m=(await c.query(`select m.*,r.kind,r.winner_id,r.result_hash,r.data result_data from matches m join match_results r on r.match_id=m.id
@@ -40,4 +42,4 @@ try{
 finally{c.release();await pool.end();}
 
 }
-await main().catch(error=>{console.error(JSON.stringify({ok:false,code:error instanceof DomainError?error.code:"operator_action_unavailable"}));process.exitCode=1;});
+await main().catch(error=>{const driverCode=error&&typeof error==='object'&&'code'in error?String(error.code):'';console.error(JSON.stringify({ok:false,code:error instanceof DomainError?error.code:"operator_action_unavailable",phase,...(/^(?:[0-9A-Z]{5}|E[A-Z_]{2,35})$/.test(driverCode)?{driverCode}:{})}));process.exitCode=1;});
