@@ -43,11 +43,13 @@ Mastersleutelrotatie: zet nieuwe actieve key en ID plus de oude sleutel in de pr
 
 - Typecheck, 112 unittests en oorspronkelijke spelregel-/bronpariteitscontroles geslaagd.
 - 50 infrastructuurtests geslaagd, inclusief afwezige AI-configuratie in beide omgevingen, ongeldige sleutelconfiguratie en scheiding van runtimegeheimen.
-- Gerichte native databaseproeven op geïsoleerde lokale database: 25 identiteiten, rechten, ciphertext/metadata, mislukte rotatie, bootstrap, honderd gelijktijdige publicatiepogingen, verschillende teksten, clientloos spel, slaap/hervatten, writerfencing, epochs, meerdere tabs en sleutelverwijdering.
+- Veertien gerichte native databaseproeven op geïsoleerde lokale database: 25 identiteiten, rechten, ciphertext/metadata, workerconsumptie en usage, harde budgetstop vóór provider, mislukte rotatie, bootstrap, honderd gelijktijdige publicatiepogingen, verschillende teksten, clientloos spel, slaap/hervatten, writerfencing, epochs, meerdere tabs en sleutelverwijdering.
 - Native browserproeven: directe HTTP-rechten, 25 karakterkaarten, dirty polling, write-only sleutelveld, desktop/mobiel zonder overflow of browserfouten.
 - Deploymentbuild geslaagd op de tussentijdse implementatie; bij verdere wijzigingen opnieuw bouwen.
 
 Providerverificatie gebruikt fakes; nul echte OpenAI-calls. De T3-preview is op deze host geblokkeerd door AppArmor; de browserproeven gebruiken de bestaande Playwright-workflow.
+
+De lokale deploymentinfrastructuur-combinatieproef bevestigt echte TLS en de beperkte approl, maar de herstelstap faalt met onderdrukte providerdiagnostiek en is dus niet als geslaagd gerekend.
 
 Volledige hosted regressie, seriële timingroute, herstel-/belastingproeven en staginguitrol zijn nog niet aangetoond. Deze versie mag niet als opgeleverd op staging worden gerapporteerd vóór die gates werkelijk slagen. Bewijs staat in `artifacts/npc-native-result.json` en `artifacts/npc-browser/`.
 

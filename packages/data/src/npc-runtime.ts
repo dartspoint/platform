@@ -29,7 +29,7 @@ export async function validateNpcJob(c:PoolClient,job:any){
 export async function planNpcActions(){
  if(await draining()||!encryptionStatus())return;
  return transaction(async c=>{
- await audienceLock(c);const audiences=await refreshAudience(c),global=audiences.find(r=>r.id==='global');if(!global?.awake)return;
+ await audienceLock(c);await c.query("delete from private.npc_utterance_history where expires_at<=clock_timestamp()");const audiences=await refreshAudience(c),global=audiences.find(r=>r.id==='global');if(!global?.awake)return;
  const config=(await c.query('select * from private.npc_director_settings where id=1 for share')).rows[0];if(!config.enabled||config.emergency_stop)return;
  const secret=(await c.query("select version from private.integration_secrets where provider='openai' and ciphertext is not null and test_status='working' and tested_version=version")).rows[0];if(!secret)return;
  const settings=npcSettingsSchema.parse(config.data),hour=Number(new Intl.DateTimeFormat('en',{timeZone:'Europe/Amsterdam',hour:'numeric',hourCycle:'h23'}).format(new Date()));
@@ -90,7 +90,7 @@ export async function runNpcJob(job:any){
  await audienceLock(c);const valid=await validateNpcJob(c,job),settings=npcSettingsSchema.parse(valid.config.data);
  // Conservative whole request bound. Unknown usage keeps the reservation charged.
  const reservation=16384;
- const budget=(await c.query(`select coalesce(sum(coalesce(actual_tokens,reserved_tokens)) filter(where created_at>=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC'),0)::int day,coalesce(sum(coalesce(actual_tokens,reserved_tokens)),0)::int month,count(*) filter(where created_at>now()-interval '1 minute') rpm,count(*) filter(where state='reserved' and completed_at is null and created_at>now()-interval '40 seconds') inflight from private.ai_usage where created_at>=date_trunc('month',now() at time zone 'UTC') at time zone 'UTC'`)).rows[0];
+ const budget=(await c.query(`select coalesce(sum(coalesce(actual_tokens,reserved_tokens)) filter(where created_at>=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC'),0)::int "day",coalesce(sum(coalesce(actual_tokens,reserved_tokens)),0)::int "month",count(*) filter(where created_at>now()-interval '1 minute') rpm,count(*) filter(where state='reserved' and completed_at is null and created_at>now()-interval '40 seconds') inflight from private.ai_usage where created_at>=date_trunc('month',now() at time zone 'UTC') at time zone 'UTC'`)).rows[0];
  requireThat(budget.day+reservation<=settings.dailyTokenLimit&&budget.month+reservation<=settings.monthlyTokenLimit&&Number(budget.rpm)<settings.requestsPerMinute&&Number(budget.inflight)<2,'ai_budget',409);
  const recent=(await c.query("select m.id,m.body,p.username from chat_messages m join profiles p on p.id=m.sender_id where m.channel_id=$1 and m.kind in('human','npc') and m.redacted_at is null order by m.seq desc limit 8",[job.channel_id])).rows.reverse();
  const persona={...valid.definition.persona};delete persona.responseExamples;

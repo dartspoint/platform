@@ -312,8 +312,9 @@ export async function npcMatchTick(id:string,writerId:string,fence:number){retur
  const m=(await c.query('select * from matches where id=$1 for update',[id])).rows[0];
  requireThat(m&&m.writer_id===writerId&&Number(m.writer_fence)===fence&&new Date(m.lease_until).getTime()>Date.now(),'stale_writer',409);
  if(!['assigned','playing','paused'].includes(m.lifecycle))return;
- const players=(await c.query('select mp.*,p.actor_kind,d.persona from match_players mp join profiles p on p.id=mp.user_id left join private.npc_definitions d on d.user_id=p.id where mp.match_id=$1 order by seat',[id])).rows;
+ const players=(await c.query('select mp.*,p.actor_kind,p.status,d.persona from match_players mp join profiles p on p.id=mp.user_id left join private.npc_definitions d on d.user_id=p.id where mp.match_id=$1 order by seat',[id])).rows;
  const npcs=players.filter(p=>p.actor_kind==='npc');if(!npcs.length)return;
+ for(const npc of npcs){const blocked=(await c.query("select 1 from sanctions where target_id=$1 and revoked_at is null and starts_at<=now() and ends_at>now() and (room_id is null or room_id=$2) and kind in('suspend','remove')",[npc.user_id,m.room_id])).rowCount;if(npc.status!=='active'||blocked){await c.query('update match_players set disconnected_at=coalesce(disconnected_at,now()) where match_id=$1 and user_id=$2',[id,npc.user_id]);return;}}
  let state=m.state as ServerGame&{npcSleepAt?:number; npcNextAt?:number};const now=Date.now();
  const npcOnly=npcs.length===2;
  if(npcOnly){
