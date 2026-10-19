@@ -22,7 +22,8 @@
     "owner:bootstrap": "tsx scripts/owner-bootstrap.ts",
     "dev": "node scripts/dev.mjs",
     "local:setup": "bash scripts/local-setup.sh",
-    "test:integration": "bash scripts/test-local.sh"
+    "test:integration": "bash scripts/test-local.sh",
+    "dev:npc": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs apps/worker/src/npc-worker.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.98.0",

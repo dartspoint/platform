@@ -43,5 +43,6 @@
   "playerMenu.actieve_kamermaatregelen": "Active room measures",
   "playerMenu.kamermute": "Room mute",
   "playerMenu.verwijderd": "Removed",
-  "playerMenu.opheffen": "Revoke"
+  "playerMenu.opheffen": "Revoke",
+  "playerMenu.private_unavailable": "This player does not receive private messages."
 }

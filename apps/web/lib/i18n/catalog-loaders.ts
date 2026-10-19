@@ -1,5 +1,7 @@
 import type {Catalog} from '../../../../packages/i18n/src/messages';
 export const catalogLoaders:Record<string,()=>Promise<{default:Catalog}>>={
+"npc.nl":()=>import("../../../../packages/i18n/src/catalogs/npc.nl.json"),
+"npc.en":()=>import("../../../../packages/i18n/src/catalogs/npc.en.json"),
 "chatBadge.nl":()=>import("../../../../packages/i18n/src/catalogs/chatBadge.nl.json"),
 "chatBadge.en":()=>import("../../../../packages/i18n/src/catalogs/chatBadge.en.json"),
 "app.nl":()=>import("../../../../packages/i18n/src/catalogs/app.nl.json"),

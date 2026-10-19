@@ -11,12 +11,13 @@ REPOSITORY = 'dartspoint/platform'
 SERVICES = ('web', 'realtime', 'worker')
 PUBLIC = ('NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_REALTIME_URL', 'NEXT_PUBLIC_SUPABASE_URL',
           'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY')
+AI_SECRETS = ('AI_INTEGRATION_MASTER_KEY_B64', 'AI_INTEGRATION_PREVIOUS_KEYS_JSON')
 OPTIONAL_SECRETS = ('TURNSTILE_SECRET_KEY', 'RESEND_WEBHOOK_SECRET')
 SECRETS = ('SUPABASE_SECRET_KEY', 'DATABASE_URL',
-           'RESEND_API_KEY', 'INTERNAL_DEPLOY_TOKEN', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY') + OPTIONAL_SECRETS
+           'RESEND_API_KEY', 'INTERNAL_DEPLOY_TOKEN', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY') + OPTIONAL_SECRETS + AI_SECRETS
 PRIVATE_FIELDS = SECRETS + ('MIGRATION_DATABASE_URL', 'BACKUP_DATABASE_URL')
 VARIABLES = PUBLIC + ('MAIL_FROM', 'MAIL_REPLY_TO', 'RESTIC_REPOSITORY', 'AWS_DEFAULT_REGION')
-OPTIONAL = ('DATABASE_CA_CERT_BASE64', 'LANDING_ORIGIN', 'SUPPORT_INBOUND_ADDRESS', 'SUPPORT_RESEND_DOMAIN_ID', 'GOOGLE_AUTH_ENABLED')
+OPTIONAL = ('DATABASE_CA_CERT_BASE64', 'LANDING_ORIGIN', 'SUPPORT_INBOUND_ADDRESS', 'SUPPORT_RESEND_DOMAIN_ID', 'GOOGLE_AUTH_ENABLED', 'AI_INTEGRATION_MASTER_KEY_ID')
 
 def environment(value):
     if value not in ('staging', 'production'): raise ValueError('Invalid environment')
@@ -90,9 +91,22 @@ def validate_backup(values):
 def validate_values(env, values):
     if set(values) != set(SECRETS + VARIABLES + OPTIONAL): raise ValueError('Unexpected or missing configuration fields')
     for k in SECRETS + VARIABLES:
+        if k in AI_SECRETS and not values[k]: continue
         if k in OPTIONAL_SECRETS and not values[k] and env == 'staging': continue
         try: scalar(values[k])
         except ValueError: raise ValueError(k + ' is missing or invalid') from None
+    if values.get('AI_INTEGRATION_MASTER_KEY_B64'):
+        try:
+            decoded = base64.b64decode(values['AI_INTEGRATION_MASTER_KEY_B64'], validate=True)
+            if len(decoded) != 32 or base64.b64encode(decoded).decode() != values['AI_INTEGRATION_MASTER_KEY_B64'] or not re.fullmatch('[a-zA-Z0-9_-]{1,64}', values.get('AI_INTEGRATION_MASTER_KEY_ID', '')): raise ValueError()
+        except Exception: raise ValueError('Invalid AI encryption configuration') from None
+    if values.get('AI_INTEGRATION_PREVIOUS_KEYS_JSON'):
+        try:
+            previous = json.loads(values['AI_INTEGRATION_PREVIOUS_KEYS_JSON'])
+            if not isinstance(previous, dict) or len(previous)>5: raise ValueError()
+            for key_id, encoded in previous.items():
+                if not re.fullmatch('[a-zA-Z0-9_-]{1,64}',key_id) or len(base64.b64decode(encoded, validate=True))!=32 or base64.b64encode(base64.b64decode(encoded)).decode()!=encoded: raise ValueError()
+        except Exception: raise ValueError('Invalid AI key rotation configuration') from None
     values = {**values, 'DATABASE_URL':normalize_database_url(values['DATABASE_URL'])}
     validate_public(env, values); validate_backup(values)
     if not values['SUPABASE_SECRET_KEY'].startswith('sb_secret_'): raise ValueError('Server Supabase secret required')

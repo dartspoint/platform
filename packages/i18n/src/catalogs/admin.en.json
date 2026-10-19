@@ -130,5 +130,7 @@
   "admin.copy_de_juiste_toegang_voor_het_team": "The right access for the team.",
   "admin.copy_ken_ticketrollen_toe_zonder_spel_of_beheerrechten_te": "Assign ticket roles without expanding game or administration permissions.",
   "admin.copy_iedere_wijziging_inzichtelijk": "Every change, visible.",
-  "admin.copy_wie_deed_wat_wanneer_en_waarom_volg_je": "Who did what, when and why? Trace your administration actions."
+  "admin.copy_wie_deed_wat_wanneer_en_waarom_volg_je": "Who did what, when and why? Trace your administration actions.",
+  "admin.npc": "AI club players",
+  "admin.npc_description": "Fixed characters, presence and conversations."
 }

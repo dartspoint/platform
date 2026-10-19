@@ -1,3 +1,4 @@
+import {hasRoomAudience} from './npc-audience';
 import {randomUUID} from 'node:crypto';
 import {transaction,audit,outbox,draining,redis} from './db';
 import {finishMatch,persist,type ServerGame} from './matches';
@@ -11,15 +12,16 @@ export async function maintainMatches(){return transaction(async c=>{
   await c.query('update match_players set disconnected_at=null,ready=false where match_id=$1',[m.id]);
   await persist(c,m,{...m.state,ready:[false,false],phase:'horizontal',lockedX:null,phaseStartedAt:Date.now(),phaseToken:randomUUID()},'writer-recovery',null);await audit(c,null,'match.recovery',m.id);
  }
- const assigned=(await c.query("select * from matches where lifecycle='assigned' and created_at<now()-interval '5 minutes' for update skip locked")).rows;
+ const assigned=(await c.query("select * from matches where lifecycle='assigned' and state->>'npcSleepAt' is null and created_at<now()-interval '5 minutes' for update skip locked")).rows;
  for(const m of assigned){
   const present=(await c.query('select p.seat from match_players p join room_memberships r on r.user_id=p.user_id and r.room_id=$2 and r.lease_until>now() where p.match_id=$1 and p.ready',[m.id,m.room_id])).rows;
   const winner=present.length===1?present[0].seat as 0|1:null;
   const state={...m.state,phase:'won',winner};await finishMatch(c,m,state,'no-show',winner);await persist(c,m,state,'no-show',null);
   await audit(c,null,'match.no-show',m.id,{winner,deadlineMinutes:5},winner===null?'Geen eenduidige aanwezige speler; hernieuwde bevestiging of beheerbesluit nodig':'Enige aanwezige speler had de wedstrijd bevestigd; administratieve walkover');
  }
- const turns=(await c.query("select m.* from matches m where lifecycle='playing' and state->'pendingDart'='null'::jsonb and not exists(select 1 from match_players p where p.match_id=m.id and disconnected_at is not null) and (state->'timeoutDecision' is null or state->'timeoutDecision'='null'::jsonb) and coalesce((state->>'turnDeadlineAt')::bigint,coalesce((state->>'turnStartedAt')::bigint,(state->>'phaseStartedAt')::bigint)+coalesce((competition->>'turnSeconds')::integer,30)*1000)<$1 for update skip locked",[Date.now()])).rows;
+ const turns=(await c.query("select m.* from matches m where lifecycle='playing' and state->>'npcSleepAt' is null and state->'pendingDart'='null'::jsonb and not exists(select 1 from match_players p where p.match_id=m.id and disconnected_at is not null) and (state->'timeoutDecision' is null or state->'timeoutDecision'='null'::jsonb) and coalesce((state->>'turnDeadlineAt')::bigint,coalesce((state->>'turnStartedAt')::bigint,(state->>'phaseStartedAt')::bigint)+coalesce((competition->>'turnSeconds')::integer,30)*1000)<$1 for update skip locked",[Date.now()])).rows;
  for(const m of turns){
+  if(m.state.npcOnly&&!await hasRoomAudience(c,m.room_id))continue;
   const now=Date.now(),intervalMs=(m.competition?.turnSeconds??30)*1000,timeout=observeTurnTimeout(m.state,now,intervalMs);if(!timeout)continue;
   await persist(c,m,{...m.state,...timeout,phaseToken:randomUUID(),phaseStartedAt:now},timeout.timeoutDecision?'turn-timeout-decision':'turn-timeout-warning',null);
   await audit(c,null,timeout.timeoutDecision?'match.turn-timeout-decision':'match.turn-timeout-warning',m.id,{player:m.state.turn,strike:timeout.timeoutStrikes[m.state.turn],intervalMs});

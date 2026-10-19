@@ -130,5 +130,7 @@
   "admin.copy_de_juiste_toegang_voor_het_team": "De juiste toegang voor het team.",
   "admin.copy_ken_ticketrollen_toe_zonder_spel_of_beheerrechten_te": "Ken ticketrollen toe zonder spel- of beheerrechten te verruimen.",
   "admin.copy_iedere_wijziging_inzichtelijk": "Iedere wijziging, inzichtelijk.",
-  "admin.copy_wie_deed_wat_wanneer_en_waarom_volg_je": "Wie deed wat, wanneer en waarom? Volg je beheerhandelingen terug."
+  "admin.copy_wie_deed_wat_wanneer_en_waarom_volg_je": "Wie deed wat, wanneer en waarom? Volg je beheerhandelingen terug.",
+  "admin.npc": "AI-clubspelers",
+  "admin.npc_description": "Vaste karakters, aanwezigheid en gesprekken."
 }

@@ -13,20 +13,24 @@ import {acquireMatch,renewMatch,matchAccess,matchAccessBatch,captureMatchIngress
 import {trustedLatency,sampleWindow} from '../../../packages/game-core/src/timing';
 import {IngressOrder} from '../../../packages/data/src/ingress-order';
 import {DomainError,requireThat,uuid,commandSchema} from '../../../packages/contracts/src/index';
+import {roomSubscription,removeRoomSubscription} from '../../../packages/data/src/npc-audience';
+import {npcMatchTick} from '../../../packages/data/src/matches';
 import {MatchWriterLease} from './match-writer-lease';
 
 const writerId=randomUUID();
 const eventLoop=monitorEventLoopDelay({resolution:20});eventLoop.enable();
 const inboxes=new Map<string,DartsPersonal>();
 class DartsPersonal extends Room {
- maxClients=20;userId='';
+ maxClients=20;userId='';subscriptions=new WeakMap<Client,string>();
  async onCreate(options:any){
+  this.onMessage('room.subscription',async(client:Client,input:any)=>{try{const roomId=input?.roomId===null?null:uuid.parse(input?.roomId),id=this.subscriptions.get(client);if(id)await roomSubscription(client.auth as Actor,id,roomId);}catch{}});
   this.userId=uuid.parse(options.userId);await this.setMetadata({userId:this.userId});inboxes.set(this.userId,this);
   this.onMessage('authenticate',async(client:Client,input:any)=>{try{const actor=await verifyToken(input?.token);requireThat(actor.id===this.userId,'identity_mismatch',403);client.auth=actor;}catch{client.leave(4001);}});
   this.clock.setInterval(async()=>{for(const client of this.clients){try{await assertSessionActive(client.auth as Actor);await actorById(this.userId,(client.auth as Actor).expiresAt);}catch{client.leave(4001);}}},10000);
  }
  async onAuth(_client:Client,options:any){const actor=await verifyToken(options?.token);requireThat(actor.id===this.userId,'forbidden',403);return actor;}
- onJoin(client:Client){client.send('chat.changed',{});}
+ onJoin(client:Client){this.subscriptions.set(client,randomUUID());client.send('chat.changed',{});}
+ async onLeave(client:Client){const id=this.subscriptions.get(client);if(id)await removeRoomSubscription(id);}
  onDispose(){if(inboxes.get(this.userId)===this)inboxes.delete(this.userId);}
 }
 class DartsMatch extends Room {
@@ -78,6 +82,8 @@ class DartsMatch extends Room {
   this.onMessage('authenticate',async(client:Client,input:any)=>{try{const actor=await verifyToken(input?.token);requireThat(actor.id===(client.auth as Actor).id,'identity_mismatch',403);client.auth=actor;}catch{client.leave(4001);}});
   // At most one publication; periodic reads never join the authoritative command queue.
   this.clock.setInterval(()=>{void this.publish();},100);
+  const hasNpc=!!(await db().query("select 1 from match_players mp join profiles p on p.id=mp.user_id where mp.match_id=$1 and p.actor_kind='npc'",[this.matchId])).rowCount;this.autoDispose=!hasNpc;
+  if(hasNpc)this.clock.setInterval(()=>{if(!this.writerLease?.isClosing)this.queue=this.queue.then(async()=>{await npcMatchTick(this.matchId,writerId,this.fence);const m=(await db().query('select lifecycle from matches where id=$1',[this.matchId])).rows[0];if(!['assigned','playing','paused'].includes(m?.lifecycle)&&!this.clients.length)void this.disconnect();}).catch(()=>{});},500);
   this.clock.setInterval(()=>{void this.writerLease?.renew();},10000);
   this.clock.setInterval(async()=>{for(const client of this.clients){try{const actor=client.auth as Actor;requireThat(actor.expiresAt>Date.now(),'session_expired',401);await assertSessionActive(actor);const fresh=await actorById(actor.id,actor.expiresAt);requireThat(fresh.sessionVersion===actor.sessionVersion,'session_revoked',401);await matchAccess(fresh,this.matchId);}catch{client.leave(4001);}}},10000);
  }
@@ -101,6 +107,7 @@ class DartsMatch extends Room {
  async onLeave(client:Client){if(!this.clients.some(c=>c!==client&&(c.auth as Actor)?.id===(client.auth as Actor).id))await connection(client.auth as Actor,this.matchId,false);}
  async onDispose(){await this.writerLease?.dispose();}
 }
+setInterval(()=>{void (async()=>{const matches=(await db().query("select distinct m.id from matches m join match_players mp on mp.match_id=m.id join profiles p on p.id=mp.user_id where p.actor_kind='npc' and m.lifecycle in('assigned','playing','paused') and (m.lease_until is null or m.lease_until<now()) limit 25")).rows;for(const match of matches){try{await matchMaker.createRoom('match',{matchId:match.id});}catch{}}})().catch(()=>{});},2000);
 const http=createServer();
 // Colyseus handles HTTP matchmaking before Express; configure its supported CORS hook.
 matchMaker.controller.getCorsHeaders=headers=>({'Access-Control-Allow-Origin':isTrustedOrigin(headers.get('origin'))?headers.get('origin')!:'',Vary:'Origin'});

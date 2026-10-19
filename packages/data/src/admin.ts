@@ -36,7 +36,7 @@ export async function moderationCapabilities(actor:Actor,input:unknown){const p=
 export async function moderateMessage(actor:Actor,input:unknown){
  const p=z.object({messageId:uuid,reason}).strict().parse(input);
  const result=await transaction(async c=>{
-  const message=(await c.query('select * from chat_messages where id=$1 for update',[p.messageId])).rows[0];requireThat(message?.kind==='human','message_not_found',404);
+  const message=(await c.query('select * from chat_messages where id=$1 for update',[p.messageId])).rows[0];requireThat(message&&['human','npc'].includes(message.kind),'message_not_found',404);
   const caps=await capabilitiesIn(c,actor,{targetId:message.sender_id,channelId:message.channel_id});requireThat(caps.canModerateMessage,'forbidden',403);
   if(!message.redacted_at){const cursor=Number((await c.query('update channels set cursor=cursor+1 where id=$1 returning cursor',[message.channel_id])).rows[0].cursor);await c.query('update chat_messages set redacted_at=now(),change_cursor=$2 where id=$1',[p.messageId,cursor]);message.change_cursor=cursor;await audit(c,actor.id,'chat.message.redact',message.sender_id,{messageId:p.messageId,channelId:message.channel_id,roomId:caps.roomId,seq:Number(message.seq),cursor},p.reason);}
   return message;

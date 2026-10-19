@@ -1,3 +1,5 @@
+import {hasRoomAudience} from './npc-audience';
+import {npcActor} from './npc-auth';
 import {assertLegalParticipation} from './legal';
 import {randomUUID,createHash} from 'node:crypto';
 import {meterPosition,admittedMoment,admittedSample,TIMING_VERSION,METER_SPEED_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../game-core/src/timing';
@@ -14,12 +16,12 @@ import {roomAccess,blocked,target,ensureChannelReadState,markRoomActivity} from 
 import {commandSchema,requireThat,uuid,DomainError} from '../../contracts/src/index';
 import {initialGameState,dartsGameReducer,type GameState} from '../../game-core/src/darts-game-state';
 import {normalizeGameRules,type GameRules} from '../../game-core/src/darts-match-rules';
-import {scoreDart} from '../../game-core/src/darts-rules';
+import {opponentTarget,scoreDart} from '../../game-core/src/darts-rules';
 import {calculateElo} from '../../game-core/src/darts-elo';
 
 export const FLIGHT_MS=560;
 export const RECONNECT_MS=120000;
-export type ServerGame=GameState & {ratingPolicyVersion?:2;phaseToken:string;phaseStartedAt:number;turnStartedAt:number;lockedX:number|null;lockedY?:number|null;lastAcceptedAt?:number;timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};
+export type ServerGame=GameState & {npcOnly?:boolean;npcSleepAt?:number;ratingPolicyVersion?:2;phaseToken:string;phaseStartedAt:number;turnStartedAt:number;lockedX:number|null;lockedY?:number|null;lastAcceptedAt?:number;timingVersion?:TimingVersion;meterSpeedVersion?:MeterSpeedVersion;impactAt:number|null;ready:[boolean,boolean];names:[string,string]};
 const rulesSchema=z.object({startScore:z.union([z.literal(301),z.literal(501),z.literal(701)]),bestOf:z.number().int().min(1).max(21).refine(n=>n%2===1),format:z.enum(['legs','sets']),bestOfSets:z.number().int().min(1).max(7).refine(n=>n%2===1),doubleIn:z.boolean().optional(),doubleOut:z.literal(true).optional()}).strict().transform(r=>normalizeGameRules({...r,doubleIn:r.startScore===301,doubleOut:true}));
 function initialServerGame(id:string,names:[string,string],rules:GameRules,starter:0|1=0):ServerGame{return {...initialGameState(starter,id,0,rules),phase:'horizontal',phaseToken:randomUUID(),phaseStartedAt:0,turnStartedAt:0,ratingPolicyVersion:2,timeoutStrikes:[0,0],timeoutWarning:null,timeoutDecision:null,turnDeadlineAt:null,lockedX:null,lockedY:null,lastAcceptedAt:0,timingVersion:TIMING_VERSION,meterSpeedVersion:METER_SPEED_VERSION,impactAt:null,ready:[false,false],names};}
 export function requireMeterSpeed(stored:MeterSpeedVersion|undefined,claimed:MeterSpeedVersion|undefined){const actual=stored??'standard-v1';requireThat(claimed===actual||actual==='standard-v1'&&claimed===undefined,'meter_speed_update_required',409,'De indicatorsnelheid is bijgewerkt. Ververs de pagina voordat je verder gooit.');}
@@ -30,13 +32,15 @@ async function playersAvailable(c:PoolClient,senderId:string,targetId:string){
  requireThat(!busy.includes(targetId),'target_already_playing',409,'Deze speler zit al in een wedstrijd');
 }
 export async function createMatch(c:PoolClient,a:Actor,b:string,roomId:string,rules:GameRules,mode:'casual'|'ranked'|'tournament'|'division',competition?:unknown,starterUserId?:string){
- await admission(c);await assertLegalParticipation([a.id,b],c);const room=await roomAccess(c,a,roomId,true);const opponent=await actorById(b,Date.now()+3600000);
+ await admission(c);await assertLegalParticipation([a.id,b],c);const room=await roomAccess(c,a,roomId,true);const opponent=await matchParticipant(b);
+ if(a.id!==b&&(await c.query("select 1 from profiles where id=any($1::uuid[]) and actor_kind='npc'",[[a.id,b]])).rowCount)requireThat(room.status==='open'&&room.category!=='tournament'&&!competition&&['casual','ranked'].includes(mode),'competition_only',403);
  await playersAvailable(c,a.id,b);
  await roomAccess(c,opponent,roomId);
  requireThat(!await blocked(c,a.id,b),'blocked',403);requireThat(a.id!==b,'self_target');
  if(!competition) requireThat(room.category!=='tournament','competition_only',403);
  for(const userId of [a.id,b])requireThat((await c.query('select 1 from room_memberships where user_id=$1 and room_id=$2 and lease_until>now()',[userId,roomId])).rowCount,'players_must_be_in_room',409);
  const id=randomUUID(),state=initialServerGame(id,[a.username!,opponent.username!],rules,starterUserId===b?1:0);
+ state.npcOnly=Number((await c.query("select count(*) n from profiles where id=any($1::uuid[]) and actor_kind='npc'",[[a.id,b]])).rows[0].n)===2;
  const created=(await c.query('insert into matches(id,room_id,mode,rules,state,competition,ranked) values($1,$2,$3,$4,$5,$6,$7) returning game_number',[id,roomId,mode,JSON.stringify(rules),JSON.stringify(state),competition?JSON.stringify(competition):null,mode==='ranked'||!!(competition as {ranked?:boolean})?.ranked])).rows[0];
  try {for(const userId of [a.id,b].sort())await c.query('insert into active_player_reservations(user_id,match_id) values($1,$2)',[userId,id]);}
  catch(e){if((e as {code:string}).code==='23505')throw new DomainError('player_already_reserved',409);throw e;}
@@ -48,17 +52,21 @@ export async function createMatch(c:PoolClient,a:Actor,b:string,roomId:string,ru
 export async function invite(actor:Actor,input:unknown,starterUserId?:string){
  const p=z.object({targetId:uuid,roomId:uuid,rules:rulesSchema,ranked:z.boolean()}).strict().parse(input);await assertLegalParticipation([actor.id]);
  await rateLimit('invite:'+actor.id,10,60);
- return transaction(async c=>{
+ return transaction(c=>inviteInTransaction(c,actor,p,starterUserId));
+}
+export async function inviteInTransaction(c:PoolClient,actor:Actor,p:{targetId:string;roomId:string;rules:GameRules;ranked:boolean},starterUserId?:string){
   await admission(c);await playersAvailable(c,actor.id,p.targetId);requireThat(!actor.renameRequired,'rename_required',403,'Kies eerst een nieuwe gebruikersnaam.');const room=await roomAccess(c,actor,p.roomId);requireThat(room.category!=='tournament','competition_only',403);await target(c,p.targetId);requireThat(p.targetId!==actor.id&&!await blocked(c,actor.id,p.targetId),'invalid_target',403);
   for(const userId of [actor.id,p.targetId])requireThat((await c.query('select 1 from room_memberships where room_id=$1 and user_id=$2 and lease_until>now()',[p.roomId,userId])).rowCount,'players_must_be_in_room',409);
   const rules=normalizeGameRules(p.rules);
   const r=await c.query("insert into game_invites(inviter_id,invitee_id,room_id,rules,ranked,expires_at,first_starter_id) values($1,$2,$3,$4,$5,now()+interval '60 seconds',$6) returning id",[actor.id,p.targetId,p.roomId,JSON.stringify(rules),p.ranked,starterUserId??null]);
   await outbox(c,'invite:'+r.rows[0].id,'game-invite',p.targetId,{name:actor.username,inviteId:r.rows[0].id});return r.rows[0];
- });
 }
 export async function respondInvite(actor:Actor,input:unknown){
  const {inviteId,action}=z.object({inviteId:uuid,action:z.enum(['accept','reject','cancel'])}).strict().parse(input);
- const result=await transaction(async c=>{
+ const result=await transaction(c=>respondInviteInTransaction(c,actor,{inviteId,action}));
+ if('error' in result)throw result.error;return result;
+}
+export async function respondInviteInTransaction(c:PoolClient,actor:Actor,{inviteId,action}:{inviteId:string;action:'accept'|'reject'|'cancel'}){
   // Admission precedes invite row locking, matching createMatch and cancellation lock order.
   if(action==='accept')await admission(c);
   const i=(await c.query('select * from game_invites where id=$1 for update',[inviteId])).rows[0];
@@ -70,11 +78,9 @@ export async function respondInvite(actor:Actor,input:unknown){
   requireThat(i.state==='pending'&&new Date(i.expires_at).getTime()>Date.now(),'invite_expired',409);
   let matchId:string|null=null;
   if(action==='accept'){
-   const inviter=await actorById(i.inviter_id,Date.now()+3600000);matchId=(await createMatch(c,inviter,actor.id,i.room_id,i.rules,i.ranked?'ranked':'casual',undefined,i.first_starter_id)).matchId;
+   const inviter=await matchParticipant(i.inviter_id);matchId=(await createMatch(c,inviter,actor.id,i.room_id,i.rules,i.ranked?'ranked':'casual',undefined,i.first_starter_id)).matchId;
   }
   await c.query('update game_invites set state=$2,match_id=$3 where id=$1',[inviteId,action==='accept'?'accepted':action==='reject'?'rejected':'cancelled',matchId]);return {matchId};
- });
- if('error' in result)throw result.error;return result;
 }
 export async function inviteStatus(actor:Actor,id:string){
  uuid.parse(id);
@@ -257,7 +263,7 @@ export async function matchCommand(actor:Actor,input:unknown,writerId:string,fen
 export async function settleImpacts(){
  return transaction(async c=>{
   const rows=(await c.query("select m.* from matches m where m.lifecycle='playing' and exists(select 1 from match_darts d where d.match_id=m.id and d.impacted_at is null and d.impact_at<=now()) order by m.id for update skip locked limit 32")).rows;
-  for(const m of rows){let state=m.state as ServerGame;const dart=(await c.query('select * from match_darts where match_id=$1 and impacted_at is null and impact_at<=now() order by dart_id for update limit 1',[m.id])).rows[0];
+  for(const m of rows){if(m.state.npcOnly&&!m.state.npcSleepAt&&!await hasRoomAudience(c,m.room_id)){await persist(c,m,{...m.state,npcSleepAt:Date.now()},'npc-sleep',null);continue;}if(m.state.npcSleepAt)continue;let state=m.state as ServerGame;const dart=(await c.query('select * from match_darts where match_id=$1 and impacted_at is null and impact_at<=now() order by dart_id for update limit 1',[m.id])).rows[0];
    requireThat(dart&&state.pendingDart?.id===Number(dart.dart_id),'impact_integrity',500);
    const oldTurn=state.turn,oldLegs=state.totalLegs[0]+state.totalLegs[1];
    state={...state,...dartsGameReducer(state,{type:'land',id:Number(dart.dart_id),at:new Date(dart.impact_at).getTime()}),phaseToken:randomUUID(),phaseStartedAt:Date.now(),lockedX:null,impactAt:null,ready:state.ready,names:state.names};
@@ -297,3 +303,40 @@ export async function expireDisconnects(){return transaction(async c=>{
    let state={...m.state,...dartsGameReducer(m.state,{type:'forfeit',player:expired[0].seat})};state=await finishMatch(c,m,state,'disconnect',state.winner);await persist(c,m,state,'disconnect',null);}
  }return rows.length;
 });}
+
+async function matchParticipant(id:string){const p=(await db().query("select actor_kind from profiles where id=$1",[id])).rows[0];return p?.actor_kind==='npc'?npcActor(id):actorById(id,Date.now()+3600000);}
+
+/** Called only by the current Colyseus writer, on its existing serialized queue.
+ * Synthetic actors never supply render samples or impersonate client commands. */
+export async function npcMatchTick(id:string,writerId:string,fence:number){return transaction(async c=>{
+ const m=(await c.query('select * from matches where id=$1 for update',[id])).rows[0];
+ requireThat(m&&m.writer_id===writerId&&Number(m.writer_fence)===fence&&new Date(m.lease_until).getTime()>Date.now(),'stale_writer',409);
+ if(!['assigned','playing','paused'].includes(m.lifecycle))return;
+ const players=(await c.query('select mp.*,p.actor_kind,d.persona from match_players mp join profiles p on p.id=mp.user_id left join private.npc_definitions d on d.user_id=p.id where mp.match_id=$1 order by seat',[id])).rows;
+ const npcs=players.filter(p=>p.actor_kind==='npc');if(!npcs.length)return;
+ let state=m.state as ServerGame&{npcSleepAt?:number; npcNextAt?:number};const now=Date.now();
+ const npcOnly=npcs.length===2;
+ if(npcOnly){
+ const awake=await hasRoomAudience(c,m.room_id);
+ if(!awake){if(!state.npcSleepAt)await persist(c,m,{...state,npcSleepAt:now} as ServerGame,'npc-sleep',null);return;}
+ if(state.npcSleepAt){const delay=now-state.npcSleepAt;state={...state,npcSleepAt:undefined,npcNextAt:now+1500,phaseStartedAt:state.phaseStartedAt+delay,turnStartedAt:state.turnStartedAt+delay,turnDeadlineAt:state.turnDeadlineAt?state.turnDeadlineAt+delay:null,impactAt:state.impactAt===null?null:state.impactAt+delay};await c.query("update match_darts set impact_at=impact_at+($2::text||' milliseconds')::interval where match_id=$1 and impacted_at is null",[id,delay]);await persist(c,m,state,'npc-wake',null);return;}
+ }
+ if(npcs.some(p=>!state.ready[p.seat])){
+ if(await draining()&&!m.started_at)return;
+ for(const p of npcs){state.ready[p.seat]=true;await c.query('update match_players set ready=true where match_id=$1 and seat=$2',[id,p.seat]);}
+ if(state.ready.every(Boolean)&&m.lifecycle!=='playing'){m.lifecycle='playing';await c.query("update matches set lifecycle='playing',started_at=coalesce(started_at,now()) where id=$1",[id]);state={...state,startedAt:state.startedAt||now,turnStartedAt:now,phaseStartedAt:now,phaseToken:randomUUID()};}
+ await persist(c,m,state,'npc-ready',null);return;
+ }
+ if(m.lifecycle!=='playing'||state.pendingDart||state.npcNextAt&&state.npcNextAt>now)return;
+ const player=players[state.turn];
+ if(state.timeoutDecision&&players.find(p=>p.seat!==state.timeoutDecision!.player)?.actor_kind==='npc'){
+ state={...state,...extendTimedOutTurn(state,now),phaseStartedAt:now,phaseToken:randomUUID(),npcNextAt:now+3000};await persist(c,m,state,'npc-timeout-wait',null);return;
+ }
+ if(player.actor_kind!=='npc'||state.phase!=='horizontal')return;
+ // Native score geometry -> launch -> ordinary worker impact -> settleLeg/finalizeLegRatings.
+ const target=opponentTarget(state.scores[state.turn],state.rules?.doubleIn&&!state.opened?.[state.turn]);
+ const spread=Math.max(.025,Math.min(.3,(90-Number(player.persona?.average??50))/240));
+ const hit=scoreDart(target.x+(Math.random()-.5)*spread,target.y+(Math.random()-.5)*spread),dartId=Number(m.state_version)+1;
+ state={...state,...dartsGameReducer({...state,phase:'vertical'},{type:'launch',dart:{id:dartId,hit,opponentName:state.names[1-state.turn]}}),...acceptedTurnStop(state,state.turn),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:hit.x,lockedY:hit.y,impactAt:now+FLIGHT_MS,npcNextAt:now+1800+Math.random()*1800};
+ await c.query('insert into match_darts(match_id,dart_id,player_id,hit,impact_at) values($1,$2,$3,$4,$5)',[id,dartId,player.user_id,JSON.stringify(hit),new Date(now+FLIGHT_MS)]);await persist(c,m,state,'npc-dart',player.user_id);
+ });}

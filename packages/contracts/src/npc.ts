@@ -1,0 +1,5 @@
+import {z} from 'zod';
+export const npcOutputSchema=z.object({decision:z.enum(['say','silent']),text:z.string().max(500).nullable(),replyToMessageId:z.string().uuid().nullable(),topic:z.string().max(60)}).strict().refine(x=>x.decision==='silent'?x.text===null:!!x.text?.trim());
+export const npcSettingsSchema=z.object({dayCap:z.number().int().min(0).max(25),nightCap:z.number().int().min(0).max(25),eveningCap:z.number().int().min(0).max(25),humanReduction:z.number().min(0).max(25),conversationSeconds:z.number().int().min(30).max(3600),inviteSeconds:z.number().int().min(300).max(86400),ranked:z.boolean(),dailyTokenLimit:z.number().int().min(0).max(1000000),monthlyTokenLimit:z.number().int().min(0).max(10000000),requestsPerMinute:z.number().int().min(1).max(30)}).strict();
+export type NpcPublicProfile={displayName:string;age:number;city:string;country:string;languages:string[];bio:string;bioEn:string;interests:string[]};
+export type OpenAiMetadata={version:number;configured:boolean;lastFour:string|null;model:string|null;testStatus:string;testedVersion:number|null;encryptionReady:boolean;updatedAt:string;models:string[]};

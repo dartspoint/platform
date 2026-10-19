@@ -18,6 +18,7 @@ import {useSupportIdentity} from "@/components/darts-support-links";
 import { AdminSeasons } from "./darts-seasons";
 import {AdminChatModeration} from './darts-chat-moderation';
 import { AdminLobbyContent } from "./darts-lobby-content";
+import {AdminNpc} from "./darts-npc";
 import { AdminReleases } from "./darts-releases";
 import { DartsTournaments } from "./darts-tournaments";
 import { AdminPlayers, AdminRooms, AdminModeration } from "./darts-operations";
@@ -41,6 +42,7 @@ const navigation = [
   { id: "game", label: "Spel & deelname", icon: SlidersHorizontal, group: "HET PLATFORM" },
   { id: "elo", label: "DP & competitie", icon: Target },
   { id: "lobby", label: "Lobby & widgets", icon: LayoutGrid },
+  { id: "npc", label: "AI-clubspelers", icon: Users },
   { id: "releases", label: "Releasebeheer", icon: LayoutGrid },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
   { id: "legal", label: "Juridisch en informatie", icon: ClipboardList },
@@ -52,6 +54,7 @@ const navigationStaticSource = navigation;
 type AdminTab = typeof navigation[number]["id"];
 type AuditEntry = AuditRecord;
 const titles: Record<AdminTab, { title: string; description: string }> = {
+  npc: { title: "AI-clubspelers", description: "Vaste karakters, aanwezigheid en gesprekken." },
   overview: { title: "Jouw club. Jouw regie.", description: "Van een volle kamer tot de laatste dubbel. Alles wat jouw community laat draaien." },
   tournaments: { title: "Een avond om voor te spelen.", description: "Organiseer toernooien, deel het veld in en begeleid iedere ronde tot de finale." },
   seasons: { title: "Een seizoen om te groeien.", description: "Beheer de divisiespelvorm: indeling, speelrondes, de ladder en promotie of degradatie." },
@@ -121,7 +124,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId, ini
   const navigating = useRef(false);
   const registerNavigationGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
   const supportIdentity=useSupportIdentity();
-  const visibleNavigation = navigation.filter(item => (item.id !== "lobby" || getPlatform().actor?.role === "owner") && (item.id !== "releases" || ["owner", "admin"].includes(getPlatform().actor?.role)) && (item.id!=="teamroles"||supportIdentity?.canManageTeam));
+  const visibleNavigation = navigation.filter(item => (item.id !== "npc" || getPlatform().actor?.role === "owner") && (item.id !== "lobby" || getPlatform().actor?.role === "owner") && (item.id !== "releases" || ["owner", "admin"].includes(getPlatform().actor?.role)) && (item.id!=="teamroles"||supportIdentity?.canManageTeam));
   const operations = useAdminOperations();
   const settings = useAdminSettings();
   const tournamentState = useTournaments();
@@ -176,7 +179,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId, ini
           <section className="adm-panel"><div className="adm-panel-heading"><h2>{dpT("admin.dit_verdient_aandacht")}</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? dpT("admin.melding_open",{openCases}) : dpT("admin.een_rustige_community")}</strong><p>{dpT("admin.bekijk_de_context_voordat_je_een_maatregel_neemt")}</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} {dpT("admin.toernooiconcepten")}</strong><p>{dpT("admin.controleer_spelregels_en_deelname_voordat_je_publiceert")}</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>{dpT("admin.dp_beleid_k_32")}</strong><p>{dpT("admin.10_wedstrijden_en_5_verschillende_tegenstanders_voor_plaatsing")}</p></div></button></div></section>
 
         </div></div>
-      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialWidgetType={lobbyWidgetType} initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "releases" ? <AdminReleases onConfigureWidget={getPlatform().actor?.role === "owner" ? () => { void navigate("lobby", undefined, "releases"); } : undefined} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
+      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialWidgetType={lobbyWidgetType} initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "releases" ? <AdminReleases onConfigureWidget={getPlatform().actor?.role === "owner" ? () => { void navigate("lobby", undefined, "releases"); } : undefined} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "npc" ? <AdminNpc onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
       <footer className="adm-page-footer"><span>{dpT("admin.dartspoint_platformbeheer")}</span><span>{dpT("admin.je_wijzigingen_vind_je_terug_in_het_logboek")}</span></footer>
       </main>
     </div>
@@ -185,6 +188,8 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId, ini
 }
 
 const dpStaticCopyKeys={
+  "AI-clubspelers":"admin.npc",
+  "Vaste karakters, aanwezigheid en gesprekken.":"admin.npc_description",
   "Overzicht": "admin.copy_overzicht",
   "DE CLUB": "admin.copy_de_club",
   "Toernooien": "admin.copy_toernooien",

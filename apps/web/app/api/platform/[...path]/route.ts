@@ -1,3 +1,5 @@
+import {npcAdmin,npcAdminAction} from '../../../../../../packages/data/src/npc-admin';
+import {openAiMetadata,openAiAction} from '../../../../../../packages/data/src/integration-secrets';
 import {errorText,requestLocale} from '../../../../../../packages/i18n/src/errors';
 import {flowOrigin,isTrustedOrigin} from '../../../../../../packages/i18n/src/domains';
 import {currentSupportActor} from '@/lib/server/support-auth';
@@ -37,6 +39,8 @@ export async function GET(request:Request,context:Context){try{
  const path=(await context.params).path;
  if(path[0]==='public')return response(await publicProjection());
  const actor=await currentActor(request,path[0]!=='profile');
+ if(path.join('/')==='admin/npc')return response(await npcAdmin(actor));
+ if(path.join('/')==='admin/integrations/openai')return response(await openAiMetadata(actor));
  if(path.join('/')==='admin/player-contact')return response(await profileContact(actor,Object.fromEntries(new URL(request.url).searchParams)));
  if(path.join('/')==='lobby/admin')return response(await lobbyAdmin(actor));
  if(path.join('/')==='releases/admin')return response(await releaseAdmin(actor));
@@ -68,7 +72,7 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
  if(path.join('/')==='media/upload'){const actor=await currentActor(request);staff(actor);requireThat(!actor.renameRequired,'rename_required',403);requireThat(request.headers.get('content-type')?.startsWith('multipart/form-data'),'multipart_required',415);return response(await uploadMedia(actor,await boundedMediaForm(request)));}
  requireThat(request.headers.get('content-type')?.startsWith('application/json'),'json_required',415);
  const bodyLimit=path[0]==='lobby'?1048576:path[0]==='releases'?65536:16384;
- const raw=['lobby','releases'].includes(path[0])?await boundedLobbyJson(request,bodyLimit):await request.text();requireThat(raw.length<=bodyLimit,'request_too_large',413);const input=JSON.parse(raw);
+ const raw=['lobby','releases','admin'].includes(path[0])?await boundedLobbyJson(request,bodyLimit):await request.text();requireThat(raw.length<=bodyLimit,'request_too_large',413);const input=JSON.parse(raw);
  if(path[0]==='auth'){
   if(['request','verify'].includes(path[1])){const key=createHash('sha256').update(request.headers.get('x-forwarded-for')?.split(',')[0]??'local').digest('hex');await rateLimit('auth:'+key,20,300);}
   const auth=await serverAuth();
@@ -91,6 +95,8 @@ export async function POST(request:Request,context:Context){const receivedAt=Dat
   if(path[1]==='logout'){try{await revokeSession(await currentActorForLogout(request));}catch(e){if(!(e instanceof DomainError&&e.status===401))throw e;}await auth.auth.signOut({scope:'local'});return response({ok:true});}
  }
  const actor=await currentActor(request,path[0]!=='onboard');
+ if(path.join('/')==='admin/npc')return response(await npcAdminAction(actor,input));
+ if(path.slice(0,3).join('/')==='admin/integrations/openai'&&path.length===4)return response(await openAiAction(actor,path[3],input));
  if(path.join('/')==='releases/submit')return response(await releaseSubmit(actor,input));
  if(path.join('/')==='releases/admin')return response(await releaseAdminAction(actor,input));
  if(actor.renameRequired)requireThat(['profile/rename','heartbeat','preferences','chat/preference','timing/ping','timing/echo'].includes(path.join('/')),'rename_required',403,'Kies eerst een nieuwe gebruikersnaam.');

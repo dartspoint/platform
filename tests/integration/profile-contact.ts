@@ -94,7 +94,7 @@ try{
  await control.query('delete from user_roles where user_id=any($1::uuid[]) or granted_by=any($1::uuid[])',[ids]);await control.query('delete from vip_entitlements where user_id=any($1::uuid[])',[ids]);
  await control.query('delete from preferences where user_id=any($1::uuid[])',[ids]);await control.query('delete from player_ratings where user_id=any($1::uuid[])',[ids]);
  await control.query('delete from profiles where id=any($1::uuid[])',[ids]);
- for(const id of ids){const deleted=await auth.auth.admin.deleteUser(id);assert.equal(deleted.error,null);}
+ for(const id of ids){await control.query("update profiles set status='deleted' where id=$1",[id]);const deleted=await auth.auth.admin.deleteUser(id);assert.equal(deleted.error,null);}
  assert.equal((await control.query('select count(*)::int count from profiles where id=any($1::uuid[])',[ids])).rows[0].count,0);checks.ownedFixturesRemoved=true;
  await control.end();await db().end();await(await redis()).quit();
 }

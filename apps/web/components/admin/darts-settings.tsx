@@ -1,4 +1,5 @@
 "use client";
+import {OpenAiSettings} from './darts-openai-settings';
 import {browserLocale} from '../../../../packages/i18n/src/errors';
 import {formatLocales} from '../../../../packages/i18n/src/locale';
 
@@ -12,11 +13,11 @@ import { ELO_K, ELO_START, PLACEMENT_MATCHES, PLACEMENT_OPPONENTS, expectedRatin
 import { DEFAULT_ADMIN_SETTINGS, updateAdminSettings, useAdminSettings, type AdminGameDefaults, type AdminEntryDefaults, type AdminPlatformDefaults, type AdminEloDraft } from "@/lib/darts-admin-settings";
 import "./darts-settings.css";
 
-function Section({ icon: Icon, title, description, children }: { icon: typeof Target; title: string; description?: string; children: ReactNode }) {
+export function Section({ icon: Icon, title, description, children }: { icon: typeof Target; title: string; description?: string; children: ReactNode }) {
   return <section className="das-card"><header className="das-section-heading"><span><Icon size={20}/></span><div><h3>{title}</h3>{description && <p>{description}</p>}</div></header>{children}</section>;
 }
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) { return <label className="das-field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>; }
-function Toggle({ label, hint, checked, onChange, icon: Icon = Check }: { label: string; hint: string; checked: boolean; onChange: (value: boolean) => void; icon?: typeof Check }) { return <div className="das-toggle"><div><Icon size={19}/><span><strong>{label}</strong><small>{hint}</small></span></div><Switch aria-label={label} checked={checked} onCheckedChange={onChange}/></div>; }
+export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) { return <label className="das-field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>; }
+export function Toggle({ label, hint, checked, onChange, icon: Icon = Check }: { label: string; hint: string; checked: boolean; onChange: (value: boolean) => void; icon?: typeof Check }) { return <div className="das-toggle"><div><Icon size={19}/><span><strong>{label}</strong><small>{hint}</small></span></div><Switch aria-label={label} checked={checked} onCheckedChange={onChange}/></div>; }
 function SaveBar({ dirty, status, error, onReset }: { dirty: boolean; status: string; error: string; onReset: () => void }) {
  const dpT = useI18n("settings").t;
 
@@ -49,7 +50,7 @@ export function AdminGameSettings() {
   </form>;
 }
 
-export function AdminPlatformSettings() {
+export function AdminPlatformSettings({onRegisterNavigationGuard}:{onRegisterNavigationGuard?:(guard:(()=>Promise<boolean>)|null)=>void}={}) {
  const dpFeedback=useI18n("feedback").t;
 
  const dpT = useI18n("settings").t;
@@ -58,13 +59,13 @@ export function AdminPlatformSettings() {
   useEffect(() => { setDraft(settings.platform); }, [settings.platform]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings.platform);
   const patch = (value: Partial<AdminPlatformDefaults>) => { setDraft(previous => ({ ...previous, ...value })); setError(""); setStatus(""); };
-  return <form className="das-page" onSubmit={async event => { event.preventDefault(); try { await updateAdminSettings({ platform: draft }); setStatus(dpFeedback("feedback.je_platformvoorkeuren_zijn_opgeslagen")); setError(""); } catch (cause) { setError(cause instanceof Error ? cause.message : dpFeedback("feedback.controleer_de_ingevulde_waarden")); } }}>
+  return <><OpenAiSettings onRegisterNavigationGuard={onRegisterNavigationGuard}/><form className="das-page" onSubmit={async event => { event.preventDefault(); try { await updateAdminSettings({ platform: draft }); setStatus(dpFeedback("feedback.je_platformvoorkeuren_zijn_opgeslagen")); setError(""); } catch (cause) { setError(cause instanceof Error ? cause.message : dpFeedback("feedback.controleer_de_ingevulde_waarden")); } }}>
     <div className="das-two-column"><div className="das-stack"><Section icon={SlidersHorizontal} title={dpT("settings.identiteit_contact")}><div className="das-fields single"><Field label={dpT("settings.platformnaam")}><input value={draft.name} maxLength={40} required onChange={e => patch({ name: e.target.value })}/></Field><Field label={dpT("settings.slogan")}><input value={draft.tagline} maxLength={100} onChange={e => patch({ tagline: e.target.value })}/></Field><Field label={dpT("settings.support_e_mailadres")} hint={dpT("settings.optioneel_contactadres")}><input value={draft.supportEmail} type="email" maxLength={120} placeholder={dpT("settings.support_jouwdomein_nl")} onChange={e => patch({ supportEmail: e.target.value })}/></Field></div></Section>
     <Section icon={MessageSquare} title={dpT("settings.chat_toegang")}><Toggle icon={Users} label={dpT("settings.nieuwe_registraties_open")} hint={dpT("settings.nieuwe_accounts_toestaan_bestaande_spelers_kunnen_blijven_inloggen")} checked={draft.registrationOpen} onChange={registrationOpen => patch({ registrationOpen })}/><div className="das-fields"><Field label={dpT("settings.chatvertraging")} hint={dpT("settings.0_geen_vertraging_tijd_tussen_nieuwe_chatberichten")}><select value={draft.chatSlowMode} onChange={e => patch({ chatSlowMode: Number(e.target.value) })}><option value={0}>{dpT("settings.uit")}</option><option value={3}>{dpT("settings.3_seconden")}</option><option value={5}>{dpT("settings.5_seconden")}</option><option value={10}>{dpT("settings.10_seconden")}</option><option value={30}>{dpT("settings.30_seconden")}</option><option value={60}>{dpT("settings.60_seconden")}</option></select></Field><Field label={dpT("settings.nieuwe_privegesprekken")} hint={dpT("settings.platformstandaard_voor_nieuwe_accounts")}><select value={draft.privateMessages} onChange={e => patch({ privateMessages: e.target.value as AdminPlatformDefaults["privateMessages"] })}><option value="everyone">{dpT("settings.iedereen")}</option><option value="friends">{dpT("settings.alleen_vrienden")}</option><option value="nobody">{dpT("settings.niemand")}</option></select></Field></div></Section></div>
     <div className="das-stack"><Section icon={Megaphone} title={dpT("settings.aankondiging")}><Toggle icon={BellRing} label={dpT("settings.aankondiging_tonen")} hint={dpT("settings.zichtbaar_bovenaan_de_lobby")} checked={draft.announcementActive} onChange={announcementActive => patch({ announcementActive })}/><Field label={dpT("settings.aankondiging")} hint={dpT("settings.240_tekens",{length:draft.announcement.length})}><textarea value={draft.announcement} maxLength={240} rows={3} required={draft.announcementActive} onChange={e => patch({ announcement: e.target.value })}/></Field><div className={`das-banner-preview ${draft.announcementActive ? "active" : ""}`}><Megaphone size={20}/><div><small>{dpT("settings.voorbeeld")} {draft.announcementActive ? dpT("settings.zichtbaar_na_opslaan") : dpT("settings.verborgen")}</small><p>{draft.announcement || dpT("settings.jouw_bericht_verschijnt_hier")}</p></div></div></Section>
     <Section icon={Gauge} title={dpT("settings.onderhoud")}><Toggle icon={LockKeyhole} label={dpT("settings.onderhoudsbericht_tonen")} hint={dpT("settings.stopt_nieuwe_wedstrijden_en_inschrijvingen_beheer_houdt_toegang")} checked={draft.maintenance} onChange={maintenance => patch({ maintenance })}/><Field label={dpT("settings.bericht_voor_spelers")}><textarea value={draft.maintenanceMessage} maxLength={300} rows={3} required={draft.maintenance} onChange={e => patch({ maintenanceMessage: e.target.value })}/></Field>{draft.maintenance && <p className="das-warning"><Info size={16}/>{dpT("settings.nieuwe_wedstrijden_worden_gepauzeerd_lopende_wedstrijden_kunnen_doorgaan")}</p>}</Section></div></div>
     <SaveBar dirty={dirty} status={status} error={error} onReset={() => { setDraft(settings.platform); setError(""); setStatus(""); }}/>
-  </form>;
+  </form></>;
 }
 
 function number(value: number) { return value.toLocaleString(formatLocales[browserLocale()], { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }

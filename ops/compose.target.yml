@@ -88,6 +88,23 @@ services:
       timeout: 8s
       retries: 6
       start_period: 20s
+  npc:
+    <<: *runtime
+    image: ${WORKER_IMAGE:?WORKER_IMAGE required}
+    env_file:
+      - path: ${RELEASE_DIR}/npc.env
+        format: raw
+    command: [node, /app/retained-log.mjs, npc, node, scripts/npc-worker.mjs]
+    logging: {driver: none}
+    volumes: [technical-logs:/var/log/dartspoint]
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, scripts/npc-health.mjs]
+      interval: 30s
+      timeout: 8s
+      retries: 6
+      start_period: 20s
   clamav:
     image: ${CLAMAV_IMAGE:?Pin CLAMAV_IMAGE by digest}
     restart: unless-stopped

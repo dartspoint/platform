@@ -1,0 +1,24 @@
+{
+  "prototype_source_sha": "887c4cfb807980415e74710c07e51bb9383c9d31",
+  "repository_audit_sha": "d2d95b7e2954eb99dc911cd61e70150f6360e89d",
+  "prototype_checks": {
+    "director": 8,
+    "text_uniqueness": 20,
+    "conversation": 19,
+    "total": 93,
+    "result": "passed",
+    "grounding": 30,
+    "greeting_combinations": 750,
+    "audience_sleep": 16,
+    "sleep_setting_combinations": 70
+  },
+  "typescript": "passed",
+  "sites_build": "passed",
+  "visual_browser_qa": "unavailable",
+  "native_repository_tests": "not run: read-only audit",
+  "live_openai_calls": 0,
+  "deployment": "succeeded",
+  "deployed_url": "https://dartspoint-afterhours-studio.dgwebserv.chatgpt.site",
+  "revision": "1.2",
+  "deployment_version_id": "appgprj_6acbb313941881919fd999ecfb044b73~appgver_e5fc48ac95d081919a384aac7a4aa976"
+}

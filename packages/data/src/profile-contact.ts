@@ -31,6 +31,7 @@ async function contactAccess(actor:Actor,userId:string){
 export async function profileContact(actor:Actor,input:unknown):Promise<ProfileContact>{
  const {userId}=contactInput.parse(input);
  await contactAccess(actor,userId);
+ if((await transaction(async c=>(await c.query("select actor_kind from profiles where id=$1",[userId])).rows[0]?.actor_kind))==='npc')return {id:userId,email:null};
  let contact:ProfileContact;
  try{
   const {data,error}=await authAdmin().auth.admin.getUserById(userId);
