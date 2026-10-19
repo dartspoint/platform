@@ -26,6 +26,7 @@ def fixture(env='staging'):
     host='staging.dartspoint.nl' if env=='staging' else 'dartspoint.nl'
     values={'NEXT_PUBLIC_APP_URL':'https://'+host,'NEXT_PUBLIC_REALTIME_URL':'https://realtime.'+host,'NEXT_PUBLIC_SUPABASE_URL':'https://'+'a'*20+'.supabase.co','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY':'sb_publishable_example','NEXT_PUBLIC_TURNSTILE_SITE_KEY':'site-key',
             'SUPABASE_SECRET_KEY':'sb_secret_example','RESEND_API_KEY':'example-private-mail','INTERNAL_DEPLOY_TOKEN':'x'*43,'RESTIC_PASSWORD':'example-strong-password','AWS_ACCESS_KEY_ID':'example-access','AWS_SECRET_ACCESS_KEY':'example-secret','MAIL_FROM':'DartsPoint <mail@example.test>','MAIL_REPLY_TO':'support@example.test','RESTIC_REPOSITORY':'s3:https://fsn1.your-objectstorage.com/dartspoint-'+env+'-backups','AWS_DEFAULT_REGION':'fsn1','DATABASE_CA_CERT_BASE64':'','LANDING_ORIGIN':'','TURNSTILE_SECRET_KEY':'test-private-captcha','RESEND_WEBHOOK_SECRET':'whsec_'+'a'*44,'SUPPORT_INBOUND_ADDRESS':'support@ontvangen.dartspoint.nl','SUPPORT_RESEND_DOMAIN_ID':'00000000-0000-4000-8000-000000000001','GOOGLE_AUTH_ENABLED':'false'}
+    values.update({name:'' for name in config.AI_SECRETS});values['AI_INTEGRATION_MASTER_KEY_ID']=''
     values['DATABASE_URL']='postgresql://postgres:example-password@db.'+'a'*20+'.supabase.co/postgres?sslmode=verify-full'
     manifest={'version':1,'environment':env,'sha':'a'*40,'run':'100','attempt':'1','repository':'dartspoint/platform','workflow':'.github/workflows/deploy.yml','platform':'linux/amd64','public':{k:values[k] for k in config.PUBLIC},'pins':pins,'images':{s:'ghcr.io/dartspoint/platform-'+env+'-'+s+'@sha256:'+'b'*64 for s in config.SERVICES},'builtAt':'2026-10-12T00:00:00+00:00'}
     return manifest,values,pins
@@ -290,8 +291,25 @@ class DeploymentContractChecks(unittest.TestCase):
         for name,value in (('AWS_DEFAULT_REGION','hel1'),('RESTIC_REPOSITORY','s3:http://fsn1.your-objectstorage.com/bucket'),('RESTIC_REPOSITORY','s3:https://secret:secret@fsn1.your-objectstorage.com/bucket'),('RESTIC_REPOSITORY','s3:https://127.0.0.1/bucket'),('RESTIC_REPOSITORY','s3:https://fsn1.your-objectstorage.com/bucket?password=secret')):
             bad={**v,name:value}
             with self.assertRaises(ValueError):config.validate_values('staging',bad)
-        for name in set(config.SECRETS)-set(config.OPTIONAL_SECRETS):
+        for name in set(config.SECRETS)-set(config.OPTIONAL_SECRETS)-set(config.AI_SECRETS):
             with self.assertRaises(ValueError):config.validate_values('staging',{**v,name:''})
+
+    def test_ai_configuration_optional_in_both_environments_and_scoped(self):
+        import base64
+        for env in ('staging','production'):
+            manifest,values,_=fixture(env)
+            config.validate_values(env,values)
+            configured={**values,'AI_INTEGRATION_MASTER_KEY_B64':base64.b64encode(bytes(range(32))).decode(),'AI_INTEGRATION_MASTER_KEY_ID':'v1'}
+            config.validate_values(env,configured)
+            for invalid in ('bad',base64.b64encode(bytes(31)).decode(),configured['AI_INTEGRATION_MASTER_KEY_B64']+'='):
+                with self.assertRaisesRegex(ValueError,'AI encryption'):config.validate_values(env,{**configured,'AI_INTEGRATION_MASTER_KEY_B64':invalid})
+            with tempfile.TemporaryDirectory() as folder:
+                (Path(folder)/'releases').mkdir();release=prepare.prepare(manifest,configured,Path(folder))
+                for service in ('web','npc'):
+                    self.assertEqual(config.read_env(release/(service+'.env'))['AI_INTEGRATION_MASTER_KEY_B64'],configured['AI_INTEGRATION_MASTER_KEY_B64'])
+                    self.assertEqual((release/(service+'.env')).stat().st_mode&0o777,0o600)
+                for service in ('realtime','worker','migration','backup'):
+                    self.assertNotIn('AI_INTEGRATION_MASTER_KEY_B64',config.read_env(release/(service+'.env')))
 
     def test_support_optional_secrets_keep_classification_and_fail_closed_in_production(self):
         _,staging,_=fixture();_,production,_=fixture('production')
@@ -378,7 +396,7 @@ class DeploymentContractChecks(unittest.TestCase):
                     self.assertEqual(modern['services'][name]['command'][:3],['node','/app/retained-log.mjs',name])
                     self.assertEqual(modern['services'][name]['logging'],{'driver':'none'})
                     self.assertEqual(modern['services'][name]['volumes'][0]['target'],'/var/log/dartspoint')
-                old_metadata=json.loads((release/'release.json').read_text());old_metadata.pop('retainedLogs');old_metadata.pop('supportRuntime');(release/'release.json').write_text(json.dumps(old_metadata))
+                old_metadata=json.loads((release/'release.json').read_text());old_metadata.pop('retainedLogs');old_metadata.pop('supportRuntime');old_metadata.pop('npcRuntime');(release/'release.json').write_text(json.dumps(old_metadata))
                 # Old deploy.env predates the scanner pin, as on the first rollout.
                 deploy_values=config.read_env(release/'deploy.env');deploy_values.pop('CLAMAV_IMAGE');(release/'deploy.env').unlink();config.write_env(release/'deploy.env',deploy_values)
                 legacy=json.loads(deployment.compose(release,'config','--format','json'))

@@ -198,3 +198,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/workspace-den
 normal_observer_reached=true
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/match-room-expansion.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/room-activity.ts
+
+# Native NPC checks run after the existing serial timing and community gates.
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/npc.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/npc.ts

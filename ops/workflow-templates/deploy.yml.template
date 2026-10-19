@@ -52,6 +52,9 @@ jobs:
           SUPPORT_INBOUND_ADDRESS: ${{ vars.SUPPORT_INBOUND_ADDRESS }}
           SUPPORT_RESEND_DOMAIN_ID: ${{ vars.SUPPORT_RESEND_DOMAIN_ID }}
           GOOGLE_AUTH_ENABLED: ${{ vars.GOOGLE_AUTH_ENABLED }}
+          AI_INTEGRATION_MASTER_KEY_B64: ${{ secrets.AI_INTEGRATION_MASTER_KEY_B64 }}
+          AI_INTEGRATION_MASTER_KEY_ID: ${{ vars.AI_INTEGRATION_MASTER_KEY_ID }}
+          AI_INTEGRATION_PREVIOUS_KEYS_JSON: ${{ secrets.AI_INTEGRATION_PREVIOUS_KEYS_JSON }}
         run: python3 ops/scripts/check-delivery-config.py
   publish:
     name: Publish images
@@ -148,6 +151,9 @@ jobs:
           SUPPORT_INBOUND_ADDRESS: ${{ vars.SUPPORT_INBOUND_ADDRESS }}
           SUPPORT_RESEND_DOMAIN_ID: ${{ vars.SUPPORT_RESEND_DOMAIN_ID }}
           GOOGLE_AUTH_ENABLED: ${{ vars.GOOGLE_AUTH_ENABLED }}
+          AI_INTEGRATION_MASTER_KEY_B64: ${{ secrets.AI_INTEGRATION_MASTER_KEY_B64 }}
+          AI_INTEGRATION_MASTER_KEY_ID: ${{ vars.AI_INTEGRATION_MASTER_KEY_ID }}
+          AI_INTEGRATION_PREVIOUS_KEYS_JSON: ${{ secrets.AI_INTEGRATION_PREVIOUS_KEYS_JSON }}
         run: /usr/bin/python3 -I /usr/local/libexec/dartspoint/delivery-entry.py
       - name: Remove downloaded public manifest
         if: always()

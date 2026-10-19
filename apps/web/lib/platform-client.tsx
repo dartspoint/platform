@@ -43,6 +43,8 @@ export function PlatformProvider({initial,children,accessFailure="login"}:{initi
    const {data}=await browserAuth().auth.getSession();if(disposed||!data.session)return;
    const next=await new Client(process.env.NEXT_PUBLIC_REALTIME_URL!).joinOrCreate('personal',{userId:initial.actor.id,token:data.session.access_token});
    if(disposed){void next.leave();return;}room=next;window.dispatchEvent(new Event('dartspoint:chat-reconnected'));
+   const subscribe=()=>next.send('room.subscription',{roomId:document.querySelector<HTMLElement>('[data-native-room-subscription]')?.dataset.nativeRoomSubscription??null});
+   subscribe();const subscriptionTimer=setInterval(subscribe,15000);next.onLeave(()=>clearInterval(subscriptionTimer));
    next.onMessage('chat.changed',(event:any)=>{lastChatActivity=Date.now();window.dispatchEvent(new CustomEvent('dartspoint:chat-changed',{detail:event}));schedulePlatformRefresh();});
    next.onLeave(()=>{if(!disposed)retry=setTimeout(connect,2000);});
    clearInterval(renew);renew=setInterval(()=>{void browserAuth().auth.getSession().then(({data})=>{if(data.session)next.send('authenticate',{token:data.session.access_token});});},60000);

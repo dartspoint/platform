@@ -74,7 +74,7 @@ export function PlayerActionMenu({ name:providedName, userId, roomId, channelId,
         {onProfile && <DropdownMenuItem onSelect={() => runExternal(onProfile)}><UserRound/>{dpT("playerMenu.profiel_bekijken")}</DropdownMenuItem>}
         {!self && <>
           {onInvite && <DropdownMenuItem disabled={!targetId||blocked||!!inviteReason} onSelect={() => runExternal(onInvite)}><Target/>{inviteReason||dpT("playerMenu.uitnodigen_voor_een_wedstrijd")}</DropdownMenuItem>}
-          {onMessage && <DropdownMenuItem disabled={!targetId||blocked} onSelect={() => runExternal(onMessage)}><MessageCircle/>{dpT("playerMenu.privebericht")}</DropdownMenuItem>}
+          {onMessage && <DropdownMenuItem disabled={!targetId||blocked||platform.players.find(p=>p.id===targetId)?.actorKind==='npc'} onSelect={() => runExternal(onMessage)}><MessageCircle/>{platform.players.find(p=>p.id===targetId)?.actorKind==='npc'?dpT("playerMenu.private_unavailable"):dpT("playerMenu.privebericht")}</DropdownMenuItem>}
           {onSpectate && <DropdownMenuItem onSelect={() => runExternal(onSpectate)}><Eye/>{dpT("playerMenu.toeschouwen")}</DropdownMenuItem>}
           <DropdownMenuSeparator/>
           {status === "friends" ? <DropdownMenuItem onSelect={async () => apply(await removeFriend(targetId!), dpFeedback("feedback.value1_is_uit_je_vriendenlijst_verwijderd",{value1:name}))}><UserMinus/>{dpT("playerMenu.vriendschap_verwijderen")}</DropdownMenuItem> : status === "incoming" ? <>

@@ -283,5 +283,10 @@
   "errors.unknown": "Dit is niet gelukt. Probeer het nog eens.",
   "errors.timeout_decision_missing": "Deze timeoutkeuze is niet meer beschikbaar.",
   "errors.timeout_opponent_only": "Alleen de wachtende tegenstander kan deze keuze maken.",
-  "errors.timeout_decision_pending": "Je tegenstander kiest of de wedstrijd doorgaat."
+  "errors.timeout_decision_pending": "Je tegenstander kiest of de wedstrijd doorgaat.",
+  "errors.ai_not_configured": "Stel eerst OpenAI in en test de verbinding.",
+  "errors.ai_encryption_configuration": "De serverencryptie is niet ingesteld.",
+  "errors.ai_credentials": "Controleer de API-sleutel en modeltoegang.",
+  "errors.ai_provider": "OpenAI is tijdelijk niet bereikbaar.",
+  "errors.ai_limit": "De providerlimiet is bereikt."
 }

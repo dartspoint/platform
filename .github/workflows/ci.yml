@@ -81,6 +81,8 @@ jobs:
           os.umask(0o077)
           destination = Path('artifacts/ci-safe')
           reports = {
+              'artifacts/npc-native-result.json': 'npc-native.json',
+              'artifacts/npc-browser/result.json': 'npc-browser.json',
               'artifacts/i18n/integration-result.json': 'internationalisation-database.json',
               'artifacts/i18n/e2e-result.json': 'internationalisation-browser.json',
               'artifacts/i18n/room-ui-result.json': 'internationalisation-room-metadata.json',

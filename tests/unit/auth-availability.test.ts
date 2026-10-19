@@ -13,7 +13,7 @@ test('Authentication rejects without an actor when any mandatory verification is
  const pool=db(),pair=await generateKeyPair('ES256'),otherPair=await generateKeyPair('ES256'),jwk={...await exportJWK(pair.publicKey),kid:'unit-key',alg:'ES256',use:'sig'};
  const symmetricKey=new TextEncoder().encode('unit-only-signing-material-at-least-thirty-two-bytes');
  let calls:string[]=[],lookups=0,providerMode:number|'timeout'|'invalid-json'=200,jwksMode:'timeout'|'server'|'invalid'|'ok'='ok',databaseFailure:unknown;
- const active={id:userId,username:'UnitPlayer',role:'player',status:'active',onboarded_at:new Date(),session_version:1,globally_suspended:false,session_revoked:false,rename_required:false};
+ const active={id:userId,actor_kind:'human',auth_user_id:userId,username:'UnitPlayer',role:'player',status:'active',onboarded_at:new Date(),session_version:1,globally_suspended:false,session_revoked:false,rename_required:false};
  let profile={...active},providerUserId=userId,confirmed=true;
  const fetchMock=mock.method(globalThis,'fetch',async(input:Parameters<typeof fetch>[0])=>{
   const url=new URL(input instanceof Request?input.url:String(input));assert.equal(url.origin,project,'Mock must intercept every provider request');calls.push(url.pathname);

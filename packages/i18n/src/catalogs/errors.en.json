@@ -283,5 +283,10 @@
   "errors.unknown": "That did not work. Please try again.",
   "errors.timeout_decision_missing": "This timeout decision is no longer available.",
   "errors.timeout_opponent_only": "Only the waiting opponent can make this decision.",
-  "errors.timeout_decision_pending": "Your opponent is deciding whether the match continues."
+  "errors.timeout_decision_pending": "Your opponent is deciding whether the match continues.",
+  "errors.ai_not_configured": "Configure OpenAI and test the connection first.",
+  "errors.ai_encryption_configuration": "Server encryption is not configured.",
+  "errors.ai_credentials": "Check the API key and model access.",
+  "errors.ai_provider": "OpenAI is temporarily unavailable.",
+  "errors.ai_limit": "The provider limit has been reached."
 }

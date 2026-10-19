@@ -30,7 +30,7 @@ def run(args, release):
     return result.stdout
 
 def runtime_services(release):
-    return ('web','realtime','worker') + (('support',) if meta(release).get('supportRuntime') is True else ())
+    return ('web','realtime','worker') + (('support',) if meta(release).get('supportRuntime') is True else ()) + (('npc',) if meta(release).get('npcRuntime') is True else ())
 
 def compose(release, *args):
     # Older release env files predate CLAMAV_IMAGE; the installed reviewed pin is authoritative.

@@ -31,3 +31,8 @@
 # OTP SMTP and Auth CAPTCHA remain in Supabase; support Turnstile also needs the web-only secret above.
 # Production requires both private support secrets and configured support receiving/sending identifiers.
 # Owner UUID/email/confirmation: temporary private operator config, never automatic deployment.
+
+# Optional in BOTH environments until AI is configured. Web and npc service only.
+# SECRET AI_INTEGRATION_MASTER_KEY_B64: canonical base64 of 32 random bytes
+# VARIABLE AI_INTEGRATION_MASTER_KEY_ID: active encryption key version label
+# SECRET AI_INTEGRATION_PREVIOUS_KEYS_JSON: prior key IDs to base64 keys during rotation

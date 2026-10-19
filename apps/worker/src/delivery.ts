@@ -1,3 +1,4 @@
+import {publishChatChange} from '../../../packages/data/src/community';
 import {deliverRetentionWarning} from '../../../packages/data/src/retention-accounts';
 import {db,transaction} from '../../../packages/data/src/db';
 import {authAdmin} from '../../../packages/data/src/auth';
@@ -8,6 +9,8 @@ import {deliverSupportOutbox} from '../../../packages/data/src/support-mail';
 import {deliverPrivacyOutbox} from '../../../packages/data/src/privacy-mail';
 const local=process.env.APP_ENV==='development'&&process.env.MAIL_PROVIDER==='local';
 async function send(event:any){
+ if(event.kind==='npc-chat-published'){const p=event.payload;await publishChatChange(p.channelId,p.messageId,p.seq,'npc',false,p.cursor);return;}
+ if(event.user_id&&(await db().query("select 1 from profiles where id=$1 and actor_kind='npc'",[event.user_id])).rowCount)return;
  if(await deliverSupportOutbox(event)||await deliverPrivacyOutbox(event)||await deliverRetentionWarning(event))return;
  if(event.kind==='match-result'){await transaction(c=>competitionResult(c,event));return;}
  if(event.kind==='game-invite'){await deliverGameInviteNotification(event);return;}

@@ -45,21 +45,31 @@ export async function roomAccess(c:PoolClient,actor:Actor,roomId:string,join=fal
  const room=(await c.query('select * from community_rooms where id=$1'+(join?' for update':''),[roomId])).rows[0];
  requireThat(room && (!join||room.status!=='closed'),'room_unavailable',403);
  requireThat(room.status!=='private' || ['admin','owner'].includes(actor.role) || (await c.query('select 1 from room_access where room_id=$1 and user_id=$2',[roomId,actor.id])).rowCount,'room_private',403);
- requireThat(!(await c.query("select 1 from sanctions where target_id=$1 and room_id=$2 and kind in('remove','suspend') and revoked_at is null and starts_at<=now() and ends_at>now()",[actor.id,roomId])).rowCount,'room_removed',403);
+ requireThat(!(await c.query("select 1 from sanctions where target_id=$1 and (room_id=$2 and kind in('remove','suspend') or room_id is null and kind='suspend') and revoked_at is null and starts_at<=now() and ends_at>now()",[actor.id,roomId])).rowCount,'room_removed',403);
  const rating=Number((await c.query('select rating from player_ratings where user_id=$1',[actor.id])).rows[0]?.rating??1500);
  requireThat(rating>=room.min_rating && rating<=room.max_rating,'room_rating_restricted',403);
  return room;
 }
 export async function joinRoom(actor:Actor,input:unknown){
  const {roomId}=z.object({roomId:uuid}).strict().parse(input);
- const result=await transaction(async c=>{
+ const result=await transaction(c=>joinRoomInTransaction(c,actor,{roomId}));
+ if(result.event)await publishChatChange(result.channelId!,result.event.id,Number(result.event.seq),'room.member_joined');
+ return {roomId:result.roomId,visitId:result.visitId};
+}
+export async function joinRoomInTransaction(c:PoolClient,actor:Actor,{roomId}:{roomId:string}){
   await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['presence:'+actor.id]);
   const room=await roomAccess(c,actor,roomId,true);
+  if((await c.query("select 1 from profiles where id=$1 and actor_kind='npc'",[actor.id])).rowCount)requireThat(room.status==='open'&&room.category!=='tournament','competition_only',403);
   const current=(await c.query('select room_id,lease_until,visit_id,lease_until>now() valid from room_memberships where user_id=$1',[actor.id])).rows[0];
   requireThat(!(await c.query("select 1 from active_player_reservations r join matches m on m.id=r.match_id where r.user_id=$1 and m.room_id<>$2",[actor.id,roomId])).rowCount,'active_match_in_other_room',409);
   const transition=current?.room_id!==roomId||!current?.valid;
   if(transition){
-   const count=Number((await c.query('select count(*) n from room_memberships where room_id=$1 and lease_until>now()',[roomId])).rows[0].n);requireThat(count<room.capacity,'room_full',409);
+   let count=Number((await c.query('select count(*) n from room_memberships where room_id=$1 and lease_until>now()',[roomId])).rows[0].n);
+   if(count>=room.capacity&&(await c.query("select 1 from profiles where id=$1 and actor_kind='human'",[actor.id])).rowCount){
+    const idleNpc=(await c.query("select member.user_id from room_memberships member join private.npc_definitions d on d.user_id=member.user_id where member.room_id=$1 and member.lease_until>now() and not exists(select 1 from active_player_reservations where user_id=member.user_id) order by member.joined_at limit 1 for update of member skip locked",[roomId])).rows[0];
+    if(idleNpc){await c.query('update room_memberships set lease_until=clock_timestamp() where user_id=$1',[idleNpc.user_id]);count--;}
+   }
+   requireThat(count<room.capacity,'room_full',409);
    const budget=(await c.query("select count(*)::int n,extract(epoch from min(created_at)+interval '60 seconds'-now()) retry from private.room_visits where user_id=$1 and created_at>now()-interval '60 seconds'",[actor.id])).rows[0];
    if(budget.n>=10)throw new DomainError('room_join_rate',429,'Je wisselt erg vaak van kamer. Probeer het zo opnieuw.',Math.max(1,Math.ceil(Number(budget.retry))));
   }
@@ -77,9 +87,6 @@ export async function joinRoom(actor:Actor,input:unknown){
    }
   }
   return {roomId,visitId,channelId:channel?.id,event};
- });
- if(result.event)await publishChatChange(result.channelId!,result.event.id,Number(result.event.seq),'room.member_joined');
- return {roomId:result.roomId,visitId:result.visitId};
 }
 export async function heartbeat(actor:Actor,input:unknown={}){const {active=false}=z.object({active:z.boolean().optional()}).strict().parse(input);return transaction(async c=>{
  if(active)await c.query("update profiles set last_active_at=now(),inactivity_warned_at=null where id=$1 and status='active' and last_active_at<now()-interval '5 minutes'",[actor.id]);
@@ -130,7 +137,7 @@ export async function social(actor:Actor,input:unknown){
 export async function privateChannel(actor:Actor,input:unknown){
  const {targetId}=z.object({targetId:uuid}).strict().parse(input);requireThat(targetId!==actor.id,'self_target');
  return transaction(async c=>{
-  await target(c,targetId);requireThat(!await blocked(c,actor.id,targetId),'blocked',403);
+  await target(c,targetId);requireThat(!(await c.query("select 1 from profiles where id=$1 and actor_kind='npc'",[targetId])).rowCount,'private_messages_closed',403);requireThat(!await blocked(c,actor.id,targetId),'blocked',403);
   const [lo,hi]=[actor.id,targetId].sort();await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['pair:'+lo+':'+hi]);
   let ch=(await c.query("select * from channels where kind='private' and user_low=$1 and user_high=$2",[lo,hi])).rows[0];
   if(!ch){
@@ -186,7 +193,7 @@ async function chatSendSnapshot(c:PoolClient,actor:Actor,channelId:string,client
   (select row_to_json(existing) from(select id,channel_id,body from chat_messages where sender_id=$1 and client_message_id=$3) existing) existing,
   coalesce((select jsonb_agg(rule order by rule.category,rule.term,rule.id) from private.content_filter_rules rule),'[]'::jsonb) rules,
   coalesce((select data->'platform' from private.system_settings where key='settings'),'{}'::jsonb) settings,
-  coalesce((select jsonb_agg(recent order by recent.created_at desc) from(select channel_id,body,normalized_body,created_at,extract(epoch from now()-created_at) age from chat_messages where sender_id=$1 and kind='human' and created_at>now()-interval '60 seconds') recent),'[]'::jsonb) recent`,[actor.id,channelId,clientMessageId])).rows[0];
+  coalesce((select jsonb_agg(recent order by recent.created_at desc) from(select channel_id,body,normalized_body,created_at,extract(epoch from now()-created_at) age from chat_messages where sender_id=$1 and kind in('human','npc') and created_at>now()-interval '60 seconds') recent),'[]'::jsonb) recent`,[actor.id,channelId,clientMessageId])).rows[0];
 }
 function requireChatSendAccess(actor:Actor,ch:any){
  requireThat(ch,'channel_not_found',404);
@@ -220,7 +227,10 @@ export async function resolveChannel(actor:Actor,input:unknown){const {kind,targ
 export async function sendMessage(actor:Actor,input:unknown){
  const {channelId,clientMessageId,body}=z.object({channelId:uuid,clientMessageId:uuid,body:z.string().trim().min(1).max(2000)}).strict().parse(input);
  await rateLimit('chat-endpoint:'+actor.id,120,60);
- const result=await transaction(async c=>{
+ const result=await transaction(c=>sendMessageInTransaction(c,actor,{channelId,clientMessageId,body},'human'));
+ await publishChatChange(channelId,result.id,Number(result.seq),'human',result.redacted,Number(result.cursor));return result;
+}
+export async function sendMessageInTransaction(c:PoolClient,actor:Actor,{channelId,clientMessageId,body}:{channelId:string;clientMessageId:string;body:string},kind:'human'|'npc'){
   // Acquire the lock in a separate statement. Reads in the next statement must
   // see earlier senders' commits even when this transaction waited for the lock.
   await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['chat-send:'+actor.id]);
@@ -246,11 +256,9 @@ export async function sendMessage(actor:Actor,input:unknown){
   const saved=(await c.query(`with read_state as (insert into channel_memberships(channel_id,user_id,last_read_cursor) select id,$2,cursor from channels where id=$1 on conflict(channel_id,user_id) do update set left_at=null returning channel_id),
    activity as (update room_memberships set last_activity_at=greatest(last_activity_at,clock_timestamp()),lease_until=greatest(last_activity_at,clock_timestamp())+interval '5 minutes' where user_id=$2 and lease_until>clock_timestamp() returning user_id),
    next_cursor as (update channels set cursor=cursor+1 where id=$1 and exists(select 1 from read_state) returning cursor),
-   inserted as (insert into chat_messages(channel_id,sender_id,client_message_id,seq,body,normalized_body) select $1,$2,$3,cursor,$4,$5 from next_cursor returning *)
-   select id from inserted`,[channelId,actor.id,clientMessageId,body,normalized])).rows[0];
+   inserted as (insert into chat_messages(channel_id,sender_id,client_message_id,seq,body,normalized_body,kind) select $1,$2,$3,cursor,$4,$5,$6 from next_cursor returning *)
+   select id from inserted`,[channelId,actor.id,clientMessageId,body,normalized,kind])).rows[0];
   return (await c.query(chatMessageSelect+' where m.id=$1',[saved.id])).rows[0];
- });
- await publishChatChange(channelId,result.id,Number(result.seq),'human',result.redacted,Number(result.cursor));return result;
 }
 export async function publishChatChange(channelId:string,messageId:string,seq:number,kind:string,redacted=false,cursor=seq){
  // Commit first. Notifications carry IDs only; persistence never depends on delivery.

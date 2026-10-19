@@ -43,5 +43,6 @@
   "playerMenu.actieve_kamermaatregelen": "Actieve kamermaatregelen",
   "playerMenu.kamermute": "Kamermute",
   "playerMenu.verwijderd": "Verwijderd",
-  "playerMenu.opheffen": "Opheffen"
+  "playerMenu.opheffen": "Opheffen",
+  "playerMenu.private_unavailable": "Deze speler ontvangt geen privéberichten."
 }

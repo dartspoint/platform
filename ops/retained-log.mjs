@@ -8,10 +8,10 @@ import {join} from 'node:path';
 import {Writable} from 'node:stream';
 import {StringDecoder} from 'node:string_decoder';
 const directory=process.env.DARTSPOINT_LOG_DIR??'/var/log/dartspoint';
-const services=new Set(['web','realtime','worker','support']),maximumBytes=2*1024*1024,maximumLine=16384;
+const services=new Set(['web','realtime','worker','support','npc']),maximumBytes=2*1024*1024,maximumLine=16384;
 const uid=process.getuid();
 async function privateDirectory(){await fs.mkdir(directory,{mode:0o700}).catch(error=>{if(error.code!=='EEXIST')throw error;});const info=await fs.lstat(directory);if(!info.isDirectory()||info.isSymbolicLink()||info.uid!==uid||(info.mode&0o077))throw new Error('private_log_directory_required');}
-async function prune(){await privateDirectory();const cutoff=Date.now()-28*86400000;let removed=0;for(const name of await fs.readdir(directory)){const match=/^(web|realtime|worker|support)-(\d{4}-\d{2}-\d{2})\.log$/.exec(name);if(!match)continue;const date=Date.parse(match[2]+'T00:00:00Z');if(!Number.isFinite(date)||new Date(date).toISOString().slice(0,10)!==match[2]||date>=cutoff)continue;const path=join(directory,name),info=await fs.lstat(path);if(info.isFile()&&!info.isSymbolicLink()&&info.uid===uid&&info.nlink===1&&!(info.mode&0o077)){await fs.unlink(path);removed++;}}return removed;}
+async function prune(){await privateDirectory();const cutoff=Date.now()-28*86400000;let removed=0;for(const name of await fs.readdir(directory)){const match=/^(web|realtime|worker|support|npc)-(\d{4}-\d{2}-\d{2})\.log$/.exec(name);if(!match)continue;const date=Date.parse(match[2]+'T00:00:00Z');if(!Number.isFinite(date)||new Date(date).toISOString().slice(0,10)!==match[2]||date>=cutoff)continue;const path=join(directory,name),info=await fs.lstat(path);if(info.isFile()&&!info.isSymbolicLink()&&info.uid===uid&&info.nlink===1&&!(info.mode&0o077)){await fs.unlink(path);removed++;}}return removed;}
 async function run(){
  await privateDirectory();const removed=await prune();
  if(process.argv[2]==='--prune'){process.stdout.write(JSON.stringify({removedLogPartitions:removed,pruneAfterDays:28,maximumRetentionDays:30})+'\n');return;}

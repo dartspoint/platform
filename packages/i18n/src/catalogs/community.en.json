@@ -169,5 +169,6 @@
   "community.copy_sociaal": "Social",
   "community.copy_competitief": "Competitive",
   "community.copy_ontspannen": "Relaxed",
-  "community.copy_toernooi": "Tournament"
+  "community.copy_toernooi": "Tournament",
+  "community.npc_disclosure": "AI club player · fictional DartsPoint character"
 }

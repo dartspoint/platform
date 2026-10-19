@@ -15,7 +15,7 @@ async function loadActor(id:string,expiresAt:number,complete:boolean,scope:'acce
  const q=await db().query(`select p.*, coalesce((select role from user_roles r where r.user_id=p.id and r.revoked_at is null order by case role when 'owner' then 0 else 1 end limit 1), case when exists(select 1 from vip_entitlements v where v.user_id=p.id and v.status='active' and v.starts_at<=now() and (v.ends_at is null or v.ends_at>now())) then 'vip' else 'player' end) role,
  exists(select 1 from sanctions where target_id=p.id and room_id is null and kind='suspend' and starts_at<=now() and ends_at>now() and revoked_at is null) globally_suspended,
  exists(select 1 from private.revoked_sessions where session_id=$2::uuid) session_revoked from profiles p where p.id=$1`,[id,sessionId??null]);
- const p=q.rows[0]; requireThat(p,'unauthenticated',401);
+ const p=q.rows[0]; requireThat(p&&p.actor_kind==='human'&&p.auth_user_id===p.id,'unauthenticated',401);
  if(scope==='support')requireThat(['active','suspended'].includes(p.status),'account_closed',403,'Dit account is afgesloten. Gebruik de openbare supportroute.');
  if(scope==='access')requireThat(p.status==='active','banned',403,'Je account heeft op dit moment geen toegang.');
  if(scope==='access')requireThat(!p.globally_suspended,'banned',403);
