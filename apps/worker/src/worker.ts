@@ -2,6 +2,7 @@ import {db,redis,transaction} from '../../../packages/data/src/db';
 import {authAdmin} from '../../../packages/data/src/auth';
 import {maintainMatches,scheduleReminders} from '../../../packages/data/src/lifecycle';
 import {settlePractice} from '../../../packages/data/src/practice';
+import {ImpactPolling,hasImpactActivity,hasPendingImpacts} from '../../../packages/data/src/impact-polling';
 import {settleImpacts,expireDisconnects} from '../../../packages/data/src/matches';
 import {expireRoomMemberships} from '../../../packages/data/src/community';
 import {renderDartsEmail,type DartsEmailInput} from '../../../packages/emails/src/templates';
@@ -20,9 +21,10 @@ process.on('SIGTERM',()=>{stopping=true;});
 await readiness(false);
 console.log(JSON.stringify({event:'worker_started',release}));
 let lastHeartbeat=0;
+const impacts=new ImpactPolling({hasActivity:hasImpactActivity,hasPending:hasPendingImpacts});
 while(!stopping){
  try{
-  await settleImpacts();await settlePractice();
+  if(await impacts.shouldPoll()){await settleImpacts();await settlePractice();}
   if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await expireRoomMemberships();await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
  }catch{console.error(JSON.stringify({event:'worker_tick_failed'}));}
  await new Promise(resolve=>setTimeout(resolve,50));

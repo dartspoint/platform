@@ -6,6 +6,7 @@ import {renderDartsEmail,type DartsEmailInput} from '../../../packages/emails/sr
 import {deliverGameInviteNotification} from '../../../packages/data/src/notifications';
 import {deliverSupportOutbox} from '../../../packages/data/src/support-mail';
 import {deliverPrivacyOutbox} from '../../../packages/data/src/privacy-mail';
+import {dueOutboxSql} from '../../../packages/data/src/support-work';
 const local=process.env.APP_ENV==='development'&&process.env.MAIL_PROVIDER==='local';
 async function send(event:any){
  if(await deliverSupportOutbox(event)||await deliverPrivacyOutbox(event)||await deliverRetentionWarning(event))return;
@@ -40,6 +41,6 @@ async function send(event:any){
  await db().query("insert into private.email_deliveries(event_id,provider_id,state) values($1,$2,'accepted') on conflict(event_id) do update set provider_id=$2,state='accepted',updated_at=now()",[event.id,providerId]);
 }
 export async function deliverOutbox(){
- const events=await transaction(async c=>(await c.query("update private.outbox_events set locked_until=now()+interval '60 seconds',attempts=attempts+1 where id in(select id from private.outbox_events where delivered_at is null and next_try<=now() and (locked_until is null or locked_until<now()) order by next_try for update skip locked limit 16) returning *")).rows);
+ const events=await transaction(async c=>(await c.query(`update private.outbox_events set locked_until=now()+interval '60 seconds',attempts=attempts+1 where id in(select id from private.outbox_events where ${dueOutboxSql} order by next_try for update skip locked limit 16) returning *`)).rows);
  for(const e of events){try{await send(e);await db().query('update private.outbox_events set delivered_at=now(),locked_until=null,last_error=null where id=$1',[e.id]);}catch{await db().query("update private.outbox_events set locked_until=null,next_try=now()+($2::integer*interval '1 second'),last_error='delivery_failed' where id=$1",[e.id,Math.min(3600,2**Math.min(e.attempts,11))]);}}
 }

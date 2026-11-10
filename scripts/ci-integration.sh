@@ -132,6 +132,8 @@ web_pid=$!
 web_start=$(process_identity "$web_pid" || true)
 node --env-file=.env.local scripts/wait-local.mjs
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/test-legal-setup.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/impact-polling.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/support-worker.ts
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts create >artifacts/public-launch-probe-create.json
 RELEASE_SHA=0000000000000000000000000000000000000001 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/verify-launch-storage.ts check >artifacts/public-launch-probe-check.json
 cmp artifacts/public-launch-probe-create.json artifacts/public-launch-probe-check.json

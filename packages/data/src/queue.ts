@@ -5,6 +5,7 @@ import {actorById,type Actor} from './auth';
 import {uuid,requireThat} from '../../contracts/src/index';
 import {roomAccess,blocked} from './community';
 import {admission,invite} from './matches';
+import {expiredInvitesSql,queueAdvanceFromSql,queueAdvanceWhereSql} from './support-work';
 export async function queue(actor:Actor,input:unknown){const {matchId}=z.object({matchId:uuid}).strict().parse(input);return transaction(async c=>{
  const m=(await c.query('select * from matches where id=$1 for update',[matchId])).rows[0];requireThat(m,'match_not_found',404);requireThat(!m.competition,'competition_queue_forbidden',403);await roomAccess(c,actor,m.room_id);
  requireThat((await c.query('select 1 from room_memberships where user_id=$1 and room_id=$2 and lease_until>now()',[actor.id,m.room_id])).rowCount,'join_room_first',403);
@@ -38,8 +39,8 @@ export async function advanceQueue(actor:Actor,input:unknown){const {matchId}=z.
  await admission(c);const m=(await c.query('select m.*,r.winner_id from matches m join match_results r on r.match_id=m.id where m.id=$1 for update of m',[matchId])).rows[0];requireThat(m&&m.winner_id===actor.id&&!m.competition,'winner_only',403);return handover(c,actor,m);
 });}
 export async function advanceQueues(){if(await draining())return;return transaction(async c=>{
- await admission(c);await c.query("update game_invites set state='expired' where state='pending' and expires_at<=now()");
- const matches=(await c.query("select m.*,r.winner_id from matches m join match_results r on r.match_id=m.id where m.competition is null and r.winner_id is not null and (exists(select 1 from match_queues q where q.match_id=m.id) or exists(select 1 from private.queue_advances a where a.match_id=m.id and not a.finished)) order by m.id for update of m skip locked limit 16")).rows;
+ await admission(c);await c.query(`update game_invites set state='expired' where ${expiredInvitesSql}`);
+ const matches=(await c.query(`select m.*,r.winner_id from ${queueAdvanceFromSql} where ${queueAdvanceWhereSql} order by m.id for update of m skip locked limit 16`)).rows;
  for(const m of matches){let actor:Actor;try{actor=await actorById(m.winner_id,Date.now()+3600000);}catch{continue;}await handover(c,actor,m);}
 });}
 export async function rematch(actor:Actor,input:unknown){const {matchId}=z.object({matchId:uuid}).strict().parse(input);const info=await transaction(async c=>{const m=(await c.query('select * from matches where id=$1',[matchId])).rows[0];requireThat(m&&m.lifecycle==='completed'&&!m.competition,'rematch_unavailable',409);const players=(await c.query('select user_id,seat from match_players where match_id=$1',[matchId])).rows;requireThat(players.some(p=>p.user_id===actor.id),'players_only',403);return {starterUserId:players.find(p=>p.seat!==m.state.starter).user_id,targetId:players.find(p=>p.user_id!==actor.id).user_id,roomId:m.room_id,rules:m.rules,ranked:m.mode==='ranked'};});const {starterUserId,...invitationInput}=info;return invite(actor,invitationInput,starterUserId);}

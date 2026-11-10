@@ -3,6 +3,7 @@ import {transaction,audit,outbox,draining,redis} from './db';
 import {finishMatch,persist,type ServerGame} from './matches';
 import {dartsGameReducer} from '../../game-core/src/darts-game-state';
 import {observeTurnTimeout} from '../../game-core/src/turn-timeout';
+import {dueTournamentRemindersSql,dueDivisionRemindersFromSql,dueDivisionRemindersSql} from './support-work';
 export async function maintainMatches(){return transaction(async c=>{
  // A lost writer cannot make elapsed infrastructure downtime into a player loss.
  const recovery=(await c.query("select * from matches where lifecycle='playing' and writer_id is not null and lease_until<now() and not exists(select 1 from match_darts d where d.match_id=matches.id and impacted_at is null) for update skip locked")).rows;
@@ -26,9 +27,9 @@ export async function maintainMatches(){return transaction(async c=>{
  }
 });}
 export async function scheduleReminders(){return transaction(async c=>{
- const tournaments=(await c.query("select * from tournaments where published and status in('registration','checkin') and nullif(model->'settings'->>'startsAt','')::timestamptz between now() and now()+interval '30 minutes'")).rows;
+ const tournaments=(await c.query(`select t.id,t.name,t.model from tournaments t where ${dueTournamentRemindersSql}`)).rows;
  for(const t of tournaments)for(const p of t.model.participants.filter((p:any)=>['confirmed','checkedin'].includes(p.status)))await outbox(c,'tournament-reminder:'+t.id+':'+p.id,'tournament-reminder',p.id,{tournamentId:t.id,eventName:t.name,startsAt:t.model.settings.startsAt,timeZone:"Europe/Amsterdam",checkInFromSchedule:true,startsAtLabel:new Date(t.model.settings.startsAt).toLocaleString("nl-NL",{timeZone:"Europe/Amsterdam"}),checkInLabel:"Controleer je incheckvenster op de toernooipagina",roomName:t.model.settings.room,actionUrl:process.env.NEXT_PUBLIC_APP_URL+"/toernooi/"+t.id});
- const fixtures=(await c.query("select f.*,s.name,s.model season from division_fixtures f join seasons s on s.id=f.season_id where s.status='live' and f.model->>'status'='scheduled' and (f.model->>'dueOn')::date between current_date and current_date+1")).rows;
+ const fixtures=(await c.query(`select f.id,f.player_low,f.player_high,f.model,s.model season from ${dueDivisionRemindersFromSql} where ${dueDivisionRemindersSql}`)).rows;
  for(const f of fixtures)for(const id of [f.player_low,f.player_high])await outbox(c,'division-reminder:'+f.id+':'+id,'match-reminder',id,{opponent:f.season.members.find((p:any)=>p.id!==id&&[f.player_low,f.player_high].includes(p.id))?.name,gameMode:'501',dueOn:f.model.dueOn,startsAtLabel:f.model.dueOn,actionUrl:process.env.NEXT_PUBLIC_APP_URL+'/divisies'});
 });}
 

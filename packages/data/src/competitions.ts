@@ -11,6 +11,7 @@ import {admission,createMatch,finishMatch} from './matches';
 import {DEFAULT_TOURNAMENT_SETTINGS,validateTournamentSettings,eligibilityReasons,registrationIsOpen,checkInIsOpen,eligibleParticipants,buildTournamentBracket,applyTournamentResult,type Tournament,type TournamentInput,type TournamentParticipant} from '../../game-core/src/darts-tournament-model';
 import {planTournamentBoards,assignTournamentBoardPure,startTournamentMatchPure} from '../../game-core/src/darts-tournament-planning';
 import {DEFAULT_ADMIN_SETTINGS} from './settings-model';
+import {liveCompetitionsSql} from './support-work';
 import {buildDivisionSchedule,applyDivisionResult,validateDivisionSeason,finishDivisionSeason,getDivisionMovements,addDivisionDays,type DivisionSeason,type DivisionSeasonInput,type DivisionColor} from '../../game-core/src/darts-divisions-model';
 
 const date=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -135,7 +136,7 @@ async function scheduleTournament(c:PoolClient,t:Tournament,only?:string){
  return t;
 }
 export async function scheduleCompetitions(){if(await draining())return;return transaction(async c=>{
- await admission(c);const tournaments=(await c.query("select model from tournaments where status='live' order by id for update skip locked")).rows;
+ await admission(c);const tournaments=(await c.query(`select model from tournaments where ${liveCompetitionsSql} order by id for update skip locked`)).rows;
  for(const row of tournaments){const t=await scheduleTournament(c,row.model);if(JSON.stringify(t)!==JSON.stringify(row.model))await saveTournament(c,null,t,'scheduled');}
 });}
 export async function divisionAction(actor:Actor,input:unknown){

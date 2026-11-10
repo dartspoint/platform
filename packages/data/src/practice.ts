@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {db,transaction,rateLimit} from './db';
 import {currentRoomMembership,markRoomActivity} from './community';
 import {registerIngress,type TrustedIngress} from './timing';
+import {wakeImpactWorker} from './impact-polling';
 import {admittedMoment,admittedSample,TIMING_VERSION,METER_SPEED_VERSION,type TimingVersion,type MeterSpeedVersion} from '../../game-core/src/timing';
 import type {Actor} from './auth';
 import {requireThat,uuid,DomainError,renderSampleSchema} from '../../contracts/src/index';
@@ -52,6 +53,7 @@ export async function practiceCommand(actor:Actor,input:unknown,ingress:TrustedI
   if(cmd.type==='vertical'){
    requireThat(s.phase==='vertical','wrong_phase',409);s.lockedY=meterPosition(admittedAt,s.phaseStartedAt,'vertical',s.meterSpeedVersion);const hit=scoreDart(s.lockedX!,s.lockedY);s.dart={id:s.count+1,hit};s.phase='flying';s.impactAt=now+560;s.message='Daar gaat je pijl…';const config=s.configuration,p=await progress(c,actor.id),challenge=practiceChallenge();
    s.target=config.tutorial?(s.count===2?'BULL':s.count===3?'D20':null):config.mode==='bull'?'BULL':config.mode==='doubles'?`D${config.chosenDouble}`:config.mode==='challenge'?challenge.targets.find(t=>!p.weeks[challenge.id]?.includes(t))??null:null;
+   await wakeImpactWorker();
   }
   if(cmd.type==='next'){requireThat(s.phase==='pause','wrong_phase',409);if(s.visit.length===3||s.attemptEnded){s.visit=[];s.remaining=s.configuration.finish;s.attemptEnded=false;}s.phase='horizontal';s.lockedX=null;s.lockedY=null;s.message='Nieuwe pijl. Vind je richting.';}
   s.phaseToken=randomUUID();s.phaseStartedAt=now;await c.query('update practice_sessions set state=$2,state_version=state_version+1 where id=$1',[row.id,JSON.stringify(s)]);row.state=s;row.state_version=Number(row.state_version)+1;

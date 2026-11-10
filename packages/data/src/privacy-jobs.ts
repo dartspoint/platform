@@ -4,6 +4,7 @@ import {authAdmin} from './auth';
 import {requireThat} from '../../contracts/src/index';
 import {applyDatabaseErasure} from './privacy-erasure';
 import {supportEvent} from './support';
+import {duePrivacyJobsSql} from './support-work';
 type Progress={stage?:'database_erased'|'provider_erased';result?:Record<string,unknown>};
 const approvedSql=`select * from private.privacy_requests r where r.id=$1 and r.confirmed_at is not null and r.decision_at is not null and (r.decision_by is not null or r.verification_method='retention_policy' and exists(select 1 from private.retention_account_actions a where a.request_id=r.id and a.user_id=r.user_id and a.state='confirmed'))`;
 function retainedExplanation(result:unknown,locale:'nl'|'en'='nl'){const exceptions=(result as {retainedExceptions?:{category:string;purpose:string;legalBasis:string;expiresAt:string}[]})?.retainedExceptions??[];if(locale==='en')return exceptions.length?'\n\nTemporarily retained data:\n'+exceptions.map(e=>`${e.category}: ${e.purpose}. Legal basis: ${e.legalBasis}. No later than ${new Date(e.expiresAt).toLocaleDateString('en-GB',{timeZone:'Europe/Amsterdam'})}.`).join('\n'):'\n\nNo separate retention exceptions have been recorded.';return exceptions.length?'\n\nTijdelijk bewaarde gegevens:\n'+exceptions.map(e=>`${e.category}: ${e.purpose}. Grondslag: ${e.legalBasis}. Uiterlijk tot ${new Date(e.expiresAt).toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam'})}.`).join('\n'):'\n\nEr zijn geen afzonderlijke bewaarexcepties vastgelegd.';}
@@ -64,7 +65,7 @@ async function completionReport(r:any){
 }
 /** Separate worker lane: durable stages recover without repeating partial erasure. */
 export async function processPrivacyJobs(){
- const job=await transaction(async c=>(await c.query("update private.privacy_jobs set state='running',attempts=attempts+1,locked_until=now()+interval '10 minutes',updated_at=now() where id=(select id from private.privacy_jobs where state in('pending','retry','waiting_ledger','running') and next_try<=now() and (locked_until is null or locked_until<now()) order by next_try for update skip locked limit 1) returning *")).rows[0]);if(!job)return;
+ const job=await transaction(async c=>(await c.query(`update private.privacy_jobs set state='running',attempts=attempts+1,locked_until=now()+interval '10 minutes',updated_at=now() where id=(select id from private.privacy_jobs where ${duePrivacyJobsSql} order by next_try for update skip locked limit 1) returning *`)).rows[0]);if(!job)return;
  try{
   const r=(await db().query(approvedSql,[job.request_id])).rows[0];requireThat(r,'approved_request_required',409);
   if(job.kind==='export'){await finish(job,await createExport(r));return;}

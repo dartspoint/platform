@@ -4,6 +4,7 @@ import {meterPosition,admittedMoment,admittedSample,TIMING_VERSION,METER_SPEED_V
 import {acceptedTurnStop,extendTimedOutTurn,turnDeadline,observeTurnTimeout} from '../../game-core/src/turn-timeout';
 import {awardForfeitLeg,settleLeg,finalizeLegRatings,matchPlayerStatistics} from './leg-settlements';
 import {registerIngress,type TrustedIngress} from './timing';
+import {wakeImpactWorker} from './impact-polling';
 export {meterPosition} from '../../game-core/src/timing';
 import {z} from 'zod';
 import type {PoolClient} from 'pg';
@@ -245,6 +246,7 @@ export async function matchCommand(actor:Actor,input:unknown,writerId:string,fen
      const id=Number(m.state_version)+1;
      state={...state,...dartsGameReducer(state,{type:'launch',dart:{id,hit,opponentName:state.names[1]}}),...acceptedTurnStop(state,seat),phaseToken:randomUUID(),phaseStartedAt:now,lockedX:state.lockedX,lockedY,impactAt:now+FLIGHT_MS,ready:state.ready,names:state.names};
      await c.query('insert into match_darts(match_id,dart_id,player_id,hit,impact_at) values($1,$2,$3,$4,$5)',[m.id,id,actor.id,JSON.stringify(hit),new Date(now+FLIGHT_MS)]);
+     await wakeImpactWorker();
     }
    }
   }
