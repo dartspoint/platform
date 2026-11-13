@@ -1,0 +1,1 @@
+export default function BlogLoading() {return <div className="mk-site dp-blog-site"><div className="mk-wrap dp-blog-masthead" role="status" aria-label="DartsPoint blog"><div className="dp-blog-skeleton"/><div className="dp-blog-skeleton dp-blog-skeleton-wide"/></div></div>;}

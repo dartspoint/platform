@@ -12,6 +12,8 @@ function productionSearchBuild() {
 const noindex = [{key: 'X-Robots-Tag', value: 'noindex, nofollow'}];
 const config: NextConfig = {
   output: "standalone",
+  // Website publication verifies canonical/revision metadata in the initial HTML.
+  htmlLimitedBots: /.*/,
   outputFileTracingRoot: new URL("../..", import.meta.url).pathname,
   experimental: { cpus: 2 },
   async headers() {
@@ -23,7 +25,7 @@ const config: NextConfig = {
       {source: '/:path*', missing: [{type: 'host', value: '(?:dartspoint\\.nl|dartspoint\\.app)'}], headers: noindex},
       // Public information and rendering assets may be crawled. Every other
       // path, including new account/team/ticket routes and APIs, is noindex.
-      {source: '/:path((?!$|(?:(?:nl|en)/?)?$|(?:(?:nl|en)/)?(?:contact|handleiding|privacy|algemene-voorwaarden)/?$|(?:_next/static|_next/image|marketing|brand|icons)(?:/|$)|(?:favicon\\.svg|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest)$).*)', headers: noindex},
+      {source: '/:path((?!$|(?:(?:nl|en)/?)?$|(?:(?:nl|en)/)?(?:contact|handleiding|privacy|algemene-voorwaarden|blog(?:/[a-z0-9]+(?:-[a-z0-9]+)*)?)/?$|(?:_next/static|_next/image|marketing|brand|icons)(?:/|$)|blog/[^/]+\\.(?:webp|png|jpe?g)$|(?:api/blog-media/[0-9a-f-]{36})/?$|(?:favicon\\.svg|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest)$).*)', headers: noindex},
     ];
   },
 };

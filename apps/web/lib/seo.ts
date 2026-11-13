@@ -25,7 +25,7 @@ export function searchRobots(indexable = false): NonNullable<Metadata['robots']>
 }
 
 /** Public pages opt in; private routes inherit the root layout's noindex. */
-export function publicPageMetadata({path, title, description, available = true, locale='nl', translatedAvailable=true}: {path: string; title: string; description: string; available?: boolean; locale?:Locale; translatedAvailable?:boolean}): Metadata {
+export function publicPageMetadata({path, title, description, available = true, locale='nl', translatedAvailable=false}: {path: string; title: string; description: string; available?: boolean; locale?:Locale; translatedAvailable?:boolean}): Metadata {
   const {origin, indexable} = searchContext();
   const mayIndex = indexable && available;
   const url = new URL(path, indexable?canonicalOrigin(locale):origin).href;
@@ -37,7 +37,7 @@ export function publicPageMetadata({path, title, description, available = true, 
     alternates: {canonical: mayIndex ? url : null,...(mayIndex&&translatedAvailable?{languages:{nl:new URL(path,canonicalOrigin('nl')).href,en:new URL(path,canonicalOrigin('en')).href,'x-default':new URL(path,canonicalOrigin('en')).href}}:{})},
     robots: searchRobots(mayIndex),
     openGraph: {
-      type: 'website', locale: locale==='en'?'en_GB':'nl_NL',alternateLocale:locale==='en'?['nl_NL']:['en_GB'], siteName: 'DartsPoint', url,
+      type: 'website', locale: locale==='en'?'en_GB':'nl_NL',...(translatedAvailable?{alternateLocale:locale==='en'?['nl_NL']:['en_GB']} : {}), siteName: 'DartsPoint', url,
       title: socialTitle, description,
       images: [{url: image, width: 1200, height: 630, alt: locale==='en'?'DartsPoint — Online darts. Your room. Your evening.':'DartsPoint — Online darten. Jouw kamer, jouw avond.'}],
     },

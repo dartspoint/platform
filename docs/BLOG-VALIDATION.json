@@ -1,0 +1,91 @@
+{
+  "observedAt": "2026-11-13T14:42:07.910Z",
+  "environment": "local development configuration using packaged production artifacts",
+  "build": {
+    "command": "node --env-file=.env.local scripts/build-deploy.mjs",
+    "exitCode": 0
+  },
+  "localSetup": {
+    "command": "npm run local:setup",
+    "exitCode": 0
+  },
+  "verifyCI": {
+    "command": "npm run verify:ci",
+    "exitCode": 0,
+    "unitTests": 131,
+    "operationsChecks": 49
+  },
+  "fullIntegration": {
+    "command": "npm run test:integration",
+    "exitCode": 0,
+    "qaTools": "Restic 0.19.1; Caddy 2.11.7; installed Playwright1.58.2 browser, explicitly configured PATH"
+  },
+  "blog": {
+    "isolatedDatabaseCheckpoints": 42,
+    "browser": {
+      "checks": [
+        "Public desktop, tablet and mobile index has no horizontal overflow",
+        "Category filter, search results and empty search state",
+        "Native share handler (browser stub) and real clipboard copy use the canonical URL",
+        "NL/EN switch follows actual translated slug with reciprocal canonical/hreflang",
+        "Anonymous administration and saved-revision preview redirect to sign in",
+        "TipTap H2, bold, list, table and owned inline image persisted after reload",
+        "Manual draft published through UI; public rich-text renderer preserves table and image caption",
+        "Authorized persisted revision preview stays noindex"
+      ],
+      "errors": []
+    },
+    "http": {
+      "checks": {
+        "realAuthenticatedCapabilities": true,
+        "anonymousAdminAndIntegrationDenied": true,
+        "decodedMediaConcurrentIdempotencyAndChangedPayloadConflict": true,
+        "unpublishedMediaPrivate": true,
+        "createOnlyCASDraftIsolationAndReplay": true,
+        "onlyExpectedRevisionPublishesAndReplay": true,
+        "directHTMLAndCrawlerMetadataAndPublicRevisionProof": true,
+        "publicImageMimeDimensionsAndShareFallback": true,
+        "newDraftPreservesLiveAndStalePublicationRejected": true,
+        "permanentAliasFollowsLatestLive": true,
+        "missingRouteNoindex": true
+      },
+      "publishedRevision": 3,
+      "note": "Suite-owned fixtures are removed after success; public URLs in the suite report are snapshots."
+    }
+  },
+  "socialHero": {
+    "domainTests": 217,
+    "dartspointTestsIncluded": 7,
+    "browserChecks": 22,
+    "realLocalClientPassed": true
+  },
+  "retainedPublicationProof": {
+    "publicUrl": "http://127.0.0.1:4300/blog/qa-blog-4a8dd94f-socialhero-real",
+    "canonicalUrl": "http://127.0.0.1:4300/blog/qa-blog-4a8dd94f-socialhero-real",
+    "publishedRevision": 1,
+    "publishedAt": "2026-11-13T14:09:25.044Z",
+    "httpStatus": 200,
+    "htmlSha256": "2394718a45c80119166fb617721fdffd8d1a7b0cf884c80417217604e6c13fbf",
+    "proofMeta": [
+      "socialhero:external-id",
+      "socialhero:revision"
+    ]
+  },
+  "staging": [
+    {
+      "url": "https://staging.dartspoint.nl/blog",
+      "status": 404
+    },
+    {
+      "url": "https://staging.dartspoint.nl/api/socialhero/v1/capabilities",
+      "status": 404
+    },
+    {
+      "url": "https://staging.dartspoint.app/blog",
+      "errorCode": "ENOTFOUND"
+    }
+  ],
+  "deployedToStaging": false,
+  "deployedToProduction": false,
+  "sourceComparison": "Copied prototype source/styles/assets; local desktop/tablet/mobile screenshots; no pixel-diff or live-prototype acceptance claim."
+}

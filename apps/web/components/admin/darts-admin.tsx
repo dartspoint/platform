@@ -13,6 +13,7 @@ import { Activity, ArrowLeft, ArrowRight, ArrowUpRight, Bell, Check, ChevronRigh
 import { MotionConfig, motion } from "motion/react";
 import { Brand } from "@/components/design-studio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {BlogAdmin} from "@/components/blog/blog-admin";
 import {DartsLegal} from "./darts-legal";
 import {useSupportIdentity} from "@/components/darts-support-links";
 import { AdminSeasons } from "./darts-seasons";
@@ -43,6 +44,7 @@ const navigation = [
   { id: "lobby", label: "Lobby & widgets", icon: LayoutGrid },
   { id: "releases", label: "Releasebeheer", icon: LayoutGrid },
   { id: "platform", label: "Platforminstellingen", icon: Settings2 },
+  { id: "blog", label: "Blog", icon: ClipboardList },
   { id: "legal", label: "Juridisch en informatie", icon: ClipboardList },
   { id: "support", label: "Supporttickets", icon: Bell },
   { id: "teamroles", label: "Gebruikers en teamrollen", icon: Users },
@@ -64,6 +66,7 @@ const titles: Record<AdminTab, { title: string; description: string }> = {
   lobby: { title: "Een clubhuis met karakter.", description: "Beheer lobbywidgets, nieuws, kamerselecties en gedeelde publicaties." },
   releases: { title: "Samen maken we DartsPoint beter.", description: "Van idee naar toevoeging. Beoordeel voorstellen, volg de uitvoering en deel wat nieuw is in de lobby." },
   platform: { title: "DartsPoint, zoals jij het wilt.", description: "Beheer platformvoorkeuren, aankondigingen en de toegang tot jouw community." },
+  blog: {title:"Verhalen voor de club.",description:"Schrijf artikelen, bewerk campagneconcepten en publiceer de gekozen revisie."},
   legal: {title:"Duidelijke afspraken voor de club.",description:"Beheer de openbare documenten, versies en contactgegevens."},
   support: {title:"Help spelers verder.",description:"Open de afgeschermde supportomgeving."},
   teamroles: {title:"De juiste toegang voor het team.",description:"Ken ticketrollen toe zonder spel- of beheerrechten te verruimen."},
@@ -176,7 +179,7 @@ export function DartsAdmin({ initialTab, initialTournamentId, initialRoomId, ini
           <section className="adm-panel"><div className="adm-panel-heading"><h2>{dpT("admin.dit_verdient_aandacht")}</h2><Activity size={16} color="#d6aa83"/></div><div className="adm-notes"><button onClick={() => navigate("moderation")}><Flag size={16}/><div><strong>{openCases ? dpT("admin.melding_open",{openCases}) : dpT("admin.een_rustige_community")}</strong><p>{dpT("admin.bekijk_de_context_voordat_je_een_maatregel_neemt")}</p></div></button><button onClick={() => navigate("tournaments")}><ClipboardList size={16}/><div><strong>{tournamentState.tournaments.filter(item => item.status === "draft").length} {dpT("admin.toernooiconcepten")}</strong><p>{dpT("admin.controleer_spelregels_en_deelname_voordat_je_publiceert")}</p></div></button><button onClick={() => navigate("elo")}><Target size={16}/><div><strong>{dpT("admin.dp_beleid_k_32")}</strong><p>{dpT("admin.10_wedstrijden_en_5_verschillende_tegenstanders_voor_plaatsing")}</p></div></button></div></section>
 
         </div></div>
-      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialWidgetType={lobbyWidgetType} initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "releases" ? <AdminReleases onConfigureWidget={getPlatform().actor?.role === "owner" ? () => { void navigate("lobby", undefined, "releases"); } : undefined} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
+      </motion.div> : tab === "tournaments" ? <DartsTournaments key={tournamentId || "all"} initialTournamentId={tournamentId}/> : tab === "seasons" ? <AdminSeasons/> : tab === "players" ? <AdminPlayers/> : tab === "rooms" ? <AdminRooms/> : tab === "chat-moderation" ? <AdminChatModeration/> : tab === "moderation" ? <AdminModeration/> : tab === "game" ? <AdminGameSettings/> : tab === "elo" ? <AdminEloSettings/> : tab === "lobby" ? <AdminLobbyContent initialWidgetType={lobbyWidgetType} initialRoomId={initialRoomId} onNavigate={next => { void navigate(validTab(next)); }} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "releases" ? <AdminReleases onConfigureWidget={getPlatform().actor?.role === "owner" ? () => { void navigate("lobby", undefined, "releases"); } : undefined} onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "platform" ? <AdminPlatformSettings/> : tab === "blog" ? <BlogAdmin onRegisterNavigationGuard={registerNavigationGuard}/> : tab === "legal" ? <DartsLegal/> : <AuditPanel entries={audit}/>}
       <footer className="adm-page-footer"><span>{dpT("admin.dartspoint_platformbeheer")}</span><span>{dpT("admin.je_wijzigingen_vind_je_terug_in_het_logboek")}</span></footer>
       </main>
     </div>

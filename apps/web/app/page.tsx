@@ -1,4 +1,6 @@
 import {getRequestLocale} from '@/lib/i18n/server';
+import {HomeBlogSection} from '@/components/blog/public-blog';
+import {listPublishedBlogArticles} from '../../../packages/data/src/blog';
 import {DartsMarketing} from '@/components/darts-marketing';
 import {DartsOpening} from '@/components/darts-opening';
 import {PublicDataProvider} from '@/lib/darts-public-data';
@@ -15,7 +17,7 @@ export async function generateMetadata() {
       description: 'DartsPoint opent op 15 oktober 2026 om 20:00 uur Nederlandse tijd. Zet je pijlen maar vast klaar.',
     });
   }
-  return publicPageMetadata({path:'/',locale,title:locale==='en'?EN_MARKETING_TITLE:MARKETING_TITLE,description:locale==='en'?EN_MARKETING_DESCRIPTION:MARKETING_DESCRIPTION});
+  return publicPageMetadata({path:'/',locale,translatedAvailable:true,title:locale==='en'?EN_MARKETING_TITLE:MARKETING_TITLE,description:locale==='en'?EN_MARKETING_DESCRIPTION:MARKETING_DESCRIPTION});
 }
 
 export default async function Home() {
@@ -23,7 +25,8 @@ export default async function Home() {
   if (process.env.APP_ENV === 'production' && !status.open) {
     return <DartsOpening serverNow={status.serverNow} opensAt={status.opensAt}/>;
   }
-  const data=await publicProjection();
+  const locale=await getRequestLocale();
+  const [data,articles]=await Promise.all([publicProjection(),listPublishedBlogArticles(locale==='en'?'en-GB':'nl-NL')]);
   const structuredData=marketingStructuredData(await getRequestLocale());
-  return <>{structuredData&&<script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(structuredData).replace(/</g,'\\u003c')}}/>}<PublicDataProvider data={data}><DartsMarketing/></PublicDataProvider></>;
+  return <>{structuredData&&<script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(structuredData).replace(/</g,'\\u003c')}}/>}<PublicDataProvider data={data}><DartsMarketing blogSection={<HomeBlogSection articles={articles} locale={locale}/>}/></PublicDataProvider></>;
 }
