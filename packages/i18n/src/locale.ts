@@ -5,7 +5,8 @@ export function isLocale(value: unknown): value is Locale {return value === 'nl'
 export function resolveLocale(input: {explicit?: unknown; account?: unknown; guest?: unknown; domain: Locale}): Locale {
   return [input.explicit, input.account, input.guest].find(isLocale) ?? input.domain;
 }
-export const publicPaths = ['/', '/contact', '/handleiding', '/privacy', '/algemene-voorwaarden'];
+export const publicPaths = ['/', '/contact', '/handleiding', '/privacy', '/algemene-voorwaarden', '/blog'];
+export function isPublicPath(path: string) {const clean = stripLocale(path); return publicPaths.includes(clean) || /^\/blog\/[a-z0-9]+(?:-[a-z0-9]+)*\/?$/.test(clean);}
 export function stripLocale(path: string) {return path.replace(/^\/(nl|en)(?=\/|$)/, '') || '/';}
 export function publicLocalePath(path: string, locale: Locale) {
   const clean = stripLocale(path);
@@ -15,5 +16,5 @@ export function domainLocale(host: string): Locale {return host.split(':')[0].en
 export function localisedHref(value:string,locale:Locale) {
  if(!value.startsWith('/')||value.startsWith('//'))return value;
  const path=value.split(/[?#]/)[0],suffix=value.slice(path.length),clean=stripLocale(path);
- return publicPaths.includes(clean)||['/inloggen','/registreren','/support'].includes(clean)?publicLocalePath(clean,locale)+suffix:value;
+ return isPublicPath(clean)||['/inloggen','/registreren','/support'].includes(clean)?publicLocalePath(clean,locale)+suffix:value;
 }

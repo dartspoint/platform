@@ -2,6 +2,7 @@
 set -euo pipefail
 node --env-file=.env.local scripts/wait-local.mjs
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/test-legal-setup.ts
+bash scripts/test-blog.sh
 npm run verify:ci
 node scripts/check-original-rules.mjs
 python3 scripts/check-source-parity.py

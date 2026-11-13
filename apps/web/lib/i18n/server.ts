@@ -2,13 +2,13 @@ import 'server-only';
 import {headers, cookies} from 'next/headers';
 import {catalogLoaders} from './catalog-loaders';
 import routeModules from './route-modules.json';
-import {domainLocale, isLocale, publicPaths, stripLocale, type Locale} from '../../../../packages/i18n/src/locale';
+import {domainLocale, isLocale, isPublicPath, stripLocale, type Locale} from '../../../../packages/i18n/src/locale';
 import {message, type Values} from '../../../../packages/i18n/src/messages';
 import * as common from '../../../../packages/i18n/src/catalogs/common';
 
 export async function getRequestLocale(): Promise<Locale> {
   const h = await headers(), path = h.get('x-dp-path') ?? '/', requested = h.get('x-dp-locale');
-  if (publicPaths.includes(stripLocale(path)) && isLocale(requested)) return requested;
+  if (isPublicPath(path) && isLocale(requested)) return requested;
   const guest = (await cookies()).get('dp-locale')?.value;
   return isLocale(guest) ? guest : /^\/(en|nl)(\/|$)/.test(path)&&isLocale(requested)?requested:domainLocale(h.get('host') ?? '');
 }

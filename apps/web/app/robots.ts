@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import {searchContext} from '@/lib/seo';
+import {searchContext} from '../lib/seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [{
       userAgent: "*",
-      allow: "/",
+      allow: ["/", "/api/blog-media/"],
       disallow: ["/api/", "/internal", "/internal/", "/healthz", "/readyz", "/_next/data/", "/landing/"],
     }],
     sitemap: "https://dartspoint.nl/sitemap.xml",

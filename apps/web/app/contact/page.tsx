@@ -3,7 +3,7 @@ import {getLegalCompany} from '../../../../packages/data/src/legal';
 import {LanguagePicker} from '@/components/language-picker';
 import '@/components/legal.css';
 import {publicPageMetadata} from '@/lib/seo';
-export async function generateMetadata(){const locale=await getRequestLocale();return publicPageMetadata({locale,path:'/contact',title:locale==='en'?'Contact and help':'Contact en hulp',description:locale==='en'?'Contact DartsPoint and DG Webservices. Find our company details and help with your account, the game or privacy.':'Neem contact op met DartsPoint en DG Webservices. Vind onze bedrijfsgegevens en hulp bij je account, het spel of een privacyvraag.'});}
+export async function generateMetadata(){const locale=await getRequestLocale();return publicPageMetadata({locale,path:'/contact',translatedAvailable:true,title:locale==='en'?'Contact and help':'Contact en hulp',description:locale==='en'?'Contact DartsPoint and DG Webservices. Find our company details and help with your account, the game or privacy.':'Neem contact op met DartsPoint en DG Webservices. Vind onze bedrijfsgegevens en hulp bij je account, het spel of een privacyvraag.'});}
 export const dynamic='force-dynamic';
 export default async function Page(){
  const company=await getLegalCompany(),locale=await getRequestLocale(),en=locale==='en',link=(path:string)=>'/'+locale+path;

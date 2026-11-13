@@ -311,5 +311,35 @@
     "requiredRename",
     "tournamentRoom",
     "tournaments"
+  ],
+  "/blog": [
+    "marketing",
+    "pwa"
+  ],
+  "/blog/[slug]": [
+    "marketing",
+    "pwa"
+  ],
+  "/beheer/blog": [
+    "admin",
+    "chatModeration",
+    "designStudio",
+    "divisionBadge",
+    "heroEditor",
+    "incomingInvites",
+    "legal",
+    "lobbyContent",
+    "operations",
+    "playerIdentity",
+    "practice",
+    "pwa",
+    "releaseUpdates",
+    "releases",
+    "requiredRename",
+    "roomFeed",
+    "seasons",
+    "settings",
+    "supportLinks",
+    "tournaments"
   ]
 }
