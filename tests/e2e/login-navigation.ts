@@ -70,6 +70,11 @@ try{
    assert.equal(documents.length,documentCount,'Login navigation must not request another HTML document');
   };
   try{
+   if(home==='/'){
+    const redirect=await context.request.get(origin+'/oefenen',{maxRedirects:0});
+    assert.equal(redirect.status(),307,'Guest access must redirect before streaming an authenticated page');
+    assert.equal(new URL(redirect.headers().location,origin).pathname,'/inloggen');
+   }
    await page.goto(origin+home,{waitUntil:'networkidle'});
    await expect(page.locator('html')).toHaveAttribute('lang',locale);
    const login=page.locator('.mk-login-link');
@@ -117,6 +122,6 @@ try{
    throw error;
   }finally{await context.close();}
  }
- await writeFile(directory+'/results.json',JSON.stringify({ok:true,origin,readOnly:true,scenarios:results},null,2));
+ await writeFile(directory+'/results.json',JSON.stringify({ok:true,origin,readOnly:true,serverAuthRedirect:true,scenarios:results},null,2));
  console.log('Homepage client navigation to login, back/forward, bilingual labels, language draft preservation and registration passed');
 }finally{await browser.close();}
