@@ -145,6 +145,7 @@ node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/legal
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/profile-contact.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/internationalisation.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/login-navigation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/offline-internationalisation.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/room-metadata.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/support.ts
