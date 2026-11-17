@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {Pool} from 'pg';
+import {Client,Pool} from 'pg';
 import sharp from 'sharp';
 import {migrate} from '../../scripts/migrate';
 import {db} from '../../packages/data/src/db';
@@ -13,11 +13,13 @@ const source=new URL(process.env.MIGRATION_DATABASE_URL!);assert.equal(source.ho
 const database='blog_test_'+randomUUID().replaceAll('-',''),control=new Pool({connectionString:source.toString(),max:1});
 await control.query('create database '+database);
 const url=new URL(source);url.pathname='/'+database;
-const setup=new Pool({connectionString:url.toString(),max:3});
+// A dedicated client fully closes before the disposable database is dropped.
+const setup=new Client({connectionString:url.toString()});
 process.env.DATABASE_URL=url.toString();process.env.DATABASE_ROLE='dartspoint_app';process.env.MIGRATION_DATABASE_URL=url.toString();process.argv.push('--expand-only');
 let checks=0;
 const denied=async(fn:()=>Promise<unknown>,code:string)=>{await assert.rejects(fn,e=>e instanceof DomainError&&e.code===code);checks++;};
 try{
+ await setup.connect();
  await setup.query("create schema auth;create table auth.users(id uuid primary key,email text);create table auth.sessions(id uuid primary key,user_id uuid,not_after timestamptz);create table auth.refresh_tokens(user_id text);create function auth.uid() returns uuid language sql stable as $$select null::uuid$$");
  await migrate();await migrate();
  const makeActor=async(role:'owner'|'admin'|'player'):Promise<Actor>=>{const id=randomUUID();await setup.query('insert into auth.users(id,email) values($1,$2)',[id,id+'@example.test']);await setup.query("insert into profiles(id,username,onboarded_at) values($1,$2,now()) on conflict(id) do update set username=excluded.username,onboarded_at=excluded.onboarded_at",[id,'Blog'+id.replaceAll('-','').slice(0,12)]);if(role!=='player')await setup.query('insert into user_roles(user_id,role) values($1,$2)',[id,role]);return {id,username:'BlogTest',role,sessionVersion:1,expiresAt:Date.now()+3600000,onboarded:true,sessionId:randomUUID()};};
