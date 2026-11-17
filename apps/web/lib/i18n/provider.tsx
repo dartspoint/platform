@@ -1,5 +1,5 @@
 "use client";
-import {createContext, Suspense, use, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
+import {createContext, use, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
 import {usePathname} from 'next/navigation';
 import {message, type Catalog, type Values} from '../../../../packages/i18n/src/messages';
 import {isLocale, formatLocales, isPublicPath, publicLocalePath, type Locale} from '../../../../packages/i18n/src/locale';
@@ -36,7 +36,7 @@ export function LocaleProvider({initialLocale, publicPage: initialPublicPage, ca
   const syncAccount = useCallback((next: unknown) => {if (!publicPage && isLocale(next)) {document.documentElement.lang=next;updateLocale(next);}}, [publicPage]);
   useEffect(() => {document.documentElement.lang = locale;document.cookie=`dp-ui-locale=${locale}; Path=/; SameSite=Lax${location.protocol==='https:'?'; Secure':''}`;}, [locale]);
   const value = useMemo(() => ({locale, setLocale, syncAccount, publicPage, catalogs}), [locale, setLocale, syncAccount, publicPage, catalogs]);
-  return <I18nContext.Provider value={value}><Suspense fallback={<p role="status">{message(common[locale], locale, 'common.loading')}</p>}>{children}</Suspense></I18nContext.Provider>;
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 export function useI18n(module = 'common') {
   const context = useContext(I18nContext);
