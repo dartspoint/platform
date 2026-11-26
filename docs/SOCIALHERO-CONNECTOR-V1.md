@@ -25,6 +25,8 @@ De huidige beheerde hosthelper levert de bestaande variabelen. Overrides zijn op
 
 De eigen toestemmingsmanager staat op publieke pagina's en bij inloggen/inschrijven. **Privacy-instellingen** opent de keuze opnieuw. Analytics staat uit totdat de bezoeker expliciet toestemt; weigeren en later intrekken zijn beschikbaar. Een geldige keuze wordt maximaal 180 dagen per browser/origin bewaard, los van account-, inschrijf- of publicatietoestemming. Verlopen, onleesbare of ontbrekende keuzes geven geen toestemming.
 
+Als de browser een keuze niet kan opslaan, blijven analyses uit en verschijnt een herstelmelding. Een ingetrokken toestemming blijft in het tabblad leidend bij focus, zichtbaarheid, opslagmeldingen en clientnavigatie. Een sessiekeuze en het verwijderen van een oude opgeslagen toestemming beschermen waar mogelijk ook herladen; toestemming wordt pas opnieuw actief na een bewuste, succesvol opgeslagen keuze.
+
 Vóór het pixelscript begint `window.socialheroConsent` op `false`. De callback zet de actuele boolean en verstuurt exact `socialhero:consent` met die boolean als `detail`. Een opgeslagen expliciete toestemming wordt opnieuw doorgegeven. Dit werkt ook als de pixel pas later laadt; intrekken en intrekken in een ander tabblad geven direct `false` door. De bridge blijft actief op de applicatiepagina's, zonder spel- of beheerknoppen met een banner te bedekken.
 
 De inschrijf- en inlogacties zijn gemarkeerd met `data-socialhero-cta`. De website verstuurt daarvoor zelf geen formulierinhoud of aanvullende meetrequests; de bestaande SocialHero-pixel handelt toegestane CTA-klikken af. De toestemmingsmanager en CTA-attributen kunnen apart van de blogadapter naar een volgende website worden overgenomen.

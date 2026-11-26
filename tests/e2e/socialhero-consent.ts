@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
-import {createAnalyticsConsent,SOCIALHERO_CONSENT_BOOTSTRAP,SOCIALHERO_CONSENT_KEY} from '../../apps/web/lib/socialhero-consent';
+import {createAnalyticsConsent,SOCIALHERO_CONSENT_BOOTSTRAP,SOCIALHERO_CONSENT_KEY,SOCIALHERO_CONSENT_SESSION_DENIAL_KEY} from '../../apps/web/lib/socialhero-consent';
 
 const temporary=await mkdtemp(join(tmpdir(),'dartspoint-consent-')),bundle=join(temporary,'ui.js');
 await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
@@ -56,5 +56,43 @@ try{
  }
  checks.push('real NL/EN marketing, registration and login CTAs carry markers; account terms never enable analytics');
  const expired=createAnalyticsConsent('granted',Date.now()-181*24*60*60*1000);await page.evaluate(({key,value})=>localStorage.setItem(key,value),{key:SOCIALHERO_CONSENT_KEY,value:JSON.stringify(expired)});await page.reload();await page.getByRole('button',{name:'Allow analytics',exact:true}).waitFor();assert.equal(await consent(),false);assert.equal(errors.length,0,errors.join('\n'));checks.push('expired grant returns to unknown/off without browser errors');
+ for(const failure of [
+  {name:'session denial survives reload over a stale grant',removeBlocked:true,sessionBlocked:false,reload:true},
+  {name:'removing the stale grant protects reload when session storage is blocked',removeBlocked:false,sessionBlocked:true,reload:true},
+  {name:'memory denial survives refresh events when both stores reject changes',removeBlocked:true,sessionBlocked:true,reload:false},
+ ]){
+  const failedContext=await browser.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'}),failedPage=await failedContext.newPage();failedPage.on('pageerror',error=>errors.push(error.message));
+  try{
+   await failedPage.goto(origin+'/nl');await failedPage.getByRole('button',{name:'Analyses toestaan',exact:true}).click();await expect.poll(()=>failedPage.evaluate(()=>window.socialheroConsent)).toBe(true);
+   const staleGrant=await failedPage.evaluate(key=>localStorage.getItem(key),SOCIALHERO_CONSENT_KEY);
+   await failedContext.addInitScript(({key,denialKey,removeBlocked,sessionBlocked})=>{
+    const set=Storage.prototype.setItem,remove=Storage.prototype.removeItem;
+    Storage.prototype.setItem=function(storageKey,value){if((this===localStorage&&storageKey===key)||(sessionBlocked&&this===sessionStorage&&storageKey===denialKey))throw new DOMException('Storage unavailable','QuotaExceededError');return set.call(this,storageKey,value);};
+    Storage.prototype.removeItem=function(storageKey){if((removeBlocked&&this===localStorage&&storageKey===key)||(sessionBlocked&&this===sessionStorage&&storageKey===denialKey))throw new DOMException('Storage unavailable','SecurityError');return remove.call(this,storageKey);};
+    (window as any).__restoreConsentStorage=()=>{Storage.prototype.setItem=set;Storage.prototype.removeItem=remove;};
+   },{key:SOCIALHERO_CONSENT_KEY,denialKey:SOCIALHERO_CONSENT_SESSION_DENIAL_KEY,...failure});
+   await failedPage.reload();await expect.poll(()=>failedPage.evaluate(()=>window.socialheroConsent)).toBe(true);
+   await failedPage.getByRole('button',{name:'Privacy-instellingen',exact:true}).click();await failedPage.getByRole('button',{name:'Toestemming voor analyses intrekken',exact:true}).click();assert.equal(await failedPage.evaluate(()=>window.socialheroConsent),false);
+   await expect(failedPage.getByRole('alert')).toContainText('Je keuze kon niet worden opgeslagen.');await expect(failedPage.getByRole('status')).toHaveText('Analyses staan uit.');
+   await failedPage.evaluate(({key,staleGrant})=>{
+    dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));
+    dispatchEvent(new StorageEvent('storage',{key,newValue:staleGrant,storageArea:localStorage}));dispatchEvent(new StorageEvent('storage',{key:null,storageArea:localStorage}));
+   },{key:SOCIALHERO_CONSENT_KEY,staleGrant});
+   assert.equal(await failedPage.evaluate(()=>window.socialheroConsent),false);assert.equal(await failedPage.evaluate(()=>(window as any).__events.at(-1)),false);
+   await failedPage.locator('.mk-header-register').click({force:true});assert.equal(await failedPage.evaluate(()=>(window as any).__analytics.length),0);
+   assert.equal(await failedPage.evaluate(key=>localStorage.getItem(key),SOCIALHERO_CONSENT_KEY),failure.removeBlocked?staleGrant:null);
+   if(failure.reload){
+    await failedPage.reload();await failedPage.getByRole('button',{name:'Privacy-instellingen',exact:true}).waitFor();await failedPage.getByRole('button',{name:'Privacy-instellingen',exact:true}).click();
+    assert.equal(await failedPage.evaluate(()=>window.socialheroConsent),false);assert.equal(await failedPage.evaluate(()=>(window as any).__events.includes(true)),false);
+    await failedPage.locator('.mk-header-register').click({force:true});assert.equal(await failedPage.evaluate(()=>(window as any).__analytics.length),0);
+   }
+   // A failed attempt to grant also stays off; only an explicitly saved grant
+   // clears the withdrawal override and its session marker.
+   await failedPage.getByRole('button',{name:'Analyses toestaan',exact:true}).click();assert.equal(await failedPage.evaluate(()=>window.socialheroConsent),false);await expect(failedPage.getByRole('alert')).toBeVisible();
+   await failedPage.evaluate(()=>(window as any).__restoreConsentStorage());await failedPage.getByRole('button',{name:'Analyses toestaan',exact:true}).click();assert.equal(await failedPage.evaluate(()=>window.socialheroConsent),true);
+   assert.equal(await failedPage.evaluate(key=>sessionStorage.getItem(key),SOCIALHERO_CONSENT_SESSION_DENIAL_KEY),null);checks.push(failure.name+'; blocked grant stays off until an explicit saved grant');
+  }finally{await failedContext.close();}
+ }
+ assert.equal(errors.length,0,errors.join('\n'));
  console.log(JSON.stringify({event:'socialhero_consent_browser_passed',checks,scope:'real consent/marketing/auth components, local mock pixel, no external analytics or account writes'}));
 }finally{await context.close();await browser.close();await new Promise<void>(resolveClose=>server.close(()=>resolveClose()));await rm(temporary,{recursive:true,force:true});}

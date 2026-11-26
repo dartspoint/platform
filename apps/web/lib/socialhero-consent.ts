@@ -1,5 +1,6 @@
 /** This stores only a consent choice; it contains no account or form data. */
 export const SOCIALHERO_CONSENT_KEY='dartspoint.analytics-consent.v1';
+export const SOCIALHERO_CONSENT_SESSION_DENIAL_KEY=SOCIALHERO_CONSENT_KEY+'.denied';
 export const SOCIALHERO_CONSENT_MAX_AGE=180*24*60*60*1000;
 export type AnalyticsConsent={version:1;choice:'granted'|'denied';decidedAt:number;expiresAt:number};
 export const SOCIALHERO_CONSENT_BOOTSTRAP='window.socialheroConsent=false;';
