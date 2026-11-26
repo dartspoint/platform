@@ -5,7 +5,7 @@ export const runtime='nodejs';
 type Context={params:Promise<{externalId:string}>};
 export async function GET(request:Request,{params}:Context){try{
   const principal=await blogIntegration(request,'drafts:read'),result=await getSocialHeroPost(principal,(await params).externalId);
-  return blogResponse(result,200,{'ETag':blogETag(result.draftRevision)});
+  return blogResponse(result,200,{'ETag':blogETag(result.revision)});
 }catch(error){return blogFailure(error);}}
 export async function PUT(request:Request,{params}:Context){try{
   const principal=await blogIntegration(request,'drafts:write'),key=blogOperationKey(request),{externalId}=await params;

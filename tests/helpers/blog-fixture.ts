@@ -21,6 +21,8 @@ export async function createLocalBlogFixture(){
     await control.query("insert into public.user_roles(user_id,role,granted_by) values($1,'owner',$1)",[id]);
     const login=await authAdmin().auth.signInWithPassword({email,password});assert.equal(login.error,null);
     const session=login.data.session!,actor=await verifyToken(session.access_token);
+    const previousPublishPolicy=(await control.query("select publish_enabled from private.socialhero_settings where site_id=$1 and environment='development'",[process.env.BLOG_SITE_ID??'dartspoint'])).rows[0]?.publish_enabled??false;
+    await control.query("insert into private.socialhero_settings(site_id,environment,publish_enabled) values($1,'development',true) on conflict(site_id,environment) do update set publish_enabled=true",[process.env.BLOG_SITE_ID??'dartspoint']);
     const credential=await createBlogToken(actor,{label:prefix,scopes:BLOG_SCOPES,expiresAt:new Date(Date.now()+86400000).toISOString()});
     const posts=[];
     const examples=[
@@ -39,7 +41,7 @@ export async function createLocalBlogFixture(){
     }
     const translated:BlogDraft={...posts[0].draft,locale:'en-GB',slug:'practise-501-checkouts-'+prefix.slice(-8),title:'Practise 501 checkouts with confidence',excerpt:'Choose your finish, find your rhythm and enjoy an evening of darts.',translationOfId:posts[0].id,seo:{title:'Practise 501 checkouts | DartsPoint',description:'Choose your finish, find your rhythm and enjoy an evening of darts.'}};
     const saved=await saveBlogDraft(actor,{draft:translated,requestId:randomUUID()});posts.push(await publishBlog(actor,{id:saved.id,revision:saved.revision,requestId:randomUUID()}));
-    const fixture={prefix,id,email,session,credential,posts,origin:process.env.NEXT_PUBLIC_APP_URL!,createdAt:new Date().toISOString()};
+    const fixture={prefix,id,email,session,credential,posts,previousPublishPolicy,origin:process.env.NEXT_PUBLIC_APP_URL!,createdAt:new Date().toISOString()};
     await mkdir('artifacts/blog',{recursive:true});await writeFile(blogFixturePath,JSON.stringify(fixture,null,2),{mode:0o600});
     console.log(JSON.stringify({event:'owned_local_blog_fixture_created',articles:posts.length,secretsPrinted:false}));
     return fixture;
@@ -72,6 +74,7 @@ export async function cleanupLocalBlogFixture(){
     await control.query('delete from public.preferences where user_id=$1',[fixture.id]);
     await control.query('delete from public.player_ratings where user_id=$1',[fixture.id]);
     await control.query('delete from public.profiles where id=$1',[fixture.id]);
+    if(typeof fixture.previousPublishPolicy==='boolean')await control.query("update private.socialhero_settings set publish_enabled=$2 where site_id=$1 and environment='development'",[process.env.BLOG_SITE_ID??'dartspoint',fixture.previousPublishPolicy]);
     await control.query('commit');
     const deleted=await authAdmin().auth.admin.deleteUser(fixture.id);assert.equal(deleted.error,null);
     await unlink(blogFixturePath);

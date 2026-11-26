@@ -8,6 +8,6 @@ export async function POST(request:Request,{params}:{params:Promise<{externalId:
   const principal=await blogIntegration(request,'posts:publish'),key=blogOperationKey(request);
   const {revision}=z.object({revision:z.coerce.number().int().positive()}).strict().parse(await readBlogJson(request,10_000));
   const result=await publishSocialHeroPost(principal,(await params).externalId,revision,key);
-  revalidatePath('/blog','layout');revalidatePath('/');revalidatePath('/sitemap.xml');
+  revalidatePath('/blog','layout');revalidatePath('/en/blog','layout');revalidatePath('/nl/blog','layout');revalidatePath('/');revalidatePath('/sitemap.xml');
   return blogResponse(result,200,{'ETag':blogETag(result.publishedRevision!)});
 }catch(error){return blogFailure(error);}}

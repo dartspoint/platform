@@ -16,6 +16,7 @@ cleanup_blog_fixture() {
 }
 trap cleanup_blog_fixture EXIT
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/blog.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/socialhero-pairing.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/test-blog-fixture.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/e2e/blog.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/blog-http.ts

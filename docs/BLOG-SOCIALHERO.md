@@ -1,5 +1,7 @@
 # DartsPoint Blog en SocialHero — implementatie en bewijs
 
+Update 26 november 2026: de actuele koppelcode-installatie, het lokale publicatiebeleid en de SocialHero-pixel staan in [SocialHero Connector v1](SOCIALHERO-CONNECTOR-V1.md). De onderstaande oorspronkelijke oplevering beschrijft de eerdere handmatige tokeninterface.
+
 De blog gebruikt het bestaande Next.js-platform, de actuele Supabase-sessiecontrole en PostgreSQL. Handmatige redactie en SocialHero gebruiken dezelfde artikel-, media- en publicatieservices. Er is geen nieuwe hostingomgeving, OpenAI-credential of meetpixel nodig.
 
 De volledige gewijzigde-bestandenlijst voor beide repositories staat in [BLOG-BESTANDEN.txt](BLOG-BESTANDEN.txt).

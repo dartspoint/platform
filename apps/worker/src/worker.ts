@@ -25,7 +25,7 @@ const impacts=new ImpactPolling({hasActivity:hasImpactActivity,hasPending:hasPen
 while(!stopping){
  try{
   if(await impacts.shouldPoll()){await settleImpacts();await settlePractice();}
-  if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await expireRoomMemberships();await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
+  if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await expireRoomMemberships();await db().query("update private.blog_tokens set credential_state='expired',encrypted_token=null,revoked_at=coalesce(revoked_at,now()) where credential_state='pending' and provisioning_expires_at<=now()");await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
  }catch{console.error(JSON.stringify({event:'worker_tick_failed'}));}
  await new Promise(resolve=>setTimeout(resolve,50));
 }

@@ -22,7 +22,9 @@ export function blogFailure(error:unknown,requestId=randomUUID()) {
   const aliases:Record<string,string>={UPLOAD_TOO_LARGE:'PAYLOAD_TOO_LARGE',REQUEST_TOO_LARGE:'PAYLOAD_TOO_LARGE',UNAUTHENTICATED:'UNAUTHENTICATED',FORBIDDEN:'PERMISSION_DENIED',IMAGE_TYPE:'INVALID_MEDIA',IMAGE_REQUIRED:'INVALID_MEDIA',INVALID_UPLOAD:'INVALID_MEDIA',ORIGIN:'PERMISSION_DENIED'};
   code=aliases[code]??code;
   // Error responses never echo request bodies, credentials or database messages.
-  return blogResponse({code,message,error:message,requestId,...(fields?{fields}:{})},status,{'X-Request-ID':requestId,...(status===429?{'Retry-After':'60'}:{})});
+  if(error instanceof DomainError&&['INVALID_CREDENTIAL','PAIRING_IN_PROGRESS'].includes(code))message=code==='PAIRING_IN_PROGRESS'?'De koppeling wordt nog bevestigd. Probeer het over enkele seconden opnieuw.':'De sitecredential is ongeldig of ingetrokken.';
+  console.info(JSON.stringify({event:'blog_request_failed',requestId,code,status}));
+  return blogResponse({code,message,error:message,requestId,...(fields?{fields}:{})},status,{'X-Request-ID':requestId,...(status===429?{'Retry-After':'60'}:code==='PAIRING_IN_PROGRESS'?{'Retry-After':'3'}:{})});
 }
 export function requireBlogOrigin(request:Request){requireThat(isTrustedOrigin(request.headers.get('origin')),'origin',403,'Deze herkomst is niet toegestaan.');}
 export async function readBlogJson(request:Request,maximum=400_000):Promise<any> {
@@ -38,7 +40,7 @@ export function blogOperationKey(request:Request){const key=request.headers.get(
 export async function blogIntegration(request:Request,scope:BlogScope){
   // Caddy terminates TLS; only configured origins may receive site credentials.
   const origin=trustedRequestOrigin(request);requireThat(origin&&((process.env.APP_ENV??'development')==='development'||origin.startsWith('https://')),'PERMISSION_DENIED',403,'De bestemming is niet toegestaan.');
-  const header=request.headers.get('authorization');requireThat(header?.startsWith('Bearer '),'UNAUTHENTICATED',401,'Een sitecredential is vereist.');
+  const header=request.headers.get('authorization');requireThat(header?.startsWith('Bearer '),'INVALID_CREDENTIAL',401,'Een sitecredential is vereist.');
   const principal=await authenticateBlogToken(header!.slice(7),scope);
   await rateLimit('blog-api:'+principal.tokenId,120,60);
   return principal;

@@ -2,7 +2,7 @@
 import {createContext, use, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
 import {usePathname} from 'next/navigation';
 import {message, type Catalog, type Values} from '../../../../packages/i18n/src/messages';
-import {isLocale, formatLocales, publicLocalePath, publicPaths, stripLocale, type Locale} from '../../../../packages/i18n/src/locale';
+import {isLocale, isPublicPath, formatLocales, publicLocalePath, type Locale} from '../../../../packages/i18n/src/locale';
 import {catalogLoaders} from './catalog-loaders';
 import feedbackNl from "../../../../packages/i18n/src/catalogs/feedback.nl.json";
 import feedbackEn from "../../../../packages/i18n/src/catalogs/feedback.en.json";
@@ -25,7 +25,7 @@ function loadClientCatalogs(module: string) {
 }
 export function LocaleProvider({initialLocale, publicPage: initialPublicPage, catalogs = {}, children}: {initialLocale: Locale; publicPage: boolean; catalogs?: Record<string, Record<string, Catalog>>; children: ReactNode}) {
   const pathname = usePathname();
-  const publicPage = pathname ? publicPaths.includes(stripLocale(pathname)) : initialPublicPage;
+  const publicPage = pathname ? isPublicPath(pathname) : initialPublicPage;
   const [locale, updateLocale] = useState(initialLocale);
   const setLocale = useCallback((next: Locale) => {
     if (!isLocale(next)) return;

@@ -132,6 +132,7 @@ web_pid=$!
 web_start=$(process_identity "$web_pid" || true)
 node --env-file=.env.local scripts/wait-local.mjs
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/test-legal-setup.ts
+# Runs blog and SocialHero pairing database suites sequentially before browser/HTTP acceptance.
 bash scripts/test-blog.sh
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/impact-polling.ts
 node --env-file=.env.local node_modules/tsx/dist/cli.mjs tests/integration/support-worker.ts
