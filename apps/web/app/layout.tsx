@@ -13,6 +13,8 @@ import {Toaster} from "sonner";
 import { DartsPwa } from "@/components/darts-pwa";
 import { TIMING_INPUT_BOOTSTRAP } from "@/lib/timing-input-bootstrap";
 import { searchRobots } from "@/lib/seo";
+import {SocialHeroConsent} from '@/components/socialhero-consent';
+import {SOCIALHERO_CONSENT_BOOTSTRAP} from '@/lib/socialhero-consent';
 const baseMetadata: Metadata = {
   title: { default: "DartsPoint — Online darten. Jouw kamer, jouw avond.", template: "%s · DartsPoint" },
   description: "Ontdek DartsPoint: online darten met het vertrouwde kamergevoel. Bekijk toernooien, Elo-rankings en divisies en speel mee.",
@@ -33,5 +35,5 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const h = await headers(), store = await cookies();
   const path = h.get('x-dp-path') ?? '/', publicPage = isPublicPath(path);
   const initialLocale=await getRequestLocale();
-  return <html lang={initialLocale} className="dark"><head><script id="dp-timing-input-bootstrap" dangerouslySetInnerHTML={{__html:TIMING_INPUT_BOOTSTRAP}}/><script async src="https://socialhero.dgwebservices.nl/api/pixel/script?site=sh_CG5YTOIfjV1H1VrXhFZvO3RjiEif7kOI"/></head><body><LocaleProvider initialLocale={initialLocale} publicPage={publicPage} catalogs={await loadRouteCatalogs(path)}><DartsPwa/>{children}<Toaster theme="dark" richColors position="bottom-right"/></LocaleProvider></body></html>;
+  return <html lang={initialLocale} className="dark"><head><script id="dp-timing-input-bootstrap" dangerouslySetInnerHTML={{__html:TIMING_INPUT_BOOTSTRAP}}/><script id="dp-socialhero-consent-default" dangerouslySetInnerHTML={{__html:SOCIALHERO_CONSENT_BOOTSTRAP}}/><script async src="https://socialhero.dgwebservices.nl/api/pixel/script?site=sh_CG5YTOIfjV1H1VrXhFZvO3RjiEif7kOI"/></head><body><LocaleProvider initialLocale={initialLocale} publicPage={publicPage} catalogs={await loadRouteCatalogs(path)}><DartsPwa/>{children}<SocialHeroConsent/><Toaster theme="dark" richColors position="bottom-right"/></LocaleProvider></body></html>;
 }

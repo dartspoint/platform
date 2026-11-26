@@ -111,14 +111,14 @@ export function DartsAuthFlow({ intent = "login" }: { intent?: "login" | "regist
           {step === "email" && <>
             <h1 id="dp-auth-title">{isNew ? <>{dpT("login.jouw_plek_aan")}<br/>{dpT("login.het_bord")}<span>.</span></> : <>{dpT("login.schuif_aan")}<span>.</span></>}</h1>
             <p className="dp-login-intro">{dpT("login.ga_verder_met_google_of_ontvang_een_eenmalige")}</p>
-            <a className="dp-login-primary" href={'/api/auth/google?locale='+locale+'&next='+encodeURIComponent(destination)}>{dpT("login.doorgaan_met_google")} <ArrowRight size={18}/></a><p className="dp-login-new">{dpT("login.of_met_je_e_mailadres")}</p>
+            <a data-socialhero-cta="" className="dp-login-primary" href={'/api/auth/google?locale='+locale+'&next='+encodeURIComponent(destination)}>{dpT("login.doorgaan_met_google")} <ArrowRight size={18}/></a><p className="dp-login-new">{dpT("login.of_met_je_e_mailadres")}</p>
             <form className="dp-login-form" onSubmit={issueCode} noValidate>
               <div className="dp-login-field"><label htmlFor="dp-auth-email">{dpT("login.e_mailadres")}</label><div className="dp-login-input-wrap"><Mail size={18}/><input ref={emailInput} id="dp-auth-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder={dpT("login.jij_voorbeeld_nl")} value={email} maxLength={254} onChange={event => { setEmail(event.target.value); setError(""); }} required aria-invalid={Boolean(error)} aria-describedby={error ? "dp-auth-error dp-auth-prototype-note" : "dp-auth-prototype-note"}/></div></div>
               {error && <p className="dp-login-error" id="dp-auth-error" role="alert">{error}</p>}
-              <button type="submit" className="dp-login-primary" disabled={busy||!captchaReady}>{dpT("login.ontvang_je_inlogcode")} <ArrowRight size={18}/></button>
+              <button data-socialhero-cta="" type="submit" className="dp-login-primary" disabled={busy||!captchaReady}>{dpT("login.ontvang_je_inlogcode")} <ArrowRight size={18}/></button>
             </form>
             <div className="dp-auth-reassurance"><ShieldCheck size={16}/><span>{dpT("login.je_e_mailadres_is_niet_zichtbaar_voor_andere")}</span></div>
-            <p className="dp-login-new">{isNew ? dpT("login.al_eerder_gespeeld") : dpT("login.voor_het_eerst_hier")} <a href={`${isNew ? "/inloggen" : "/registreren"}${destination === "/lobby" ? "" : `?next=${encodeURIComponent(destination)}`}`}>{isNew ? dpT("login.welkom_terug") : dpT("login.maak_het_jouw_avond")} <ArrowRight size={12}/></a></p>
+            <p className="dp-login-new">{isNew ? dpT("login.al_eerder_gespeeld") : dpT("login.voor_het_eerst_hier")} <a data-socialhero-cta="" href={`${isNew ? "/inloggen" : "/registreren"}${destination === "/lobby" ? "" : `?next=${encodeURIComponent(destination)}`}`}>{isNew ? dpT("login.welkom_terug") : dpT("login.maak_het_jouw_avond")} <ArrowRight size={12}/></a></p>
           </>}
           {step === "code" && <>
             <h1 id="dp-auth-title">{dpT("login.een_code")}<br/>{dpT("login.en_je_bent_er")}<span>.</span></h1>
@@ -127,7 +127,7 @@ export function DartsAuthFlow({ intent = "login" }: { intent?: "login" | "regist
             <form className="dp-login-form" onSubmit={submitCode} noValidate>
               <div className="dp-login-field"><label htmlFor="dp-auth-code">{dpT("login.je_eenmalige_code")}</label><input ref={codeInput} id="dp-auth-code" className="dp-auth-otp-input" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={code} onChange={event => { setCode(sanitizeOtpInput(event.target.value)); setError(""); }} placeholder="000000" required aria-invalid={Boolean(error)} aria-describedby={error ? "dp-auth-error dp-auth-code-expiry" : "dp-auth-code-expiry"} disabled={busy || locked || expired}/><span className="dp-auth-code-expiry" id="dp-auth-code-expiry"><Clock3 size={13}/>{expired ? dpT("login.deze_code_is_verlopen") : dpT("login.nog_geldig",{value0:displayWait((challenge?.expiresAt ?? now) - now)})}</span></div>
               {error && <p className="dp-login-error" id="dp-auth-error" role="alert">{error}</p>}
-              <button type="submit" className="dp-login-primary" disabled={busy || expired || locked}>{busy ? dpT("login.even_controleren") : dpT("login.bevestig_je_code")}<ArrowRight size={18}/></button>
+              <button data-socialhero-cta="" type="submit" className="dp-login-primary" disabled={busy || expired || locked}>{busy ? dpT("login.even_controleren") : dpT("login.bevestig_je_code")}<ArrowRight size={18}/></button>
             </form>
             <div className="dp-auth-resend"><span>{dpT("login.geen_code_of_code_verlopen")}</span><button type="button" onClick={() => issueCode()} disabled={busy || resendWait > 0 || !captchaReady}><RefreshCw size={13}/>{resendWait > 0 ? dpT("login.opnieuw_over",{value0:displayWait(resendWait)}) : dpT("login.vraag_een_nieuwe_code_aan")}</button></div>
             <p className="dp-auth-notice" role="status">{notice}</p>
@@ -143,7 +143,7 @@ export function DartsAuthFlow({ intent = "login" }: { intent?: "login" | "regist
               <p className="dp-register-field-help">{dpT("login.lees_hoe_wij_je_gegevens_gebruiken_in_de")} <a href="/privacy" target="_blank" rel="noopener noreferrer">{dpT("login.privacyverklaring")}{legal?.privacy?dpT("login.versie")+legal.privacy.version+')':''}</a>{dpT("login.we_leggen_vast_welke_versie_je_hebt_ontvangen")}</p>
               {(!legal?.terms||!legal?.privacy)&&<p role="status" className="dp-register-field-help">{dpT("login.registratie_wacht_op_publicatie_van_de_voorwaarden_en")} <a href="/support">{dpT("login.contact_met_support")}</a>.</p>}
               {error && <p className="dp-login-error" id="dp-auth-error" role="alert">{error}</p>}
-              <button type="submit" className="dp-login-primary" disabled={busy||!age16||!termsAccepted||!legal?.terms||!legal?.privacy}>{dpT("login.bevestig_mijn_spelersnaam")} <ArrowRight size={18}/></button>
+              <button data-socialhero-cta="" type="submit" className="dp-login-primary" disabled={busy||!age16||!termsAccepted||!legal?.terms||!legal?.privacy}>{dpT("login.bevestig_mijn_spelersnaam")} <ArrowRight size={18}/></button>
             </form>
             <p className="dp-auth-name-note">{dpT("login.je_begint_met")} <strong>{dpT("login.1500_dp")}</strong>{dpT("login.je_krijgt_een_plek_op_de_ladder_zodra")}</p>
             <button type="button" className="dp-register-edit" onClick={changeEmail}><ArrowLeft size={14}/> {dpT("login.ander_e_mailadres_gebruiken")}</button>

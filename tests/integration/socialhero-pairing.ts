@@ -6,8 +6,8 @@ import {migrate} from '../../scripts/migrate';
 import {db} from '../../packages/data/src/db';
 import {DomainError} from '../../packages/contracts/src/index';
 import {credentialHash,type PairingClaim} from '../../packages/socialhero/src/index';
-import {authenticateBlogToken,blogCapabilities,getSocialHeroPost,listPublishedBlogArticles,publishSocialHeroPost,saveSocialHeroDraft,storeBlogMedia} from '../../packages/data/src/blog';
-import {checkSocialHeroConnection,disconnectSocialHero,pairSocialHero,revokeSocialHeroCredential,setSocialHeroPolicy,socialHeroAdminStatus} from '../../packages/data/src/socialhero';
+import {authenticateBlogToken,blogCapabilities,getSocialHeroPost,listPublishedBlogArticles,processBlogPublication,publishSocialHeroPost,saveSocialHeroDraft,storeBlogMedia} from '../../packages/data/src/blog';
+import {checkSocialHeroConnection,disconnectSocialHero,pairSocialHero as pairWithChoices,revokeSocialHeroCredential,setSocialHeroPolicy as setDestinationPolicy,socialHeroAdminStatus} from '../../packages/data/src/socialhero';
 import type {Actor} from '../../packages/data/src/auth';
 
 // All database effects stay in a disposable local database. Only the provider
@@ -26,6 +26,8 @@ process.env.BLOG_SITE_ID='socialhero-integration';process.env.NEXT_PUBLIC_APP_UR
 process.argv.push('--expand-only');
 const originalFetch=globalThis.fetch;
 const checks:string[]=[];
+const pairSocialHero=(actor:Actor,code:string,policy={draftEnabled:true,publishEnabled:true})=>pairWithChoices(actor,{code,...policy});
+const setSocialHeroPolicy=(actor:Actor,publishEnabled:boolean,destinationId='stable-destination',draftEnabled=true)=>setDestinationPolicy(actor,{destinationId,draftEnabled,publishEnabled});
 type Fixture={code:string;claim:PairingClaim;attemptId?:string;claimCalls:number;verifyCalls:number;loseClaimOnce?:boolean;verifyMode:'verified'|'interrupted'|'mismatch'|'INVALID_CREDENTIAL';onClaim?:()=>Promise<void>;onVerify?:()=>Promise<void>};
 const fixtures=new Map<string,Fixture>();
 const rawProviderDetail='RAW_PROVIDER_SECRET_NEVER_PUBLIC';
@@ -100,18 +102,21 @@ try{
  };
  owner=await makeActor('owner');const admin=await makeActor('admin'),player=await makeActor('player');
  await denied(()=>socialHeroAdminStatus(admin),'forbidden');await denied(()=>pairSocialHero(player,'unknown-pairing'),'forbidden');
- assert.deepEqual(await socialHeroAdminStatus(owner),{configured:true,connection:null});checks.push('owner-only administration');
+ assert.deepEqual(await socialHeroAdminStatus(owner),{configured:true,pairingDefaults:{draftEnabled:true,publishEnabled:true},connection:null});checks.push('owner-only administration');
 
  const first=makeFixture('interrupted');first.verifyMode='interrupted';
  await denied(()=>pairSocialHero(owner,first.code),'SOCIALHERO_UNAVAILABLE');
  const pendingStatus=await socialHeroAdminStatus(owner);assert.equal(pendingStatus.connection?.status,'pending');safeStatus(pendingStatus);
  assert.equal((await setup.query('select count(*)::int n from private.blog_tokens')).rows[0].n,1);
  first.verifyMode='verified';const activeStatus=await checkSocialHeroConnection(owner);
- assert.equal(activeStatus.connection?.status,'active');assert.deepEqual(activeStatus.connection?.scopes,['read','draft']);safeStatus(activeStatus);
+ assert.equal(activeStatus.connection?.status,'active');assert.deepEqual(activeStatus.connection?.scopes,['read','draft','publish']);assert.ok(activeStatus.connection?.lastCheckedAt);assert.equal(activeStatus.connection?.draftEnabled,true);safeStatus(activeStatus);
  const firstToken=await authenticateBlogToken(first.claim.accessToken),firstCaps=await blogCapabilities(firstToken);
- assert.equal(firstCaps.credentialState,'active');assert.equal(firstCaps.permissions.publish,false);assert.equal(first.verifyCalls,2);
+ assert.equal(firstCaps.credentialState,'active');assert.equal(firstCaps.permissions.publish,true);assert.equal(first.verifyCalls,2);
  assert.equal((await setup.query('select encrypted_token from private.blog_tokens where connection_id=$1',[first.claim.connectionId])).rows[0].encrypted_token,null);
- checks.push('durable pending callback, blocked pending writes and resumed verification');
+ const decision=(await setup.query('select * from private.socialhero_destination_policies where destination_id=$1',[first.claim.destinationId])).rows[0];assert.equal(decision.publish_enabled,true);assert.equal(decision.draft_enabled,true);assert.equal(decision.decided_by,owner.id);assert.ok(decision.decided_at);
+ await denied(()=>pairSocialHero(owner,first.code,{draftEnabled:true,publishEnabled:false}),'IDEMPOTENCY_CONFLICT');
+ await setSocialHeroPolicy(owner,false);
+ checks.push('visible confirmed default-on choices, durable pending callback, blocked pending writes and resumed verification');
 
  const image=await sharp({create:{width:800,height:1000,channels:3,background:'#226044'}}).webp().toBuffer();
  const asset=await storeBlogMedia(firstToken,{bytes:image,width:800,height:1000,mime:'image/webp'},'paired-media');
@@ -124,9 +129,18 @@ try{
  await denied(()=>publishSocialHeroPost(firstToken,'external-article',2,'publish-denied'),'PERMISSION_DENIED');
  // A forged cached principal scope cannot override the current local policy.
  firstToken.scopes.push('publish');await denied(()=>publishSocialHeroPost(firstToken,'external-article',2,'publish-denied-forged'),'PERMISSION_DENIED');
- await setSocialHeroPolicy(owner,true);const published=await publishSocialHeroPost(firstToken,'external-article',2,'paired-publish');
- assert.equal(published.state,'published');assert.equal(published.publicUrl,'http://127.0.0.1:4300/blog/connector-integration-draft');
+ await setSocialHeroPolicy(owner,true);const publishing=await publishSocialHeroPost(firstToken,'external-article',2,'paired-publish');assert.equal(publishing.state,'publishing');
+ const operation=(await setup.query('select proof_token from private.blog_publications where id=$1',[publishing.publicationId])).rows[0];
+ await processBlogPublication(publishing.publicationId!,async()=>new Response('<meta name="socialhero:publication" content="'+operation.proof_token+'"><meta name="socialhero:revision" content="2"><meta name="socialhero:external-id" content="external-article">',{headers:{'content-type':'text/html'}}));
+ const published=await getSocialHeroPost(firstToken,'external-article');assert.equal(published.state,'published');assert.equal(published.publicUrl,'http://127.0.0.1:4300/blog/connector-integration-draft');
  await setSocialHeroPolicy(owner,false);await denied(()=>publishSocialHeroPost(firstToken,'external-article',2,'publish-policy-off'),'PERMISSION_DENIED');
+ await denied(()=>publishSocialHeroPost(firstToken,'external-article',2,'paired-publish'),'PERMISSION_DENIED');
+ await setSocialHeroPolicy(owner,false,first.claim.destinationId,false);
+ assert.deepEqual((await blogCapabilities(firstToken)).scopes,['read']);
+ await denied(()=>storeBlogMedia(firstToken,{bytes:image,width:800,height:1000,mime:'image/webp'},'draft-policy-off-media'),'PERMISSION_DENIED');
+ await denied(()=>saveSocialHeroDraft(firstToken,'external-article',{...payload,baseRevision:2},{key:'draft-policy-off-write'}),'PERMISSION_DENIED');
+ assert.equal((await getSocialHeroPost(firstToken,'external-article')).postId,initial.postId);
+ await setSocialHeroPolicy(owner,false);
  checks.push('draft replay, update, revision conflicts and local publication policy');
 
  const rotated=makeFixture('lost-claim');rotated.loseClaimOnce=true;
@@ -136,6 +150,8 @@ try{
  rotated.onVerify=async()=>{await authenticateBlogToken(first.claim.accessToken);assert.equal((await getSocialHeroPost(firstToken,'external-article')).postId,initial.postId);};
  const rotatedStatus=await pairSocialHero(owner,rotated.code);safeStatus(rotatedStatus);
  assert.equal(rotated.claimCalls,2);assert.equal(rotatedStatus.connection?.destinationId,first.claim.destinationId);assert.equal(rotatedStatus.connection?.status,'active');
+ assert.equal(rotatedStatus.connection?.publishEnabled,false,'A re-pair cannot restore an explicit opt-out');
+ const preserved=(await setup.query('select decided_by,source,publish_enabled from private.socialhero_destination_policies where destination_id=$1',[rotated.claim.destinationId])).rows[0];assert.equal(preserved.publish_enabled,false);assert.equal(preserved.source,'admin');assert.equal(preserved.decided_by,owner.id);
  await denied(()=>authenticateBlogToken(first.claim.accessToken),'INVALID_CREDENTIAL');await denied(()=>getSocialHeroPost(firstToken,'external-article'),'INVALID_CREDENTIAL');
  const rotatedToken=await authenticateBlogToken(rotated.claim.accessToken);
  assert.equal((await getSocialHeroPost(rotatedToken,'external-article')).postId,initial.postId);
@@ -176,6 +192,10 @@ try{
 
  const other=makeFixture('other-destination','other-destination');await pairSocialHero(owner,other.code);
  const otherToken=await authenticateBlogToken(other.claim.accessToken);
+ assert.deepEqual((await blogCapabilities(otherToken)).scopes,['read','draft','publish']);
+ assert.equal((await setup.query('select publish_enabled from private.socialhero_destination_policies where destination_id=$1',[first.claim.destinationId])).rows[0].publish_enabled,false);
+ await setSocialHeroPolicy(owner,false,other.claim.destinationId);
+ assert.equal((await blogCapabilities(otherToken)).permissions.publish,false);
  await denied(()=>getSocialHeroPost(otherToken,'external-article'),'POST_NOT_FOUND');
  await denied(()=>saveSocialHeroDraft(otherToken,'other-post',{...payload,slug:'foreign-media'},{key:'foreign-media'}),'INVALID_CONTENT');
  const originalSite=process.env.BLOG_SITE_ID;process.env.BLOG_SITE_ID='another-installation';
@@ -203,7 +223,19 @@ try{
  await denied(()=>authenticateBlogToken(retained.claim.accessToken),'INVALID_CREDENTIAL');
  checks.push('failed handover reports the retained active connection and permits full disconnect');
 
- const tables=['socialhero_settings','socialhero_pairing_attempts'];
+ const duringVerify=makeFixture('policy-change-during-verify','independent-destination');
+ duringVerify.onVerify=async()=>{await setSocialHeroPolicy(owner,false,duringVerify.claim.destinationId,false);};
+ const narrowed=await pairSocialHero(owner,duringVerify.code);
+ assert.deepEqual(narrowed.connection?.scopes,['read']);
+ const narrowedToken=await authenticateBlogToken(duringVerify.claim.accessToken);
+ await denied(()=>storeBlogMedia(narrowedToken,{bytes:image,width:800,height:1000,mime:'image/webp'},'pending-policy-change'),'PERMISSION_DENIED');
+ await checkSocialHeroConnection(owner);assert.ok((await socialHeroAdminStatus(owner)).connection?.lastCheckedAt);
+ await disconnectSocialHero(owner);
+ const preservedDraft=makeFixture('preserve-draft-optout','independent-destination');
+ assert.deepEqual((await pairSocialHero(owner,preservedDraft.code)).connection?.scopes,['read']);
+ checks.push('independent destination consent, draft withdrawal, decision provenance and opt-out retention during verification and re-pair');
+
+ const tables=['socialhero_settings','socialhero_pairing_attempts','socialhero_destination_policies','blog_publications','blog_taxonomy'];
  for(const table of tables){
   assert.equal((await setup.query("select rowsecurity from pg_tables where schemaname='private' and tablename=$1",[table])).rows[0].rowsecurity,true);
   for(const role of ['anon','authenticated']){
@@ -217,5 +249,8 @@ try{
  console.log(JSON.stringify({event:'socialhero_pairing_integration_passed',checks,scope:'isolated PostgreSQL with mocked provider transport and real local callback services'}));
 }finally{
  globalThis.fetch=originalFetch;
- await db().end();await setup.end();await control.query('drop database '+database+' with (force)');await control.end();
+ await db().end();await setup.end();await control.end();
+ // Provisioning retries may outlive an idle control connection on a busy test host.
+ const cleanup=new Client({connectionString:source.toString()});
+ await cleanup.connect();try{await cleanup.query('drop database '+database+' with (force)');}finally{await cleanup.end();}
 }

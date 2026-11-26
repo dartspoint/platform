@@ -1,4 +1,5 @@
 export const nl = {
+  'consent.settings':'Privacy-instellingen','consent.title':'Jij kiest voor analyses','consent.description':'Met jouw toestemming meet SocialHero bezoeken en klikken op aanmeldknoppen om de website te verbeteren. Zonder toestemming blijven deze analyses uit. Je kunt je keuze hier altijd wijzigen.','consent.privacy':'Privacyverklaring','consent.accept':'Analyses toestaan','consent.reject':'Analyses weigeren','consent.withdraw':'Toestemming voor analyses intrekken','consent.enabled':'Analyses staan aan.','consent.disabled':'Analyses staan uit.',
   'language.label': 'Taal', 'language.saveFailed': 'Je taalkeuze kon niet worden opgeslagen. Probeer het opnieuw.',
   'common.save': 'Opslaan', 'common.cancel': 'Annuleren', 'common.close': 'Sluiten',
   'common.loading': 'DartsPoint wordt geopend…', 'common.unavailable': 'Dit is niet gelukt. Probeer het nog eens.',
@@ -12,6 +13,7 @@ export const nl = {
   'legal.original': 'Bekijk de Nederlandse brontekst',
 };
 export const en: Record<keyof typeof nl, string> = {
+  'consent.settings':'Privacy settings','consent.title':'You choose whether to allow analytics','consent.description':'With your permission, SocialHero measures visits and clicks on sign-up buttons to improve the website. These analytics stay off without your permission. You can change your choice here at any time.','consent.privacy':'Privacy notice','consent.accept':'Allow analytics','consent.reject':'Reject analytics','consent.withdraw':'Withdraw analytics consent','consent.enabled':'Analytics are on.','consent.disabled':'Analytics are off.',
   'language.label': 'Language', 'language.saveFailed': 'Your language preference could not be saved. Please try again.',
   'common.save': 'Save', 'common.cancel': 'Cancel', 'common.close': 'Close',
   'common.loading': 'Opening DartsPoint…', 'common.unavailable': 'That did not work. Please try again.',

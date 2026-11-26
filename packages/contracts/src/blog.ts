@@ -8,13 +8,26 @@ export const BLOG_LOCALES=['nl-NL','en-GB'] as const;
 export type BlogLocale=typeof BLOG_LOCALES[number];
 export const BLOG_AUTHORS=[{id:'redactie',name:'DartsPoint Redactie'}] as const;
 export const BLOG_CATEGORIES=[{id:'speltips',name:'Speltips'},{id:'online-darten',name:'Online darten'},{id:'community',name:'Community'}] as const;
+/** Stable record IDs; existence and active state are checked against the website database. */
+export const blogTaxonomyId=z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/,'Gebruik een geldige auteur- of categorie-ID.');
+export type BlogTaxonomyRecord={id:string;name:string;active:boolean};
+export type BlogTaxonomy={authors:BlogTaxonomyRecord[];categories:BlogTaxonomyRecord[]};
+const taxonomyName=z.string().trim().min(1).max(100).refine(value=>!/[\u0000-\u001f\u007f]/.test(value),'Gebruik een naam zonder besturingstekens.');
+export const blogTaxonomyMutation=z.discriminatedUnion('action',[
+ z.object({kind:z.enum(['author','category']),action:z.literal('create'),id:blogTaxonomyId.optional(),name:taxonomyName}).strict(),
+ z.object({kind:z.enum(['author','category']),action:z.literal('update'),id:blogTaxonomyId,name:taxonomyName.optional(),active:z.boolean().optional()}).strict().refine(value=>value.name!==undefined||value.active!==undefined,'Geef een naam of status op.'),
+ z.object({kind:z.enum(['author','category']),action:z.literal('archive'),id:blogTaxonomyId}).strict(),
+]);
+export const blogListQuery=z.object({page:z.coerce.number().int().min(1).max(10000).default(1),pageSize:z.coerce.number().int().min(1).max(50).default(20),q:z.string().trim().max(120).default(''),categoryId:blogTaxonomyId.optional(),authorId:blogTaxonomyId.optional(),locale:z.enum(BLOG_LOCALES).optional(),state:z.enum(['all','draft','revision','published','publishing']).default('all')}).strict();
+export type BlogListQuery=z.infer<typeof blogListQuery>;
+export type BlogPageInfo={page:number;pageSize:number;total:number;hasMore:boolean};
 export const BLOG_SCOPES=['capabilities:read','media:write','drafts:read','drafts:write','posts:publish'] as const;
 export type BlogScope=typeof BLOG_SCOPES[number];
 export type BlogDocument={type:string;schemaVersion?:number;attrs?:Record<string,any>;content?:BlogDocument[];text?:string;marks?:{type:string;attrs?:Record<string,any>}[]};
 export type BlogImage={assetId:string;url:string;alt:string;width:number;height:number};
-export type BlogDraft={slug:string;title:string;excerpt:string;locale:BlogLocale;type:'blog'|'article';translationOfId?:string;categoryId:string;category:string;tags:string[];authorId:string;author:string;content:BlogDocument;hero:BlogImage&{focalPoint:{x:number;y:number}};ogImage?:BlogImage;seo:{title:string;description:string}};
-export type BlogArticle=BlogDraft&{id:string;revision:number;externalId?:string;publishedAt:string;updatedAt:string};
-export type BlogAdminEntry={id:string;revision:number;liveRevision:number|null;draft:BlogDraft;live:BlogArticle|null;updatedAt:string;source:'redactie'|'socialhero'};
+export type BlogDraft={slug:string;slugMode?:'auto'|'manual';title:string;excerpt:string;locale:BlogLocale;type:'blog'|'article';translationOfId?:string;categoryId:string;category:string;tags:string[];authorId:string;author:string;content:BlogDocument;hero:BlogImage&{focalPoint:{x:number;y:number}};ogImage?:BlogImage;seo:{title:string;description:string}};
+export type BlogArticle=BlogDraft&{id:string;revision:number;externalId?:string;publicationProof?:string;publishedAt:string;updatedAt:string};
+export type BlogAdminEntry={id:string;revision:number;liveRevision:number|null;draft:BlogDraft;live:BlogArticle|null;updatedAt:string;source:'redactie'|'socialhero';publicationState?:'publishing'|'published'|null;publicationId?:string|null;publicationError?:string|null;publicationAttempts?:number};
 export const blogPath=(slug:string)=>'/blog/'+encodeURIComponent(slug);
 export function blogCanonicalPath(locale:BlogLocale,slug:string,environment:string){return (environment==='development'&&locale==='en-GB'?'/en':'')+blogPath(slug);}
 export const blogImageUrl=(assetId:string)=>'/api/blog-media/'+assetId;
@@ -106,7 +119,7 @@ export function blogMediaIds(draft:BlogDraft){
 const imageBase=z.object({assetId:z.union([assetId,z.literal('')]),url:z.string().max(200),alt:z.string().trim().max(250),width:z.number().int().min(0).max(12000),height:z.number().int().min(0).max(12000)}).strict();
 const validImage=(i:BlogImage)=>i.assetId?i.url===blogImageUrl(i.assetId)&&i.width>0&&i.height>0:i.url===''&&i.width===0&&i.height===0;
 const image=imageBase.refine(validImage,'Kies een eigen geüploade afbeelding.');
-export const blogDraftSchema=z.object({slug:z.string().trim().min(1).max(110).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),title:z.string().trim().min(1).max(160),excerpt:z.string().trim().max(360),locale:z.enum(BLOG_LOCALES),type:z.enum(['blog','article']),translationOfId:z.string().uuid().optional(),categoryId:z.enum(['speltips','online-darten','community']),category:z.string().trim().max(70),authorId:z.literal('redactie'),author:z.string().trim().max(100),tags:z.array(z.string().trim().min(1).max(40)).max(20),content:z.custom<BlogDocument>(validBlogDocument,'Ongeldige artikelinhoud.'),hero:imageBase.extend({focalPoint:z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1)}).strict()}).strict().refine(validImage,'Kies een eigen geüploade afbeelding.'),ogImage:image.optional(),seo:z.object({title:z.string().trim().max(160),description:z.string().trim().max(320)}).strict()}).strict();
+export const blogDraftSchema=z.object({slugMode:z.enum(['auto','manual']).optional(),slug:z.string().trim().min(1).max(110).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),title:z.string().trim().min(1).max(160),excerpt:z.string().trim().max(360),locale:z.enum(BLOG_LOCALES),type:z.enum(['blog','article']),translationOfId:z.string().uuid().optional(),categoryId:blogTaxonomyId,category:z.string().trim().max(100),authorId:blogTaxonomyId,author:z.string().trim().max(100),tags:z.array(z.string().trim().min(1).max(40)).max(20),content:z.custom<BlogDocument>(validBlogDocument,'Ongeldige artikelinhoud.'),hero:imageBase.extend({focalPoint:z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1)}).strict()}).strict().refine(validImage,'Kies een eigen geüploade afbeelding.'),ogImage:image.optional(),seo:z.object({title:z.string().trim().max(160),description:z.string().trim().max(320)}).strict()}).strict();
 
 /** Parse CommonMark/GFM into the exact same schema. Executable/raw HTML is rejected. */
 export function importBlogMarkdown(markdown:string):BlogDocument{

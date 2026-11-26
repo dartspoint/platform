@@ -1,9 +1,10 @@
 "use client";
 
-import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 import {Check, Link2, RefreshCw, Trash2} from 'lucide-react';
 import {useI18n} from '@/lib/i18n/provider';
 import {blogUi as ui} from './blog-ui';
+import {browserLocale} from '../../../../packages/i18n/src/errors';
 import './blog-socialhero.css';
 
 type Connection = {
@@ -14,10 +15,13 @@ type Connection = {
   siteId: string;
   origin: string;
   scopes: string[];
+  draftEnabled: boolean;
   publishEnabled: boolean;
+  lastCheckedAt: string | null;
 };
-type ConnectionResult = {connection: Connection | null; configured: boolean};
-type Command = {action: 'pair'; code: string} | {action: 'check' | 'disconnect'} | {action: 'policy'; publishEnabled: boolean};
+type Policy = {draftEnabled: boolean; publishEnabled: boolean};
+type ConnectionResult = {connection: Connection | null; configured: boolean; pairingDefaults: Policy};
+type Command = ({action: 'pair'; code: string} & Policy) | {action: 'check' | 'disconnect'} | ({action: 'policy'; destinationId: string} & Policy);
 type Notice = {code?: string; message?: string; requestId?: string};
 
 const statusLabels: Record<Connection['status'], string> = {
@@ -38,6 +42,7 @@ const errorMessages: Record<string, string> = {
   RATE_LIMITED: 'Er zijn te veel pogingen gedaan. Wacht even en probeer het opnieuw.',
   SOCIALHERO_CONFIGURATION_INVALID: 'De SocialHero-koppeling is nog niet ingesteld voor deze website.',
   SOCIALHERO_UNAVAILABLE: 'SocialHero is tijdelijk niet bereikbaar. Je invoer blijft staan. Probeer opnieuw of controleer de verbinding.',
+  IDEMPOTENCY_CONFLICT: 'Deze koppelcode is al met andere rechten bevestigd. Gebruik dezelfde keuzes of maak een nieuwe code.',
 };
 
 class ConnectionRequestError extends Error {
@@ -71,13 +76,15 @@ export function BlogCredentials() {
   const [busy, setBusy] = useState<Command['action'] | 'load' | null>('load');
   const [error, setError] = useState<Notice | null>(null);
   const [feedback, setFeedback] = useState('');
+  const [pairingPolicy, setPairingPolicy] = useState<Policy>({draftEnabled: true, publishEnabled: true});
+  const pairingPolicyTouched = useRef(false);
   const connection = result?.connection;
   const configured = result?.configured === true;
 
   const load = useCallback(async () => {
     setBusy('load');
     setError(null);
-    try { setResult(await connectionRequest()); }
+    try { const updated = await connectionRequest(); setResult(updated); if (!pairingPolicyTouched.current) setPairingPolicy(updated.pairingDefaults); }
     catch (cause) { setError(noticeFor(cause)); }
     finally { setBusy(null); }
   }, []);
@@ -85,7 +92,7 @@ export function BlogCredentials() {
   useEffect(() => { void load(); }, [load]);
 
   async function run(command: Command) {
-    const removesAccess = command.action === 'disconnect' || (command.action === 'policy' && !command.publishEnabled);
+    const removesAccess = command.action === 'disconnect' || (command.action === 'policy' && (!command.draftEnabled || !!connection?.draftEnabled) && (!command.publishEnabled || !!connection?.publishEnabled));
     if (busy || (!configured && !removesAccess)) return;
     setBusy(command.action);
     setError(null);
@@ -93,9 +100,11 @@ export function BlogCredentials() {
     try {
       const updated = await connectionRequest(command);
       setResult(updated);
+      if (command.action === 'pair') pairingPolicyTouched.current = false;
+      if (!pairingPolicyTouched.current) setPairingPolicy(updated.pairingDefaults);
       if (command.action === 'pair' || (command.action === 'check' && updated.connection?.status === 'active')) setCode('');
       if (command.action === 'disconnect') setFeedback('SocialHero is ontkoppeld.');
-      else if (command.action === 'policy') setFeedback(updated.connection?.publishEnabled ? 'SocialHero mag nu artikelen publiceren.' : 'Publiceren via SocialHero is uitgeschakeld.');
+      else if (command.action === 'policy') setFeedback('De rechten voor deze verbinding zijn bijgewerkt.');
       else if (updated.connection?.status === 'active') setFeedback(command.action === 'pair' ? 'SocialHero is gekoppeld.' : 'De lokale verbindingsstatus is gecontroleerd: actief.');
       else if (updated.connection?.status === 'pending') setFeedback('De installatie wacht nog op bevestiging. Gebruik Verbinding controleren om de installatie af te ronden.');
       else if (updated.connection?.status === 'expired') setFeedback('De installatie is verlopen. Maak een nieuwe koppelcode in SocialHero.');
@@ -111,7 +120,7 @@ export function BlogCredentials() {
 
   function pair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (code.trim()) void run({action: 'pair', code: code.trim()});
+    if (code.trim()) void run({action: 'pair', code: code.trim(), ...pairingPolicy});
   }
 
   function disconnect() {
@@ -130,26 +139,40 @@ export function BlogCredentials() {
 
     <form className="dpba-socialhero-pairing" onSubmit={pair}>
       <label className="dpba-field"><span>{ui('Eenmalige koppelcode')}</span><input name="socialhero-pairing-code" value={code} type="text" maxLength={512} autoComplete="off" autoCapitalize="none" spellCheck={false} disabled={!!busy || !configured} onChange={event => setCode(event.target.value)} aria-describedby="dpba-socialhero-code-help"/></label>
-      <button className="adm-btn" type="submit" disabled={!!busy || !configured || !code.trim()}><Link2 size={15}/>{busy === 'pair' ? ui('Koppelen…') : connection ? ui('Opnieuw koppelen') : ui('Koppelen')}</button>
       <p id="dpba-socialhero-code-help" className="dpba-help">{ui('De code wordt alleen gebruikt om deze website veilig aan SocialHero te koppelen.')}</p>
+      <fieldset className="dpba-socialhero-consent" disabled={!!busy || !configured}>
+        <legend>{ui('Rechten bij koppelen')}</legend>
+        <label className="dpba-socialhero-policy"><input type="checkbox" checked={pairingPolicy.draftEnabled} onChange={event => {pairingPolicyTouched.current = true; setPairingPolicy(current => ({draftEnabled: event.target.checked, publishEnabled: event.target.checked && current.publishEnabled}));}}/><span>{ui('SocialHero mag concepten aanleveren')}</span></label>
+        <label className="dpba-socialhero-policy"><input type="checkbox" checked={pairingPolicy.publishEnabled} disabled={!pairingPolicy.draftEnabled} onChange={event => {pairingPolicyTouched.current = true; setPairingPolicy(current => ({...current, publishEnabled: event.target.checked}));}}/><span>{ui('SocialHero mag automatisch publiceren')}</span></label>
+        <p className="dpba-help">{ui('SocialHero mag artikelen zelfstandig live zetten volgens de campagneplanning en de ingestelde goedkeuringsmodus.')}</p>
+        <p className="dpba-help">{ui('Automatisch publiceren vereist toestemming voor concepten. Zet je concepten later weer aan, dan blijft publiceren uit totdat je het zelf aanzet.')}</p>
+        {connection && <p className="dpba-help">{ui('Bij opnieuw koppelen blijven bestaande keuzes behouden. Wijzig de rechten bewust bij de actieve verbinding hieronder.')}</p>}
+      </fieldset>
+      <button className="adm-btn" type="submit" disabled={!!busy || !configured || !code.trim()}><Link2 size={15}/>{busy === 'pair' ? ui('Koppelen…') : connection ? ui('Opnieuw koppelen') : ui('Koppelen')}</button>
     </form>
 
     {result && <div className="dpba-socialhero-connection">
       <dl className="dpba-socialhero-details">
         <div><dt>{ui('Status')}</dt><dd><span className={`dpba-status dpba-status--${connection?.status === 'active' ? 'live' : connection?.status === 'pending' ? 'revision' : 'draft'}`}><i aria-hidden="true"/>{ui(connection ? statusLabels[connection.status] : 'Niet gekoppeld')}</span></dd></div>
         {connection && <><div><dt>{ui('Omgeving')}</dt><dd>{ui(connection.environment === 'production' ? 'Productie' : connection.environment === 'staging' ? 'Staging' : connection.environment)}</dd></div><div><dt>{ui('Website')}</dt><dd>{connection.origin}</dd></div><div><dt>{ui('Rechten')}</dt><dd>{connection.scopes.length ? <ul>{connection.scopes.map(scope => <li key={scope}>{ui(scopeLabels[scope] ?? scope)}</li>)}</ul> : ui('Geen actieve rechten')}</dd></div></>}
+        {connection && <div><dt>{ui('Laatst gecontroleerd')}</dt><dd>{connection.lastCheckedAt ? <time dateTime={connection.lastCheckedAt}>{new Date(connection.lastCheckedAt).toLocaleString(browserLocale() === 'en' ? 'en-GB' : 'nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'medium', timeStyle: 'short'})}</time> : ui('Nog niet gecontroleerd')}</dd></div>}
       </dl>
 
       {connection?.status === 'pending' && <p className="dpba-help">{ui('De installatie is onderbroken of wacht op bevestiging. Verbinding controleren hervat de verificatie veilig.')}</p>}
       {(connection?.status === 'expired' || connection?.status === 'revoked') && <p className="dpba-help">{ui('Maak een nieuwe koppelcode in SocialHero om deze website opnieuw te verbinden.')}</p>}
 
-      {connection && <label className="dpba-socialhero-policy"><input type="checkbox" checked={connection.publishEnabled} disabled={!!busy || connection.status !== 'active' || (!configured && !connection.publishEnabled)} onChange={event => void run({action: 'policy', publishEnabled: event.target.checked})} aria-describedby="dpba-socialhero-publish-help"/><span>{ui('SocialHero mag artikelen publiceren')}<small id="dpba-socialhero-publish-help">{ui('Publiceren staat standaard uit. Schakel dit alleen in als SocialHero goedgekeurde artikelen op deze website mag publiceren.')}</small></span></label>}
+      {connection && <fieldset className="dpba-socialhero-consent"><legend>{ui('Rechten van deze verbinding')}</legend>
+        <label className="dpba-socialhero-policy"><input type="checkbox" checked={connection.draftEnabled} disabled={!!busy || connection.status !== 'active' || (!configured && !connection.draftEnabled)} onChange={event => void run({action: 'policy', destinationId: connection.destinationId, draftEnabled: event.target.checked, publishEnabled: event.target.checked && connection.publishEnabled})}/><span>{ui('SocialHero mag concepten aanleveren')}</span></label>
+        <label className="dpba-socialhero-policy"><input type="checkbox" checked={connection.publishEnabled} disabled={!!busy || !connection.draftEnabled || connection.status !== 'active' || (!configured && !connection.publishEnabled)} onChange={event => void run({action: 'policy', destinationId: connection.destinationId, draftEnabled: connection.draftEnabled, publishEnabled: event.target.checked})}/><span>{ui('SocialHero mag automatisch publiceren')}</span></label>
+        <p className="dpba-help">{ui('SocialHero mag artikelen zelfstandig live zetten volgens de campagneplanning en de ingestelde goedkeuringsmodus.')}</p>
+      </fieldset>}
 
       <div className="dpba-actions dpba-socialhero-actions">
         {connection && configured && <button className="adm-btn" type="button" disabled={!!busy} onClick={() => void run({action: 'check'})}><RefreshCw size={14}/>{busy === 'check' ? ui('Controleren…') : ui('Verbinding controleren')}</button>}
         {connection && (connection.status === 'active' || connection.status === 'pending') && <button className="adm-btn" type="button" disabled={!!busy} onClick={disconnect}><Trash2 size={14}/>{busy === 'disconnect' ? ui('Ontkoppelen…') : ui('Ontkoppelen')}</button>}
         {!configured && <button className="adm-btn" type="button" disabled={!!busy} onClick={() => void load()}><RefreshCw size={14}/>{ui('Opnieuw laden')}</button>}
       </div>
+      {connection && <p className="dpba-help">{ui('Verbinding controleren controleert de lokale status en hervat een onderbroken installatie.')}</p>}
     </div>}
     {!result && !busy && <button className="adm-btn" type="button" onClick={() => void load()}><RefreshCw size={14}/>{ui('Opnieuw laden')}</button>}
   </section>;

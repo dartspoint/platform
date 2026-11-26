@@ -61,6 +61,7 @@ export async function cleanupLocalBlogFixture(){
     const posts=(await control.query('select distinct p.id from private.blog_posts p join private.blog_revisions r on r.post_id=p.id where r.created_by=$1 or p.external_id like $2',[fixture.id,fixture.prefix+'%'])).rows.map(row=>row.id);
     const media=(await control.query('select m.id from private.blog_media m left join private.blog_tokens t on t.id=m.token_id where m.created_by=$1 or t.created_by=$1',[fixture.id])).rows.map(row=>row.id);
     await control.query('delete from private.blog_translation_pairs where nl_post_id=any($1::uuid[]) or en_post_id=any($1::uuid[])',[posts]);
+    await control.query('delete from private.blog_publications where post_id=any($1::uuid[])',[posts]);
     await control.query('delete from public.blog_live where post_id=any($1::uuid[])',[posts]);
     await control.query('delete from private.blog_media_references where post_id=any($1::uuid[])',[posts]);
     await control.query('delete from private.blog_slug_reservations where post_id=any($1::uuid[])',[posts]);

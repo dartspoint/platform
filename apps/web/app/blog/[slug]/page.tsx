@@ -27,7 +27,7 @@ export async function generateMetadata({params}: Props): Promise<Metadata> {
     title: {absolute: title}, description, alternates: {canonical: url, ...(languages ? {languages} : {})}, robots: searchRobots(indexable),
     openGraph: {title, description, url, siteName: 'DartsPoint', type: 'article', locale: article.locale.replace('-', '_'), publishedTime: article.publishedAt, modifiedTime: article.updatedAt, authors: [article.author], section: article.category, tags: article.tags, images: [image]},
     twitter: {card: 'summary_large_image', title, description, images: [image]},
-    other: {'socialhero:revision': String(article.revision), ...(article.externalId ? {'socialhero:external-id': article.externalId} : {})},
+    other: {'socialhero:revision': String(article.revision), ...(article.publicationProof ? {'socialhero:publication': article.publicationProof} : {}), ...(article.externalId ? {'socialhero:external-id': article.externalId} : {})},
   };
 }
 export default async function BlogDetailPage({params}: Props) {

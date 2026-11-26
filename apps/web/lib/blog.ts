@@ -17,7 +17,7 @@ export function blogUrl(article: {slug: string; locale: 'nl-NL' | 'en-GB'}) {
   return new URL(blogCanonicalPath(article.locale, article.slug, blogEnvironment()), blogOrigin(article.locale)).href;
 }
 export function blogShareImage(article: Pick<import('../../../packages/contracts/src/blog').BlogDraft, 'hero' | 'ogImage'>) {
-  if (article.ogImage?.url) return article.ogImage;
+  if (article.ogImage?.url) return {...article.ogImage, url: `${article.ogImage.url}?variant=share&x=0.5&y=0.5`, width: 1200, height: 630};
   if (!article.hero.url) return article.hero;
   return {...article.hero, url: `${article.hero.url}?variant=share&x=${article.hero.focalPoint.x}&y=${article.hero.focalPoint.y}`, width: 1200, height: 630};
 }

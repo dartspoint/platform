@@ -8,6 +8,7 @@ import {expireRoomMemberships} from '../../../packages/data/src/community';
 import {renderDartsEmail,type DartsEmailInput} from '../../../packages/emails/src/templates';
 import {readiness} from '../../../packages/data/src/health';
 import {scheduleCompetitions,competitionResult} from '../../../packages/data/src/competitions';
+import {processPendingBlogPublications} from '../../../packages/data/src/blog';
 
 import {advanceQueues} from '../../../packages/data/src/queue';
 import {deliverGameInviteNotification} from '../../../packages/data/src/notifications';
@@ -21,12 +22,13 @@ process.on('SIGTERM',()=>{stopping=true;});
 await readiness(false);
 console.log(JSON.stringify({event:'worker_started',release}));
 let lastHeartbeat=0;
+let publicationRecovery:Promise<void>|undefined;
 const impacts=new ImpactPolling({hasActivity:hasImpactActivity,hasPending:hasPendingImpacts});
 while(!stopping){
  try{
   if(await impacts.shouldPoll()){await settleImpacts();await settlePractice();}
-  if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await expireRoomMemberships();await db().query("update private.blog_tokens set credential_state='expired',encrypted_token=null,revoked_at=coalesce(revoked_at,now()) where credential_state='pending' and provisioning_expires_at<=now()");await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
+  if(Date.now()-lastHeartbeat>5000){await maintainMatches();await expireDisconnects();await expireRoomMemberships();await db().query("update private.blog_tokens set credential_state='expired',encrypted_token=null,revoked_at=coalesce(revoked_at,now()) where credential_state='pending' and provisioning_expires_at<=now()");publicationRecovery??=processPendingBlogPublications().catch(()=>console.error(JSON.stringify({event:'blog_publication_recovery_failed'}))).finally(()=>{publicationRecovery=undefined;});await db().query('insert into private.worker_heartbeats(worker_id,release,at) values($1,$2,now()) on conflict(worker_id) do update set release=$2,at=now()',[workerId,release]);lastHeartbeat=Date.now();}
  }catch{console.error(JSON.stringify({event:'worker_tick_failed'}));}
  await new Promise(resolve=>setTimeout(resolve,50));
 }
-await db().query('delete from private.worker_heartbeats where worker_id=$1 and release=$2',[workerId,release]);await db().end();await (await redis()).quit();
+await publicationRecovery;await db().query('delete from private.worker_heartbeats where worker_id=$1 and release=$2',[workerId,release]);await db().end();await (await redis()).quit();

@@ -11,6 +11,11 @@
 .dpba-socialhero-policy { align-items: start; display: flex; font-size: 12px; gap: 10px; margin-top: 20px; }
 .dpba-socialhero-policy input { accent-color: #9ebfa2; flex: 0 0 auto; height: 16px; margin: 2px 0 0; width: 16px; }
 .dpba-socialhero-policy small { color: var(--dpba-muted); display: block; font-size: 10px; line-height: 1.55; margin-top: 5px; max-width: 650px; }
+.dpba-socialhero-consent { border: 0; grid-column: 1 / -1; margin: 16px 0 0; padding: 0; }
+.dpba-socialhero-consent legend { color: #dae3d2; font-size: 11px; font-weight: 670; }
+.dpba-socialhero-consent .dpba-socialhero-policy { margin-top: 10px; }
+.dpba-socialhero-consent:disabled { opacity: .65; }
+.dpba-socialhero-pairing > button { grid-column: 1 / -1; justify-self: start; }
 .dpba-socialhero-actions { margin-top: 16px; }
 .dpba-socialhero-request { display: block; font-size: 10px; margin-top: 4px; overflow-wrap: anywhere; }
 @media (max-width: 520px) {

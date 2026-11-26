@@ -1,11 +1,13 @@
-import {getSocialHeroPost,saveSocialHeroDraft} from '../../../../../../../../packages/data/src/blog';
+import {getSocialHeroPost,saveSocialHeroDraft,processBlogPublication} from '../../../../../../../../packages/data/src/blog';
 import {blogETag,blogFailure,blogResponse,blogIntegration,blogOperationKey,readBlogJson} from '@/lib/server/blog-http';
+import {revalidateBlogPaths} from '@/lib/server/blog-publication';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 type Context={params:Promise<{externalId:string}>};
 export async function GET(request:Request,{params}:Context){try{
-  const principal=await blogIntegration(request,'drafts:read'),result=await getSocialHeroPost(principal,(await params).externalId);
-  return blogResponse(result,200,{'ETag':blogETag(result.revision)});
+  const principal=await blogIntegration(request,'drafts:read'),externalId=(await params).externalId;let result=await getSocialHeroPost(principal,externalId);
+  if(result.state==='publishing'&&result.publicationId){revalidateBlogPaths();await processBlogPublication(result.publicationId);result=await getSocialHeroPost(principal,externalId);}
+  return blogResponse(result,result.state==='publishing'?202:200,{'ETag':blogETag(result.revision),...(result.state==='publishing'?{'Retry-After':'3'}:{})});
 }catch(error){return blogFailure(error);}}
 export async function PUT(request:Request,{params}:Context){try{
   const principal=await blogIntegration(request,'drafts:write'),key=blogOperationKey(request),{externalId}=await params;

@@ -40,6 +40,7 @@ function BlogCard({ article }: { article: BlogArticle }) {
       <div className="dp-blog-card-image"><img src={image.url} width={image.width} height={image.height} alt="" style={article.ogImage?.url ? undefined : focus(article)} loading="lazy" decoding="async"/></div>
       <div className="dp-blog-card-content">
         {article.category && <span className="dp-blog-category">{article.category}</span>}
+        <time className="dp-blog-card-date" dateTime={article.publishedAt}>{blogDate(article)}</time>
         <h3>{article.title}</h3>
         <p>{article.excerpt}</p>
         <span className="dp-blog-card-footer"><span><Clock3 size={14} aria-hidden="true"/> {blogReadTime(article.content)} min</span><span>{english ? "Read article" : "Lees artikel"} <ArrowUpRight size={17} aria-hidden="true"/></span></span>
@@ -61,14 +62,22 @@ export function HomeBlogSection({ articles, locale = "nl" }: { articles: BlogArt
   </div></section>;
 }
 
-export function BlogIndex({ articles, category, query = "", locale = "nl" }: { articles: BlogArticle[]; category?: string; query?: string; locale?: Locale }) {
+export function BlogIndex({ articles, category, query = "", locale = "nl", categories: suppliedCategories, pagination }: { articles: BlogArticle[]; category?: string; query?: string; locale?: Locale; categories?: {id: string; name: string}[]; pagination?: {page: number; pageSize: number; total: number; hasMore: boolean} }) {
   const en = locale === "en";
-  const categories = Array.from(new Set(articles.map(article => article.category).filter(Boolean)));
-  const selected = category && categories.includes(category) ? category : undefined;
-  const visible = articles.filter(article => (!selected || article.category === selected) && (!query || [article.title, article.excerpt, ...article.tags].join(" ").toLocaleLowerCase().includes(query.toLocaleLowerCase())));
-  const featured = selected || query || visible.length < 2 ? undefined : visible[0];
+  const categories = suppliedCategories ?? Array.from(new Map(articles.filter(article => article.category).map(article => [article.categoryId, {id: article.categoryId, name: article.category}])).values());
+  const selectedCategory = categories.find(item => item.id === category || item.name === category);
+  const selected = selectedCategory?.id;
+  const visible = pagination ? articles : articles.filter(article => (!selected || article.categoryId === selected) && (!query || [article.title, article.excerpt, ...article.tags].join(" ").toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+  const featured = (pagination?.page ?? 1) > 1 || selected || query || visible.length < 2 ? undefined : visible[0];
   const featuredImage = featured && cardImage(featured);
   const gridArticles = featured ? visible.slice(1) : visible;
+  const indexUrl = (page = 1, nextCategory = selected ?? '') => {
+    const params = new URLSearchParams();
+    if (nextCategory) params.set('categorie', nextCategory);
+    if (query) params.set('q', query);
+    if (page > 1) params.set('page', String(page));
+    return `/${locale}/blog${params.size ? '?' + params : ''}#artikelen`;
+  };
 
   return <BlogShell locale={locale}>
     <section className="dp-blog-masthead">
@@ -89,14 +98,19 @@ export function BlogIndex({ articles, category, query = "", locale = "nl" }: { a
       <div className="dp-blog-featured-image"><img src={featuredImage.url} width={featuredImage.width} height={featuredImage.height} style={featured.ogImage?.url ? undefined : focus(featured)} alt="" fetchPriority="high"/></div>
     </section>}
     <section className="mk-wrap dp-blog-index" id="artikelen" aria-labelledby="dp-blog-index-title">
-      <div className="dp-blog-section-header"><h2 id="dp-blog-index-title">{selected ?? (query ? (en ? "Search results" : "Zoekresultaten") : featured && gridArticles.length ? (en ? "More articles" : "Meer artikelen") : (en ? "All articles" : "Alle artikelen"))}</h2>
+      <div className="dp-blog-section-header"><h2 id="dp-blog-index-title">{selectedCategory?.name ?? (query ? (en ? "Search results" : "Zoekresultaten") : featured && gridArticles.length ? (en ? "More articles" : "Meer artikelen") : (en ? "All articles" : "Alle artikelen"))}</h2>
         {categories.length > 0 && <nav aria-label="Filter artikelen op categorie" className="dp-blog-filters">
-          <a href={`/${locale}/blog#artikelen`} aria-current={!selected ? "page" : undefined}>{en ? "All" : "Alles"}</a>
-          {categories.map(item => <a key={item} href={`/${locale}/blog?categorie=${encodeURIComponent(item)}#artikelen`} aria-current={selected === item ? "page" : undefined}>{item}</a>)}
+          <a href={indexUrl(1, '')} aria-current={!selected ? "page" : undefined}>{en ? "All" : "Alles"}</a>
+          {categories.map(item => <a key={item.id} href={indexUrl(1, item.id)} aria-current={selected === item.id ? "page" : undefined}>{item.name}</a>)}
         </nav>}
       </div>
       <form className="dp-blog-search" action={`/${locale}/blog`} role="search"><label htmlFor="blog-search">{en ? "Search articles" : "Zoek artikelen"}</label><div><input id="blog-search" type="search" name="q" defaultValue={query} maxLength={120} placeholder={en ? "Title or topic" : "Titel of onderwerp"}/>{selected && <input type="hidden" name="categorie" value={selected}/>}<button className="mk-cta" type="submit">{en ? "Search" : "Zoeken"}</button></div></form>
       {gridArticles.length ? <BlogCardGrid articles={gridArticles}/> : !featured && <p className="dp-blog-empty">{query ? (en ? "No articles match your search." : "Geen artikelen gevonden voor deze zoekopdracht.") : (en ? "No articles have been published yet." : "Er zijn nog geen artikelen gepubliceerd.")}</p>}
+      {pagination && pagination.total > pagination.pageSize && <nav className="dp-blog-pagination" aria-label={en ? 'Blog pagination' : 'Paginering blog'}>
+        {pagination.page > 1 ? <a href={indexUrl(pagination.page - 1)}><ArrowLeft size={16}/>{en ? 'Previous' : 'Vorige'}</a> : <span aria-disabled="true">{en ? 'Previous' : 'Vorige'}</span>}
+        <span>{en ? 'Page' : 'Pagina'} {pagination.page} {en ? 'of' : 'van'} {Math.max(1, Math.ceil(pagination.total / pagination.pageSize))}</span>
+        {pagination.hasMore ? <a href={indexUrl(pagination.page + 1)}>{en ? 'Next' : 'Volgende'}<ArrowRight size={16}/></a> : <span aria-disabled="true">{en ? 'Next' : 'Volgende'}</span>}
+      </nav>}
     </section>
   </BlogShell>;
 }

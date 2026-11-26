@@ -4,29 +4,32 @@ import {browserLocale} from "../../../../packages/i18n/src/errors";
 import {useI18n} from "@/lib/i18n/provider";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Check, ChevronRight, CircleAlert, Eye, FileText, Globe, ImagePlus, Link2, Plus, Save, Search, Send, Share2, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Globe, ImagePlus, Link2, Plus, Save, Search, Send, Share2, Trash2, Upload } from "lucide-react";
 import {getPlatform} from "@/lib/platform-client";
 import {BlogCredentials} from "./blog-credentials";
+import {BlogTaxonomyManager, type BlogTaxonomy} from './blog-taxonomy';
 import { BlogEditor } from "@/components/blog/blog-editor";
 import { BlogArticleDetail } from "@/components/blog/public-blog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BLOG_CATEGORIES, BLOG_AUTHORS, blogOrigin, blogUrl, blogShareImage, type BlogArticle, type BlogImage } from "@/lib/blog";
+import { blogOrigin, blogUrl, blogShareImage, type BlogArticle, type BlogImage } from "@/lib/blog";
 import type { BlogAdminEntry, BlogDraft } from "@/lib/blog";
 import "./blog-admin.css";
 
 type UploadedImage = { url: string; assetId: string; width: number; height: number };
-type Status = "draft" | "revision" | "live";
-type Notice = { kind: "success" | "error"; message: string; code?: string; fields?: Record<string, string> };
+type Status = "draft" | "revision" | "live" | 'publishing';
+type Notice = { kind: "success" | "error" | 'info'; message: string; code?: string; fields?: Record<string, string> };
 type Selection = { entry: BlogAdminEntry | null; value: BlogDraft; slugManuallyEdited: boolean };
+type AdminPage = {entries: BlogAdminEntry[]; total: number; page: number; pageSize: number; hasMore: boolean};
 
-const stateLabels: Record<Status, string> = { draft: "Concept", revision: "Revisie open", live: "Gepubliceerd" };
+const stateLabels: Record<Status, string> = { draft: "Concept", revision: "Revisie open", live: "Gepubliceerd", publishing: 'Publicatie wordt gecontroleerd' };
 
 
 
-function emptyDraft(): BlogDraft {
+function emptyDraft(taxonomy: BlogTaxonomy = {authors: [], categories: []}): BlogDraft {
+  const author = taxonomy.authors.find(item => item.active), category = taxonomy.categories.find(item => item.active);
   return {
-    title: "", slug: "", excerpt: "", type: "blog", locale: "nl-NL", category: BLOG_CATEGORIES[0].name, categoryId: BLOG_CATEGORIES[0].id, authorId: BLOG_AUTHORS[0].id, tags: [],
-    author: "DartsPoint Redactie", content: { type: "doc", schemaVersion: 1, content: [{ type: "paragraph" }] },
+    title: "", slug: "", slugMode: 'auto', excerpt: "", type: "blog", locale: "nl-NL", category: category?.name ?? '', categoryId: category?.id ?? '', authorId: author?.id ?? '', tags: [],
+    author: author?.name ?? '', content: { type: "doc", schemaVersion: 1, content: [{ type: "paragraph" }] },
     hero: { assetId: "", url: "", alt: "", width: 0, height: 0, focalPoint: { x: 0.5, y: 0.5 } },
     seo: { title: "", description: "" },
   };
@@ -37,6 +40,7 @@ function slugFor(value: string) {
 }
 
 function entryStatus(entry: BlogAdminEntry): Status {
+  if (entry.publicationState === 'publishing' && entry.revision === entry.liveRevision) return 'publishing';
   if (!entry.liveRevision) return "draft";
   return entry.revision === entry.liveRevision ? "live" : "revision";
 }
@@ -91,9 +95,10 @@ function Panel({ title, icon, children, className = "" }: { title: string; icon?
   </section>;
 }
 
-function ImageField({ title, image, placeholder, ratio, disabled, required, onUpload, onAlt, onRemove }: {
+function ImageField({ title, image, placeholder, ratio, disabled, required, onUpload, onAlt, onRemove, onFocusPoint }: {
   title: string; image?: BlogImage; placeholder: string; ratio: string; disabled: boolean; required?: boolean;
   onUpload: (file: File) => void; onAlt: (value: string) => void; onRemove: () => void;
+  onFocusPoint?: (value: {x: number; y: number}) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const focal = image && "focalPoint" in image ? (image as BlogDraft["hero"]).focalPoint : null;
@@ -116,6 +121,7 @@ function ImageField({ title, image, placeholder, ratio, disabled, required, onUp
       <span>{ui("Alt-tekst")} {required ? <b className="dpba-required">*</b> : null}</span>
       <input value={image.alt} onChange={event => onAlt(event.target.value)} placeholder={ui("Beschrijf wat er op de foto staat")} maxLength={250} disabled={disabled} />
     </label>}
+    {image?.url && focal && onFocusPoint && <div className="dpba-focus-control"><span>{ui('Kies het focuspunt op de volledige afbeelding')}</span><button type="button" className="dpba-focus-picker" disabled={disabled} aria-label={ui('Focuspunt kiezen; gebruik ook de pijltjestoetsen')} style={{width: Math.min(280, 230 * image.width / image.height), aspectRatio: `${image.width} / ${image.height}`}} onClick={event => {if (event.detail === 0) return; const bounds = event.currentTarget.getBoundingClientRect(); onFocusPoint({x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)), y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))});}} onKeyDown={event => {const offsets: Record<string, [number, number]> = {ArrowLeft: [-.01, 0], ArrowRight: [.01, 0], ArrowUp: [0, -.01], ArrowDown: [0, .01]}; const offset = offsets[event.key]; if (offset) {event.preventDefault(); onFocusPoint({x: Math.max(0, Math.min(1, focal.x + offset[0])), y: Math.max(0, Math.min(1, focal.y + offset[1]))});}}}><img src={image.url} alt=""/><span className="dpba-focus-marker" style={{left: `${focal.x * 100}%`, top: `${focal.y * 100}%`}}/></button><small>{ui('Het portretvoorbeeld en het automatisch afgeleide deelbeeld volgen dit focuspunt.')}</small></div>}
   </div>;
 }
 
@@ -151,6 +157,11 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
   const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<"all" | Status>("all");
   const [query, setQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [page, setPage] = useState(1), [total, setTotal] = useState(0), [hasMore, setHasMore] = useState(false);
+  const [taxonomy, setTaxonomy] = useState<BlogTaxonomy>({authors: [], categories: []});
+  const [translations, setTranslations] = useState<BlogAdminEntry[]>([]), [translationSearch, setTranslationSearch] = useState(''), [translationPage, setTranslationPage] = useState(1), [moreTranslations, setMoreTranslations] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [editorVersion, setEditorVersion] = useState(0);
   const [preview, setPreview] = useState(false);
@@ -158,6 +169,7 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
   const noticeRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const baseline = useRef<string>("");
+  const loadVersion = useRef(0);
   const busy = Boolean(operation);
   const draft = selection?.value;
   const slug = draft ? slugFor(draft.slug) : "";
@@ -166,19 +178,26 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
   const dirty = actualDraft !== null && JSON.stringify(actualDraft) !== baseline.current;
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setOperation("laden");
     setLoadFailed(false);
     setNotice(null);
     try {
-      const result = await request<{ entries: BlogAdminEntry[] }>();
+      const params = new URLSearchParams({page: String(page), pageSize: '20', q: searchQuery, state: filter === 'live' ? 'published' : filter});
+      if (categoryFilter) params.set('categoryId', categoryFilter);
+      const [result, records] = await Promise.all([request<AdminPage>('?' + params), request<BlogTaxonomy>('/taxonomy')]);
+      if (version !== loadVersion.current) return;
       setEntries(result.entries);
+      setTotal(result.total); setHasMore(result.hasMore); setTaxonomy(records);
     } catch (error) {
+      if (version !== loadVersion.current) return;
       setLoadFailed(true);
       setNotice(errorNotice(error));
-    } finally { setOperation(null); }
-  }, []);
+    } finally { if (version === loadVersion.current) setOperation(null); }
+  }, [page, searchQuery, filter, categoryFilter]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {const timeout = window.setTimeout(() => {setSearchQuery(query.trim()); setPage(1);}, 250); return () => window.clearTimeout(timeout);}, [query]);
   useEffect(() => {
     const guard = async () => !busy && (!dirty || window.confirm(ui("Je hebt onopgeslagen wijzigingen. Wil je deze verlaten?")));
     onRegisterNavigationGuard(guard);
@@ -191,13 +210,46 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
   useEffect(() => { if (notice?.kind === "error") noticeRef.current?.focus(); }, [notice]);
+  useEffect(() => {
+    if (!draft) return;
+    let cancelled = false;
+    const params = new URLSearchParams({locale: draft.locale === 'nl-NL' ? 'en-GB' : 'nl-NL', page: '1', pageSize: '50', q: translationSearch, state: 'all'});
+    const selectedId = draft.translationOfId;
+    const timer = window.setTimeout(() => void (async () => {
+      try {
+        const result = await request<AdminPage>('?' + params);
+        const candidates = result.entries.filter(item => item.live);
+        if (selectedId && !candidates.some(item => item.id === selectedId)) {
+          const selected = await request<{entry: BlogAdminEntry}>('?id=' + encodeURIComponent(selectedId));
+          if (selected.entry.live) candidates.unshift(selected.entry);
+        }
+        if (!cancelled) {setTranslations(candidates); setTranslationPage(1); setMoreTranslations(result.hasMore);}
+      } catch { /* The current draft remains editable when lookup is temporarily unavailable. */ }
+    })(), 250);
+    return () => {cancelled = true; window.clearTimeout(timer);};
+  }, [draft?.locale, draft?.translationOfId, translationSearch]);
+  const pendingPublicationId = selection?.entry?.publicationState === 'publishing' ? selection.entry.id : null;
+  useEffect(() => {
+    if (!pendingPublicationId) return;
+    let cancelled = false, reading = false;
+    async function poll() {
+      if (reading) return;
+      reading = true;
+      try {
+        const {entry: updated} = await request<{entry: BlogAdminEntry}>('?id=' + encodeURIComponent(pendingPublicationId!));
+        if (cancelled) return;
+        setEntries(current => current.map(item => item.id === updated.id ? updated : item));
+        setSelection(current => current?.entry?.id === updated.id ? {...current, entry: updated} : current);
+        if (updated.publicationState === 'published') setNotice({kind: 'success', message: ui('De nieuwe versie staat op de blog.')});
+      } catch { /* The worker continues verification; the retry action remains available. */ }
+      finally { reading = false; }
+    }
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => {cancelled = true; window.clearInterval(timer);};
+  }, [pendingPublicationId]);
 
-  const shown = entries.filter(entry => {
-    const matchFilter = filter === "all" || entryStatus(entry) === filter;
-    const matchQuery = [entry.draft.title, entry.draft.category, entry.draft.slug, entry.draft.author, entry.source].some(value => value.toLowerCase().includes(query.trim().toLowerCase()));
-    return matchFilter && matchQuery;
-  }).sort((first, second) => second.updatedAt.localeCompare(first.updatedAt));
-  const liveCount = entries.filter(entry => entry.live !== null).length;
+  const shown = entries;
+  const liveCount = entries.filter(entry => entryStatus(entry) === 'live').length;
   const draftCount = entries.filter(entry => entryStatus(entry) !== "live").length;
   const socialHeroCount = entries.filter(entry => entry.source === "socialhero").length;
 
@@ -205,10 +257,11 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
     setEntries(items => [entry, ...items.filter(item => item.id !== entry.id)]);
   }
 
-  function setEditor(entry: BlogAdminEntry | null, draftValue = entry?.draft ?? emptyDraft()) {
+  function setEditor(entry: BlogAdminEntry | null, draftValue = entry?.draft ?? emptyDraft(taxonomy)) {
     baseline.current = JSON.stringify(draftValue);
-    setSelection({ entry, value: draftValue, slugManuallyEdited: !!entry });
+    setSelection({ entry, value: draftValue, slugManuallyEdited: !!entry?.live || draftValue.slugMode === 'manual' || (!draftValue.slugMode && draftValue.slug !== slugFor(draftValue.title)) });
     setTagInput(draftValue.tags.join(", "));
+    setTranslationSearch('');
     setEditorVersion(version => version + 1);
     requestAnimationFrame(() => {
       headingRef.current?.focus({ preventScroll: true });
@@ -225,6 +278,7 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
     if (busy || (dirty && !window.confirm(ui("Je hebt onopgeslagen wijzigingen. Wil je terug naar het overzicht?")))) return;
     setSelection(null);
     setNotice(null);
+    void load();
   }
 
   function update(fields: Partial<BlogDraft>) {
@@ -236,7 +290,7 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
   }
 
   function updateSlug(value: string) {
-    setSelection(current => current ? { ...current, slugManuallyEdited: true, value: { ...current.value, slug: value } } : null);
+    setSelection(current => current ? { ...current, slugManuallyEdited: true, value: { ...current.value, slug: value, slugMode: 'manual' } } : null);
   }
 
   async function reloadEditor() {
@@ -244,14 +298,21 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
     if (!id || busy || (dirty && !window.confirm(ui("Wil je het concept opnieuw laden en je onopgeslagen wijzigingen wissen?")))) return;
     setOperation("laden");
     try {
-      const result = await request<{ entries: BlogAdminEntry[] }>();
-      const latest = result.entries.find(entry => entry.id === id);
+      const result = await request<{entry: BlogAdminEntry}>('?id=' + encodeURIComponent(id));
+      const latest = result.entry;
       if (!latest) throw new Error(ui("Dit artikel is niet meer beschikbaar."));
-      setEntries(result.entries);
+      remember(latest);
       setEditor(latest);
       setNotice(null);
     } catch (error) { setNotice(errorNotice(error)); }
     finally { setOperation(null); }
+  }
+
+  async function loadMoreTranslations() {
+    if (!draft || busy) return;
+    const params = new URLSearchParams({locale: draft.locale === 'nl-NL' ? 'en-GB' : 'nl-NL', page: String(translationPage + 1), pageSize: '50', q: translationSearch, state: 'all'});
+    try {const result = await request<AdminPage>('?' + params); setTranslations(current => [...current, ...result.entries.filter(item => item.live && !current.some(existing => existing.id === item.id))]); setTranslationPage(current => current + 1); setMoreTranslations(result.hasMore);}
+    catch (error) {setNotice(errorNotice(error));}
   }
 
   async function saveDraft() {
@@ -272,7 +333,7 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
       const result = await request<{ entry: BlogAdminEntry }>("", { id: selection.entry?.id, revision: selection.entry?.revision, confirmSlugChange, draft: actualDraft });
       remember(result.entry);
       baseline.current = JSON.stringify(result.entry.draft);
-      setSelection({ entry: result.entry, value: result.entry.draft, slugManuallyEdited: true });
+      setSelection({ entry: result.entry, value: result.entry.draft, slugManuallyEdited: !!result.entry.live || selection.slugManuallyEdited });
       setTagInput(result.entry.draft.tags.join(", "));
       setNotice({ kind: "success", message: result.entry.live ? ui("Revisie opgeslagen. De huidige versie blijft zichtbaar tot je publiceert.") : ui("Concept opgeslagen.") });
     } catch (error) { setNotice(errorNotice(error)); }
@@ -290,7 +351,7 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
       remember(result.entry);
       baseline.current = JSON.stringify(result.entry.draft);
       setSelection({ entry: result.entry, value: result.entry.draft, slugManuallyEdited: true });
-      setNotice({ kind: "success", message: ui("De nieuwe versie staat op de blog.") });
+      setNotice({ kind: result.entry.publicationState === 'publishing' ? 'info' : 'success', message: result.entry.publicationState === 'publishing' ? ui('De publicatie wordt gecontroleerd. De bevestiging verschijnt automatisch zodra de juiste revisie openbaar is aangetroffen.') : ui("De nieuwe versie staat op de blog.") });
     } catch (error) { setNotice(errorNotice(error)); }
     finally { setOperation(null); }
   }
@@ -308,15 +369,16 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
   }
 
   const flash = notice ? <div ref={noticeRef} tabIndex={-1} role={notice.kind === "error" ? "alert" : "status"} className={`dpba-notice dpba-notice--${notice.kind}`}>
-    {notice.kind === "error" ? <CircleAlert size={17} /> : <Check size={17} />}<span>{notice.message}{notice.fields && <ul>{Object.entries(notice.fields).map(([field, message]) => <li key={field}><strong>{({title:ui("Titel"),slug:ui("URL-slug"),excerpt:ui("Samenvatting"),content:ui("Artikeltekst"),hero:ui("Hero-afbeelding"),ogImage:ui("Deelafbeelding"),locale:ui("Taal"),authorId:ui("Auteur"),categoryId:ui("Categorie")} as Record<string,string>)[field.split(".")[0]] ?? field}: </strong>{ui(message)}</li>)}</ul>}</span>{["REVISION_CONFLICT", "revision_conflict", "blog_revision_conflict"].includes(notice.code ?? "") && selection?.entry && <button type="button" className="adm-btn" disabled={busy} onClick={() => void reloadEditor()}>{ui("Concept opnieuw laden")}</button>}
+    {notice.kind === "error" ? <CircleAlert size={17} /> : notice.kind === 'info' ? <Clock3 size={17}/> : <Check size={17} />}<span>{notice.message}{notice.fields && <ul>{Object.entries(notice.fields).map(([field, message]) => <li key={field}><strong>{({title:ui("Titel"),slug:ui("URL-slug"),excerpt:ui("Samenvatting"),content:ui("Artikeltekst"),hero:ui("Hero-afbeelding"),ogImage:ui("Deelafbeelding"),locale:ui("Taal"),authorId:ui("Auteur"),categoryId:ui("Categorie")} as Record<string,string>)[field.split(".")[0]] ?? field}: </strong>{ui(message)}</li>)}</ul>}</span>{["REVISION_CONFLICT", "revision_conflict", "blog_revision_conflict"].includes(notice.code ?? "") && selection?.entry && <button type="button" className="adm-btn" disabled={busy} onClick={() => void reloadEditor()}>{ui("Concept opnieuw laden")}</button>}
   </div> : null;
 
   if (!draft || !selection) return <div className="dp-blog-admin">
     <div className="dpba-list-header"><p>{ui("Beheer artikelen, concepten en publicaties voor de DartsPoint-blog.")}</p><div className="dpba-actions">
       <a className="adm-btn" href="/blog" target="_blank" rel="noreferrer"><ArrowUpRight size={15} />{ui("Bekijk blog")}</a>
-      <button type="button" className="adm-btn adm-btn-primary" disabled={busy || loadFailed} onClick={() => openEditor(null)}><Plus size={17} />{ui("Nieuw artikel")}</button>
+      <button type="button" className="adm-btn adm-btn-primary" disabled={busy || loadFailed || !taxonomy.authors.some(item => item.active) || !taxonomy.categories.some(item => item.active)} onClick={() => openEditor(null)}><Plus size={17} />{ui("Nieuw artikel")}</button>
     </div></div>
     {flash}
+    <p className="dpba-help dpba-page-caption">{ui('{total} artikelen · aantallen op deze pagina', {total})}</p>
     <div className="dpba-summary">
       <div className="adm-panel"><Globe size={16} /><span>{ui("Gepubliceerd")}</span><strong>{liveCount}</strong></div>
       <div className="adm-panel"><FileText size={16} /><span>{ui("Concepten en revisies")}</span><strong>{draftCount}</strong></div>
@@ -324,21 +386,24 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
     </div>
     <div className="adm-toolbar dpba-list-tools">
       <label className="adm-search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} aria-label={ui("Zoeken in blogartikelen")} placeholder={ui("Zoek op titel, categorie of auteur")} /></label>
-      <label className="dpba-status-filter"><span>{ui("Status")}</span><select className="adm-filter-select" value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="all">{ui("Alle statussen")}</option><option value="draft">{ui("Concept")}</option><option value="revision">{ui("Revisie open")}</option><option value="live">{ui("Gepubliceerd")}</option></select></label>
+      <label className="dpba-status-filter"><span>{ui("Status")}</span><select className="adm-filter-select" aria-label={ui("Filter op status")} value={filter} onChange={event => {setFilter(event.target.value as typeof filter); setPage(1);}}><option value="all">{ui("Alle statussen")}</option><option value="draft">{ui("Concept")}</option><option value="revision">{ui("Revisie open")}</option><option value="live">{ui("Gepubliceerd")}</option><option value="publishing">{ui('Publicatie wordt gecontroleerd')}</option></select></label>
+      <label className="dpba-status-filter"><span>{ui('Categorie')}</span><select className="adm-filter-select" aria-label={ui("Filter op categorie")} value={categoryFilter} onChange={event => {setCategoryFilter(event.target.value); setPage(1);}}><option value="">{ui('Alle categorieën')}</option>{taxonomy.categories.map(category => <option value={category.id} key={category.id}>{category.name}{category.active ? '' : ' · ' + ui('Gearchiveerd')}</option>)}</select></label>
     </div>
     <div className="adm-panel dpba-entries">
-      <div className="dpba-entries-head" aria-hidden="true"><span>{ui("Artikel")}</span><span>{ui("Status")}</span><span>{ui("Herkomst")}</span><span>{ui("Bijgewerkt")}</span><span /></div>
+      <div className="dpba-entries-head" aria-hidden="true"><span>{ui("Artikel")}</span><span>{ui('Type')}</span><span>{ui('Auteur')}</span><span>{ui("Status")}</span><span>{ui("Bijgewerkt")}</span><span /></div>
       {shown.map(entry => <button type="button" className="dpba-entry" key={entry.id} onClick={() => openEditor(entry)}>
         <span className="dpba-entry-title"><span className="dpba-entry-image">{entry.draft.hero.url ? <img src={entry.draft.hero.url} alt="" /> : <BookOpen size={16} />}</span><span><strong>{entry.draft.title}</strong><small>{entry.draft.category} · {entry.draft.locale}</small></span></span>
-        <span className="dpba-entry-status"><StatusPill status={entryStatus(entry)} /></span><span className="dpba-entry-source">{entry.source === "socialhero" ? "SocialHero" : ui("Redactie")}</span><span className="dpba-entry-date">{day(entry.updatedAt)}</span><ChevronRight size={17} className="dpba-entry-arrow" />
+        <span className="dpba-entry-type">{ui(entry.draft.type === 'blog' ? 'Blogbericht' : 'Artikel')}</span><span className="dpba-entry-author">{entry.draft.author}<small>{entry.source === 'socialhero' ? 'SocialHero' : ui('Redactie')}</small></span><span className="dpba-entry-status"><StatusPill status={entryStatus(entry)} /></span><span className="dpba-entry-date">{day(entry.updatedAt)}</span><ChevronRight size={17} className="dpba-entry-arrow" />
       </button>)}
       {!shown.length && <div className="dpba-empty">{operation === "laden" ? ui("Artikelen laden…") : loadFailed ? <button type="button" className="adm-btn" onClick={() => void load()}>{ui("Opnieuw laden")}</button> : ui("Geen artikelen gevonden.")}</div>}
     </div>
+    {total > 20 && <nav className="dpba-pagination" aria-label={ui('Paginering blogbeheer')}><button className="adm-btn" type="button" disabled={busy || page <= 1} onClick={() => setPage(current => current - 1)}><ArrowLeft size={14}/>{ui('Vorige')}</button><span>{ui('Pagina {page} van {pages}', {page, pages: Math.max(1, Math.ceil(total / 20))})}</span><button className="adm-btn" type="button" disabled={busy || !hasMore} onClick={() => setPage(current => current + 1)}>{ui('Volgende')}<ArrowRight size={14}/></button></nav>}
+    <BlogTaxonomyManager value={taxonomy} onChange={setTaxonomy} disabled={busy}/>
     {getPlatform().actor?.role === "owner" && <BlogCredentials/>}
   </div>;
 
   const entry = selection.entry;
-  const canPublish = !!entry && !dirty && entry.revision !== entry.liveRevision;
+  const canPublish = !!entry && !dirty && (entry.revision !== entry.liveRevision || entry.publicationState === 'publishing');
   const previewArticle: BlogArticle = { id: entry?.id ?? "preview", revision: entry?.revision ?? 0, ...(actualDraft ?? draft), title: draft.title || ui("Naamloos artikel"), publishedAt: entry?.live?.publishedAt ?? new Date().toISOString(), updatedAt: entry?.updatedAt ?? new Date().toISOString() };
   const redirectFrom = entry?.live && (entry.live.slug !== slug || entry.live.locale !== draft.locale) ? blogUrl(entry.live) : null;
   return <div className="dp-blog-admin">
@@ -360,14 +425,15 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
         </Panel>
         <Panel title={ui("Details")} icon={<BookOpen size={17} />}>
           <div className="dpba-fields-grid">
-            <label className="dpba-field"><span>{ui("Type")}</span><select value={draft.type} onChange={event => update({ type: event.target.value as BlogDraft["type"] })} disabled={busy}><option value="blog">{ui("Blogbericht")}</option><option value="article">{ui("Artikel")}</option></select></label>
-            <label className="dpba-field"><span>{ui("Taal")}</span><select value={draft.locale} onChange={event => update({ locale: event.target.value as BlogDraft["locale"] })} disabled={busy}><option value="nl-NL">{ui("Nederlands")}</option><option value="en-GB">{ui("Engels")}</option></select></label>
-            <label className="dpba-field"><span>{ui("Categorie")}</span><select value={draft.categoryId} onChange={event => { const category = BLOG_CATEGORIES.find(item => item.id === event.target.value); if (category) update({ categoryId: category.id, category: category.name }); }} disabled={busy}>{BLOG_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-            <label className="dpba-field"><span>{ui("Auteur")}</span><select value={draft.authorId} onChange={event => { const author = BLOG_AUTHORS.find(item => item.id === event.target.value); if (author) update({ authorId: author.id, author: author.name }); }} disabled={busy}>{BLOG_AUTHORS.map(author => <option key={author.id} value={author.id}>{author.name}</option>)}</select></label>
+            <label className="dpba-field"><span>{ui("Type")}</span><select aria-label={ui("Type")} value={draft.type} onChange={event => update({ type: event.target.value as BlogDraft["type"] })} disabled={busy}><option value="blog">{ui("Blogbericht")}</option><option value="article">{ui("Artikel")}</option></select></label>
+            <label className="dpba-field"><span>{ui("Taal")}</span><select aria-label={ui("Taal")} value={draft.locale} onChange={event => update({ locale: event.target.value as BlogDraft["locale"] })} disabled={busy}><option value="nl-NL">{ui("Nederlands")}</option><option value="en-GB">{ui("Engels")}</option></select></label>
+            <label className="dpba-field"><span>{ui("Categorie")}</span><select aria-label={ui("Categorie")} value={draft.categoryId} onChange={event => { const category = taxonomy.categories.find(item => item.id === event.target.value); if (category) update({ categoryId: category.id, category: category.name }); }} disabled={busy}>{taxonomy.categories.filter(category => category.active || category.id === draft.categoryId).map(category => <option key={category.id} value={category.id}>{category.name}{category.active ? '' : ' · ' + ui('Gearchiveerd')}</option>)}</select></label>
+            <label className="dpba-field"><span>{ui("Auteur")}</span><select aria-label={ui("Auteur")} value={draft.authorId} onChange={event => { const author = taxonomy.authors.find(item => item.id === event.target.value); if (author) update({ authorId: author.id, author: author.name }); }} disabled={busy}>{taxonomy.authors.filter(author => author.active || author.id === draft.authorId).map(author => <option key={author.id} value={author.id}>{author.name}{author.active ? '' : ' · ' + ui('Gearchiveerd')}</option>)}</select></label>
           </div>
           <label className="dpba-field"><span>{ui("Tags")}</span><input value={tagInput} onChange={event => setTagInput(event.target.value)} maxLength={850} placeholder={ui("Bijvoorbeeld 501, trainen, dubbels")} disabled={busy} /></label>
           <p className="dpba-help">{ui("Gebruik komma’s om maximaal 20 tags te scheiden.")}</p>
-          <label className="dpba-field"><span>{ui("Gepubliceerde vertaling")}</span><select value={draft.translationOfId ?? ""} disabled={busy} onChange={event => update({translationOfId:event.target.value || undefined})}><option value="">{ui("Geen gekoppelde vertaling")}</option>{entries.filter(item => item.live && item.id !== entry?.id && item.live.locale !== draft.locale).map(item => <option key={item.id} value={item.id}>{item.live!.title} · {item.live!.locale}</option>)}</select></label><p className="dpba-help">{ui("Koppel alleen een echte vertaling. Taalverwijzingen verschijnen zodra beide artikelen live staan.")}</p>
+          <label className="dpba-field"><span>{ui('Zoek een gepubliceerde vertaling')}</span><input value={translationSearch} onChange={event => setTranslationSearch(event.target.value)} disabled={busy} maxLength={120}/></label>
+          <label className="dpba-field"><span>{ui("Gepubliceerde vertaling")}</span><select aria-label={ui("Gepubliceerde vertaling")} value={draft.translationOfId ?? ""} disabled={busy} onChange={event => update({translationOfId:event.target.value || undefined})}><option value="">{ui("Geen gekoppelde vertaling")}</option>{translations.filter(item => item.live && item.id !== entry?.id && item.live.locale !== draft.locale).map(item => <option key={item.id} value={item.id}>{item.live!.title} · {item.live!.locale}</option>)}</select></label>{moreTranslations && <button className="adm-btn" type="button" disabled={busy} onClick={() => void loadMoreTranslations()}>{ui('Meer vertalingen laden')}</button>}<p className="dpba-help">{ui("Koppel alleen een echte vertaling. Taalverwijzingen verschijnen zodra beide artikelen live staan.")}</p>
         </Panel>
       </div>
       <div className="dpba-editor-side">
@@ -375,14 +441,15 @@ export function BlogAdmin({ onRegisterNavigationGuard }: { onRegisterNavigationG
           <div className="dpba-publish-state"><StatusPill status={entry ? entryStatus(entry) : "draft"} />{dirty && <span>{ui("Onopgeslagen wijzigingen")}</span>}</div>
           <dl className="dpba-publish-details"><div><dt>{ui("Herkomst")}</dt><dd>{entry?.source === "socialhero" ? "SocialHero" : ui("Redactie")}</dd></div>{entry && <div><dt>{ui("Conceptrevisie")}</dt><dd>{entry.revision}</dd></div>}{entry?.liveRevision && <div><dt>{ui("Live revisie")}</dt><dd>{entry.liveRevision}</dd></div>}</dl>
           {entry?.live && entry.liveRevision !== entry.revision && <p className="dpba-help">{ui("De vorige versie blijft zichtbaar tot je deze revisie publiceert.")}</p>}
+          {entry?.publicationState === 'publishing' && <p className="dpba-help" role="status">{ui(entry.publicationError ? 'De publicatie is nog niet bevestigd. We controleren opnieuw. Je kunt de controle ook zelf opnieuw starten.' : 'We controleren of de juiste revisie op de openbare URL zichtbaar is.')}</p>}
           <div className="dpba-publish-actions">
             <button type="button" className="adm-btn" disabled={busy || (!!entry && !dirty)} onClick={() => void saveDraft()}><Save size={15} />{operation === "opslaan" ? ui("Opslaan…") : ui("Concept opslaan")}</button>
-            <button type="button" className="adm-btn adm-btn-primary" disabled={busy || !canPublish} onClick={() => setConfirmPublish(true)}><Send size={15} />{operation === "publiceren" ? ui("Publiceren…") : ui("Publiceren")}</button>
+            <button type="button" className="adm-btn adm-btn-primary" disabled={busy || !canPublish} onClick={() => setConfirmPublish(true)}><Send size={15} />{operation === "publiceren" ? ui("Publiceren…") : entry?.publicationState === 'publishing' ? ui('Opnieuw controleren') : ui("Publiceren")}</button>
           </div>
           {(!entry || dirty) && <p className="dpba-help">{ui("Sla het concept op om te kunnen publiceren.")}</p>}
         </Panel>
         <Panel title={ui("Afbeeldingen")} icon={<ImagePlus size={17} />}>
-          <ImageField title={ui("Hero-afbeelding")} image={draft.hero} placeholder={ui("Kies een portretafbeelding")} ratio={ui("4:5 aanbevolen")} disabled={busy} required onUpload={file => void uploadField(file, "hero")} onAlt={alt => update({ hero: { ...draft.hero, alt } })} onRemove={() => update({ hero: emptyDraft().hero })} />
+          <ImageField title={ui("Hero-afbeelding")} image={draft.hero} placeholder={ui("Kies een portretafbeelding")} ratio={ui("4:5 aanbevolen")} disabled={busy} required onUpload={file => void uploadField(file, "hero")} onAlt={alt => update({ hero: { ...draft.hero, alt } })} onFocusPoint={focalPoint => update({hero: {...draft.hero, focalPoint}})} onRemove={() => update({ hero: emptyDraft().hero })} />
           {draft.hero.url && <fieldset className="dpba-focal" disabled={busy}>
             <legend>{ui("Focuspunt")}</legend>
             <label><span>{ui("Horizontaal")}</span><input type="range" min={0} max={100} value={Math.round(draft.hero.focalPoint.x * 100)} onChange={event => update({ hero: { ...draft.hero, focalPoint: { ...draft.hero.focalPoint, x: Number(event.target.value) / 100 } } })} /><output>{Math.round(draft.hero.focalPoint.x * 100)}%</output></label>
